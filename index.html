@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI接客ロープレ</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">店長向け かんたん操作</p>
+        <h1>AI接客ロープレ</h1>
+      </div>
+      <div class="status-pill" id="connectionStatus">ローカル判定モード</div>
+    </header>
+
+    <section class="layout">
+      <aside class="scenario-panel">
+        <div class="panel-head">
+          <h2>シナリオ</h2>
+          <span>1件</span>
+        </div>
+
+        <button class="scenario-card is-selected" type="button" aria-pressed="true">
+          <span class="scenario-type">サービス工場</span>
+          <strong>12カ月点検・来店促進</strong>
+          <span>引取納車依頼を、来店メリットと代替案へつなげる練習</span>
+        </button>
+
+        <div class="manager-steps" aria-label="店長の操作">
+          <div><span>1</span>シナリオ確認</div>
+          <div><span>2</span>ロープレ開始</div>
+          <div><span>3</span>結果を見る</div>
+        </div>
+
+        <label class="audio-toggle">
+          <input id="audioEnabled" type="checkbox" checked>
+          <span>お客様音声を自動再生</span>
+        </label>
+
+        <a class="audio-manager-link" href="./audio-list.html">
+          <span aria-hidden="true">🔊</span>
+          <span><strong>お客様音声を管理</strong><small>自然な音声の作り方・追加方法</small></span>
+        </a>
+
+        <button class="primary-action" id="startButton" type="button">ロープレ開始</button>
+      </aside>
+
+      <section class="workbench">
+        <div class="progress-strip" id="progressStrip" aria-label="進行状況"></div>
+
+        <section class="chat-card" aria-label="会話">
+          <div class="chat-head">
+            <div>
+              <h2>会話</h2>
+              <p id="stateLabel">開始前</p>
+            </div>
+            <div class="chat-actions">
+              <button class="ghost-button" id="resetButton" type="button">やり直し</button>
+              <button class="ghost-button" id="finishButton" type="button">終了して採点</button>
+            </div>
+          </div>
+
+          <div class="conversation" id="conversation" aria-live="polite">
+            <div class="empty-state">
+              <strong>ロープレ開始を押してください</strong>
+              <span>AIお客様役との会話がここに表示されます。</span>
+            </div>
+          </div>
+
+          <p class="random-note">AIお客様の質問・引取依頼・断り理由は、毎回ランダムに変わります。</p>
+
+          <form class="input-row" id="replyForm">
+            <button class="icon-button" id="micButton" type="button" aria-label="音声入力">🎙</button>
+            <textarea id="staffInput" rows="2" placeholder="スタッフとして返答を入力"></textarea>
+            <button class="send-button" type="submit">送信</button>
+          </form>
+          <p class="speech-note" id="speechNote">AIお客様の発話後に音声入力が始まり、文が完了すると自動的に次へ進みます。話が途中の場合は「はい」と相槌を入れて続きを聞きます。</p>
+        </section>
+      </section>
+
+      <aside class="result-panel" id="resultPanel" aria-label="評価結果">
+        <div class="panel-head">
+          <h2>評価</h2>
+          <span id="scoreBadge">未採点</span>
+        </div>
+
+        <button class="print-button" id="printButton" type="button">会話内容・評価を印刷</button>
+        <p class="print-note">実際に行った会話の全文と採点結果を印刷します。</p>
+
+        <div class="score-block">
+          <div class="score-number" id="scoreNumber">--</div>
+          <div>
+            <strong>総合点</strong>
+            <p id="scoreSummary">ロープレ終了後に表示されます。</p>
+          </div>
+        </div>
+
+        <div class="result-section">
+          <h3>良かった点</h3>
+          <ul id="goodList"></ul>
+        </div>
+
+        <div class="result-section">
+          <h3>改善点</h3>
+          <ul id="improveList"></ul>
+        </div>
+
+        <div class="result-section">
+          <h3>推奨トーク</h3>
+          <p class="recommended-talk" id="recommendedTalk">結果に応じて表示されます。</p>
+        </div>
+
+        <div class="result-section compact">
+          <h3>判定ポイント</h3>
+          <ul id="judgementList"></ul>
+        </div>
+
+      </aside>
+    </section>
+  </main>
+
+  <script src="./audio-db.js"></script>
+  <script src="./scenario.js"></script>
+  <script src="./app.js"></script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a19f8ef7f9fce3de',t:'MTc4Mzg1NDE3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
