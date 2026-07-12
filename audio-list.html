@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>音声ファイル一覧</title>
+  <style>
+    :root {
+      --navy: #102a56;
+      --green: #08784a;
+      --line: #d8e0ec;
+      --bg: #f3f6fb;
+      --text: #172033;
+      --muted: #617089;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font-family: "Yu Gothic", "YuGothic", "Hiragino Kaku Gothic ProN", Meiryo, Arial, sans-serif;
+    }
+
+    main {
+      width: min(1100px, 100%);
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--navy);
+      font-size: clamp(28px, 4vw, 42px);
+      line-height: 1.15;
+      font-weight: 900;
+    }
+
+    .summary {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    a {
+      color: var(--navy);
+      font-weight: 900;
+      text-decoration: none;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .needed-panel {
+      margin-bottom: 18px;
+      padding: 20px;
+      border: 2px solid #e0b85e;
+      border-radius: 12px;
+      background: #fffaf0;
+    }
+
+    .quality-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .quality-item {
+      padding: 14px;
+      border: 1px solid #d7e2f0;
+      border-radius: 9px;
+      background: #f8faff;
+      line-height: 1.6;
+    }
+
+    .quality-item strong {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--navy);
+    }
+
+    .needed-panel h2 { margin: 0; color: #7a4b00; }
+    .needed-summary { margin: 6px 0 14px; color: var(--muted); font-weight: 800; }
+    .needed-list { display: grid; gap: 10px; }
+    .needed-item { padding: 14px; border: 1px solid #ead8ae; border-radius: 9px; background: #fff; }
+    .needed-item strong { display: block; margin-bottom: 5px; color: var(--navy); }
+    .needed-meta { color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .empty-needed { margin: 0; color: var(--muted); font-weight: 700; }
+    .resolve { margin-top: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--navy); font-weight: 800; cursor: pointer; }
+
+    .guide {
+      margin-bottom: 18px;
+      padding: 20px;
+      border: 1px solid #bcd9ca;
+      border-radius: 12px;
+      background: #f2fbf6;
+    }
+
+    .guide h2 {
+      margin: 0 0 8px;
+      color: var(--green);
+      font-size: 21px;
+    }
+
+    .guide > p {
+      margin: 0 0 14px;
+      line-height: 1.7;
+      font-weight: 700;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .step {
+      padding: 13px;
+      border-radius: 9px;
+      background: #fff;
+      line-height: 1.55;
+    }
+
+    .step strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--navy);
+    }
+
+    .tips {
+      margin: 14px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .automation-note {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-left: 4px solid #d68a00;
+      border-radius: 6px;
+      background: #fff8e8;
+      line-height: 1.7;
+    }
+
+    .automation-note strong {
+      display: block;
+      color: #7a4b00;
+    }
+
+    @media (max-width: 720px) {
+      .steps, .quality-grid { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 860px;
+    }
+
+    th,
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    th {
+      color: var(--navy);
+      background: #f7f9fd;
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    td:nth-child(2) {
+      font-weight: 900;
+      color: var(--navy);
+      white-space: nowrap;
+    }
+
+    code {
+      color: #0f3f82;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    .ready {
+      display: inline-flex;
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: var(--green);
+      background: #eefaf4;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .play {
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--navy);
+      background: #fff;
+      font-weight: 900;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>音声ファイル一覧</h1>
+        <p class="summary" id="summary">読み込み中</p>
+      </div>
+      <a href="./index.html">ロープレ画面へ戻る</a>
+    </header>
+
+    <section class="guide" aria-labelledby="guideTitle">
+      <h2 id="guideTitle">新しい音声ファイルが必要になった場合も作成できます</h2>
+      <p>はい、自然なお客様音声を作成できます。必要なセリフと声のイメージを指定すると、日本語音声（MP3）を制作し、既存音声との入れ替えや新しい会話パターンへの追加ができます。</p>
+      <div class="steps">
+        <div class="step"><strong>1. セリフを決める</strong>実際のお客様が話すような、短く自然な言い回しにします。</div>
+        <div class="step"><strong>2. 声を指定する</strong>年齢・性別・話す速さ・感情・電話らしい音質などを指定し、MP3形式で作成します。</div>
+        <div class="step"><strong>3. アプリへ追加</strong>音声ファイルとセリフを登録し、再生確認後にロープレへ反映します。</div>
+      </div>
+      <ul class="tips">
+        <li>電話応対らしくする場合は、少し控えめな抑揚と自然な間を入れます。</li>
+        <li>同じ内容でも言い回しを3～5種類用意すると、毎回違う会話にできます。</li>
+        <li>追加したいセリフと希望する声（例：57歳男性、穏やか、少し不安）を伝えるだけで制作できます。</li>
+      </ul>
+      <div class="automation-note">
+        <strong>既存音声と同等レベルで、自動的に増やせますか？</strong>
+        同じ声質・話す速さ・抑揚の条件をそろえることで、現在の音声と同等レベルの新しい音声を増やすことは可能です。ただし、現在のアプリは登録済みMP3を再生する方式のため、まだ完全自動ではありません。音声生成機能を接続すると、新しい会話パターンを追加した際に音声を自動生成し、内容を確認してからロープレへ反映する仕組みにできます。
+      </div>
+      <div class="automation-note">
+        <strong>料金は無料ですか？</strong>
+        現在登録されている音声ファイルの再生には、音声生成の追加料金はかかりません。ただし、新しい音声を自動生成する機能を追加した場合は無料ではなく、利用する音声生成APIの使用量に応じた料金が発生します。ChatGPTの月額料金とは別の扱いです。少量の音声追加であれば大きな費用になりにくいものの、導入前に上限金額を設定し、使い過ぎを防止する運用を推奨します。料金は変更される場合があるため、<a href="https://openai.com/api/pricing/" target="_blank" rel="noopener noreferrer">OpenAI公式料金ページ</a>で最新情報を確認してください。
+      </div>
+      <div class="automation-note">
+        <strong>新しい音声が必要になったときの運用</strong>
+        ロープレ内容を確認し、新しいセリフの音声が必要だと判断できた場合は、既存音声に合わせた自然な声で作成し、アプリへ追加できるMP3ファイルとして準備します。会話の矛盾や不足が見つかった場合も、必要なセリフを整理してから音声を作り直し、次回以降のロープレで使用できるようにします。
+      </div>
+      <div class="automation-note">
+        <strong>もっと会話の性能を上げるために必要なこと</strong>
+        現在のキーワード判定を改善するだけでなく、会話全体の意味と流れを理解するAI判定、さまざまなお客様を想定したシナリオ、実際のロープレ結果を使った継続的な見直しが必要です。
+        <div class="quality-grid">
+          <div class="quality-item"><strong>1. 会話内容を理解するAI</strong>単語だけではなく、引取承諾・来店提案・質問・迷いなど、発言の意図を前後の会話から判定します。</div>
+          <div class="quality-item"><strong>2. 会話の記憶と矛盾防止</strong>お客様の希望やスタッフが説明した内容を保持し、前の発言と矛盾しない返答を選びます。</div>
+          <div class="quality-item"><strong>3. 会話パターンの充実</strong>仕事、距離、家族、費用、他店比較などの理由ごとに、複数の質問・反応・自然な音声を用意します。</div>
+          <div class="quality-item"><strong>4. 判定事例の蓄積</strong>正しい判定と誤判定の会話ログを残し、店長が確認した結果を次の改善に反映します。</div>
+          <div class="quality-item"><strong>5. 自然な音声認識</strong>言い直し、方言、短い返答、間を含む発話でも、スタッフの意図を正確に読み取れるようにします。</div>
+          <div class="quality-item"><strong>6. 段階的なテスト</strong>実際のスタッフによるロープレを繰り返し、誤終了・会話の行き違い・採点のズレを修正します。</div>
+        </div>
+      </div>
+      <div class="automation-note">
+        <strong>無料で適用している会話改善</strong>
+        実際のスタッフによるロープレテストは実施済みです。その結果を踏まえ、追加料金が発生しない範囲で、直前のお客様発言と会話の進行状態を組み合わせる判定、漢字・ひらがななどの表記揺れ、短い承諾表現、否定表現による誤判定防止を組み込んでいます。今後もテストで見つかった会話例を追加することで、無料のルール判定を継続的に改善できます。
+      </div>
+    </section>
+
+    <section class="needed-panel" aria-labelledby="neededTitle">
+      <h2 id="neededTitle">作成が必要な音声一覧</h2>
+      <p class="needed-summary" id="neededSummary">確認中</p>
+      <div class="needed-list" id="neededList"></div>
+    </section>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th>用途</th>
+            <th>ファイル名</th>
+            <th>セリフ</th>
+            <th>状態</th>
+            <th>確認</th>
+          </tr>
+        </thead>
+        <tbody id="audioRows"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="./audio-db.js"></script>
+  <script>
+    const db = window.ROLEPLAY_AUDIO_DB;
+    const rows = document.querySelector("#audioRows");
+    const summary = document.querySelector("#summary");
+    const basePath = db.basePath || "audio/";
+
+    function renderNeededAudio() {
+      const list = document.querySelector("#neededList");
+      const neededSummary = document.querySelector("#neededSummary");
+      const issues = JSON.parse(localStorage.getItem("roleplayAudioIssues") || "[]")
+        .filter((item) => item.status !== "resolved");
+      neededSummary.textContent = `${issues.length}件の音声が作成・修正待ちです`;
+      list.innerHTML = issues.length ? issues.map((item, index) => `
+        <article class="needed-item">
+          <strong>${escapeHtml(item.text)}</strong>
+          <div class="needed-meta">現在のファイル：${escapeHtml(item.audioFile)}<br>理由：${escapeHtml(item.reason)}<br>記録日時：${new Date(item.createdAt).toLocaleString("ja-JP")}</div>
+          <button class="resolve" type="button" data-resolve-key="${escapeHtml(item.key)}">対応済みにする</button>
+        </article>
+      `).join("") : `<p class="empty-needed">現在、作成が必要な音声はありません。ロープレ画面で矛盾や不足を見つけた発言を記録すると、ここに表示されます。</p>`;
+    }
+
+    document.querySelector("#neededList").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-resolve-key]");
+      if (!button) return;
+      const issues = JSON.parse(localStorage.getItem("roleplayAudioIssues") || "[]");
+      const target = issues.find((item) => item.key === button.dataset.resolveKey && item.status !== "resolved");
+      if (target) target.status = "resolved";
+      localStorage.setItem("roleplayAudioIssues", JSON.stringify(issues));
+      renderNeededAudio();
+    });
+
+    renderNeededAudio();
+
+    summary.textContent = `${db.items.length}件の音声ファイル`;
+    rows.innerHTML = db.items.map((item, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(item.label)}</td>
+        <td><code>${escapeHtml(item.file)}</code></td>
+        <td>${escapeHtml(item.text)}</td>
+        <td><span class="ready">${escapeHtml(item.status)}</span></td>
+        <td><button class="play" type="button" data-file="${escapeHtml(item.file)}">再生</button></td>
+      </tr>
+    `).join("");
+
+    rows.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-file]");
+      if (!button) return;
+      new Audio(`${basePath}${button.dataset.file}`).play();
+    });
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#039;"
+      })[char]);
+    }
+  </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a19f8efc2f45635d',t:'MTc4Mzg1NDE3Ng=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
