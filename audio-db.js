@@ -47,7 +47,7 @@ window.ROLEPLAY_AUDIO_DB = {
     {
       id: "pickupRequest03",
       label: "引取依頼 3",
-      text: "自宅に取りにいてほしいんですけど。",
+      text: "自宅に取りに来てほしいんですけど。",
       file: "customer_pickup_03.mp3",
       status: "ready"
     },
@@ -68,7 +68,7 @@ window.ROLEPLAY_AUDIO_DB = {
     {
       id: "pickupRequest06",
       label: "引取依頼 6",
-      text: "職場の駐車場にカギを付けて置いておくので、持ってて頂けますか？",
+      text: "職場の駐車場にカギを付けて置いておくので、持って行っていただけますか？",
       file: "customer_pickup_06.mp3",
       status: "ready"
     },

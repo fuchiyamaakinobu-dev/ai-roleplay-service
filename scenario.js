@@ -25,7 +25,7 @@ window.ROLEPLAY_SCENARIO = {
     objections: {
       work: ["objectionWork", "objectionWork02", "objectionWork03"],
       distance: ["objectionDistance", "objectionDistance02", "objectionDistance03"],
-      competitor: ["objectionCompetitor", "objectionDistance02"],
+      competitor: ["objectionCompetitor"],
       misunderstanding: ["objectionMisunderstanding", "objectionMisunderstanding02"],
       family: ["objectionFamily", "objectionFamily02"]
     },
@@ -44,9 +44,9 @@ window.ROLEPLAY_SCENARIO = {
   pickupRequests: [
     "出来れば車を取りに来てもらえませんか？",
     "職場に取りに来れますか？",
-    "自宅に取りにいてほしいんですけど。",
+    "自宅に取りに来てほしいんですけど。",
     "仕事が忙しくて持っていく時間が無いので取りに来てもらいますか？",
-    "職場の駐車場にカギを付けて置いておくので、持ってて頂けますか？",
+    "職場の駐車場にカギを付けて置いておくので、持って行っていただけますか？",
     "通勤で使用しているので職場まで車を取りに来てほしいんですけど。",
     "自宅に置いておくので、持っていってもらえませんか？",
     "運転に自信が無いので取りに来て頂くことはできますか？",
@@ -74,8 +74,7 @@ window.ROLEPLAY_SCENARIO = {
     competitor: {
       label: "他店比較",
       customer: [
-        "他のお店では取りに来てくれるって聞いたんですが。",
-        "そちらまで行くのが少し面倒なんですよね。"
+        "他のお店では取りに来てくれるって聞いたんですが。"
       ],
       expected: "引取を否定せず、来店メリットを選択肢として伝える"
     },
@@ -105,18 +104,28 @@ window.ROLEPLAY_SCENARIO = {
     { state: "ALTERNATIVE_PROPOSAL", label: "代替案" }
   ],
   scoring: [
-    { key: "acknowledged_request", label: "依頼を受け止めた", points: 10 },
-    { key: "explained_service_time", label: "作業時間を説明した", points: 10 },
-    { key: "asked_reason", label: "引取希望の理由を確認した", points: 15 },
-    { key: "explained_visit_benefit", label: "来店メリットを説明した", points: 15 },
-    { key: "proposed_weekend", label: "土日などを提案した", points: 15 },
-    { key: "proposed_other_store", label: "他店舗などを提案した", points: 10 },
-    { key: "left_choice", label: "選択肢を残した", points: 10 },
-    { key: "next_action_confirmed", label: "次の約束につなげた", points: 15 }
+    { key: "acknowledged_request", label: "依頼を受け止めた", action: "依頼を受け止める", points: 10 },
+    { key: "explained_service_time", label: "作業時間を説明した", action: "作業時間を説明する", points: 10 },
+    { key: "asked_reason", label: "引取希望の理由を確認した", action: "引取希望の理由を確認する", points: 15 },
+    { key: "explained_visit_benefit", label: "来店メリットを説明した", action: "来店メリットを説明する", points: 15 },
+    { key: "proposed_weekend", label: "土日などを提案した", action: "土日などを提案する", points: 15 },
+    { key: "proposed_other_store", label: "他店舗などを提案した", action: "他店舗などを提案する", points: 10 },
+    { key: "left_choice", label: "選択肢を残した", action: "選択肢を残す", points: 10 },
+    { key: "next_action_confirmed", label: "次の約束につなげた", action: "次の約束につなげる", points: 15 }
   ],
   recommendedTalk:
     "お仕事で平日のご来店が難しいのですね。点検だけですと1時間程度です。土日に営業している週もありますので、ご都合はいかがでしょうか。ご来店いただければ、点検内容をお車を見ながら詳しくご説明できます。",
   recommendedTalks: {
+    work:
+      "お仕事で平日のご来店が難しいのですね。点検は1時間程度です。土日営業日や、お仕事の前後で利用しやすい時間帯も確認できます。ご都合のよい曜日や時間帯を教えていただけますか。",
+    distance:
+      "ご自宅から距離があり、ご来店がご負担なのですね。お出かけの予定に合わせる方法や、ご自宅から近い店舗をご案内する方法もございます。無理のない方法を一緒に確認させてください。",
+    competitor:
+      "他店の引取サービスも比較されているのですね。引取のご希望を否定せず、ご来店いただく場合はお車を見ながら点検内容を詳しくご説明できる点も含めて、ご都合に合う方法をお選びいただけます。何を一番重視されていますか。",
+    misunderstanding:
+      "ご案内が分かりにくく、申し訳ございません。以前の説明内容と現在のご希望を確認させてください。そのうえで、来店またはほかの方法からご負担の少ない方法をご案内します。",
+    family:
+      "ご家族と相談されるのですね。もちろんお急ぎいただく必要はありません。ご相談に必要な点検時間や選択肢を整理し、こちらから再度ご連絡する時期を決めさせていただけますか。",
     drivingConfidence:
       "運転にご不安があるのですね。無理に運転なさらず、ご主人などご家族と一緒にご来店いただく方法や、ご自宅から近い店舗をご案内する方法もございます。どちらがご負担が少ないでしょうか。"
   }

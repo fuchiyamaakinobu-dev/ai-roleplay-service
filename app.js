@@ -16,7 +16,9 @@ const state = {
   currentState: "START",
   turn: 0,
   variantSeed: 0,
+  pickupReason: null,
   currentObjection: null,
+  resolutionType: null,
   transcript: [],
   analyses: [],
   usedVariants: {}
@@ -50,7 +52,7 @@ const lexicon = {
   reasonQuestion: ["なぜ", "理由", "どうして", "差し支え", "ご事情", "難しい", "どのような"],
   visitBenefit: ["直接", "説明", "お車を見ながら", "点検内容", "整備内容", "安心", "詳しく"],
   weekend: ["土日", "週末", "土曜", "日曜", "休日"],
-  otherStore: ["他店舗", "別店舗", "市内", "帯広", "近くのお店"],
+  otherStore: ["他店舗", "別店舗", "市内", "帯広", "近くのお店", "近い店舗", "近くの店舗", "最寄りの店舗"],
   choice: ["無理に", "可能です", "選べ", "ご都合", "難しい場合", "検討"],
   nextAction: ["いつ", "候補", "予約", "ご都合", "何日", "午前", "午後", "連絡", "確認"],
   pressure: ["必ず来店", "来てください", "来店しか", "できません", "無理です"],
@@ -65,6 +67,17 @@ const lexicon = {
 
 function includesAny(text, words) {
   return words.some((word) => text.includes(word));
+}
+
+function classifyCustomerReason(text) {
+  const normalized = text.replace(/\s+/g, "");
+  if (includesAny(normalized, ["運転に自信", "運転が不安", "運転するのが不安"])) return "drivingConfidence";
+  if (includesAny(normalized, ["仕事", "職場", "通勤", "畑", "忙しく", "時間が無い", "時間がない"])) return "work";
+  if (includesAny(normalized, ["遠い", "距離", "行くのが大変", "持って行くのが大変"])) return "distance";
+  if (includesAny(normalized, ["他のお店", "他店", "ほかのお店"])) return "competitor";
+  if (includesAny(normalized, ["言いませんでした", "説明と違", "聞いていた"])) return "misunderstanding";
+  if (includesAny(normalized, ["主人と相談", "家族と相談"])) return "family";
+  return null;
 }
 
 function isActivePickupRequest() {
@@ -261,7 +274,9 @@ function startRoleplay() {
   state.currentState = "INSPECTION_REQUEST_RECEIVED";
   state.turn = 0;
   state.variantSeed = Math.floor(Math.random() * 1000);
+  state.pickupReason = null;
   state.currentObjection = null;
+  state.resolutionType = null;
   state.transcript = [];
   state.analyses = [];
   state.usedVariants = {};
@@ -317,7 +332,10 @@ function analyzeStaff(text) {
   const hasConcreteServiceTime = includesAny(normalized, lexicon.serviceTime);
   const hasActionableProposal = includesAny(normalized, lexicon.weekend)
     || includesAny(normalized, lexicon.otherStore)
-    || includesAny(normalized, ["時間帯", "午前", "午後", "代車"]);
+    || includesAny(normalized, ["時間帯", "午前", "午後", "代車", "ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
+  const proposedTime = includesAny(normalized, ["時間帯", "午前", "午後", "夕方", "仕事前", "仕事後"]);
+  const proposedFamilyVisit = includesAny(normalized, ["ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
+  const hasConcreteSchedule = /\d{1,2}(?:月|日|時)|(?:月|火|水|木|金|土|日)曜日|午前|午後/.test(normalized);
   const hasConcreteExplanation = hasConcreteServiceTime
     || hasActionableProposal
     || includesAny(normalized, lexicon.visitBenefit)
@@ -342,6 +360,10 @@ function analyzeStaff(text) {
     explained_visit_benefit: includesAny(normalized, lexicon.visitBenefit),
     proposed_weekend: includesAny(normalized, lexicon.weekend),
     proposed_other_store: includesAny(normalized, lexicon.otherStore),
+    proposed_time: proposedTime,
+    proposed_family_visit: proposedFamilyVisit,
+    has_concrete_schedule: hasConcreteSchedule,
+    mentioned_previous_pickup: includesAny(normalized, ["以前", "前回", "前に", "取りに来ると", "取りに伺うと"]),
     proposed_alternative: hasActionableProposal,
     pressured_customer: includesAny(normalized, lexicon.pressure),
     refused_pickup: includesAny(normalized, ["引取できません", "取りに行けません", "対応できません"]),
@@ -385,6 +407,11 @@ function customerTurn(text, audioId = "") {
   return { text, audioId };
 }
 
+function customerTurnFromAudio(audioId, fallbackText = "") {
+  const item = audioIndex.get(audioId);
+  return customerTurn(item?.text || fallbackText, audioId);
+}
+
 function randomIndex(length) {
   if (length <= 1) return 0;
   if (window.crypto?.getRandomValues) {
@@ -421,7 +448,10 @@ function nextCustomerMessage(analysis) {
   }
 
   if (analysis.decision === "needs_more_context") {
-    return customerTurn("すみません、もう一度どうしたらよいか教えてもらえますか？", scenario.audio.needsMoreContext);
+    return customerTurnFromAudio(
+      scenario.audio.needsMoreContext,
+      "おっしゃっていることがよく分からないんですけど。"
+    );
   }
 
   if (state.currentState === "INSPECTION_REQUEST_RECEIVED") {
@@ -436,6 +466,7 @@ function nextCustomerMessage(analysis) {
   if (state.currentState === "SERVICE_TIME_QUESTION") {
     state.currentState = "PICKUP_REQUEST";
     const index = pickRandomIndex(scenario.pickupRequests, "pickup-request");
+    state.pickupReason = classifyCustomerReason(scenario.pickupRequests[index]);
     return customerTurn(scenario.pickupRequests[index], scenario.audio.pickupRequests[index]);
   }
 
@@ -445,41 +476,104 @@ function nextCustomerMessage(analysis) {
     const objection = scenario.objections[state.currentObjection];
     const objectionTexts = objection.customer;
     const objectionAudio = scenario.audio.objections[state.currentObjection];
-    const index = pickRandomIndex(objectionTexts, `objection-${state.currentObjection}`);
+    const index = state.pickupReason === "drivingConfidence"
+      ? objectionTexts.findIndex((text) => text.includes("運転に自信"))
+      : pickRandomIndex(objectionTexts, `objection-${state.currentObjection}`);
     return customerTurn(
-      objectionTexts[index],
-      objectionAudio[index]
+      objectionTexts[index >= 0 ? index : 0],
+      objectionAudio[index >= 0 ? index : 0]
     );
   }
 
   if (state.currentState === "VISIT_PROPOSAL") {
     state.currentState = "ALTERNATIVE_PROPOSAL";
-    if (analysis.proposed_weekend || analysis.proposed_other_store || analysis.next_action_confirmed) {
-      const agreementId = pickVariant(scenario.audio.possibleAgreements, "agreement");
-      const agreementItem = audioIndex.get(agreementId);
-      return customerTurn(agreementItem?.text || "土日なら行けるかもしれません。", agreementId);
-    }
-    const followUpId = pickVariant(scenario.audio.followUps, "follow-up");
-    const followUpItem = audioIndex.get(followUpId);
-    return customerTurn(followUpItem?.text || "では、いつなら空いていますか？", followUpId);
+    const contextualResponse = selectContextualCustomerResponse(analysis);
+    if (contextualResponse) return contextualResponse;
+    return customerTurnFromAudio(
+      scenario.audio.needsMoreContext,
+      "おっしゃっていることがよく分からないんですけど。"
+    );
   }
 
   if (state.currentState === "ALTERNATIVE_PROPOSAL") {
     state.ended = true;
-    const closingId = pickVariant(scenario.audio.closings, "closing");
-    const closingItem = audioIndex.get(closingId);
-    return customerTurn(closingItem?.text || "では、その日にお願いします。", closingId);
+    const closingId = analysis.has_concrete_schedule
+      ? scenario.audio.closings[0]
+      : scenario.audio.closings[1];
+    return customerTurnFromAudio(closingId, "よろしくお願いします。");
   }
 
   return customerTurn("ありがとうございます。続けてお願いします。", "");
 }
 
 function selectObjection(analysis) {
-  const candidates = ["work", "distance", "competitor", "misunderstanding", "family"];
-  if (analysis.proposed_other_store) candidates.push("competitor", "distance");
-  if (analysis.proposed_weekend) candidates.push("work", "family");
-  if (analysis.asked_reason) candidates.push("distance", "work");
+  const linkedObjection = {
+    work: "work",
+    distance: "distance",
+    drivingConfidence: "distance",
+    competitor: "competitor",
+    misunderstanding: "misunderstanding",
+    family: "family"
+  }[state.pickupReason];
+  if (linkedObjection) return linkedObjection;
+
+  const candidates = ["work", "distance", "family"];
+  if (analysis.proposed_other_store) candidates.push("competitor");
+  if (analysis.mentioned_previous_pickup) candidates.push("misunderstanding");
   return candidates[randomIndex(candidates.length)];
+}
+
+function selectContextualCustomerResponse(analysis) {
+  const reason = state.pickupReason || state.currentObjection;
+  if (reason === "family") {
+    state.resolutionType = "familyConsultation";
+    return customerTurn("ありがとうございます。家族と相談して、改めてご連絡します。");
+  }
+  if (reason === "misunderstanding") {
+    if (analysis.acknowledged_request || analysis.left_choice) {
+      state.resolutionType = "clarified";
+      return customerTurn("分かりました。では、負担の少ない方法を相談させてください。");
+    }
+    return null;
+  }
+  if (["distance", "drivingConfidence"].includes(reason)) {
+    if (analysis.proposed_other_store || analysis.proposed_family_visit) {
+      state.resolutionType = "nearbyOrFamily";
+      return customerTurn("近い店舗や家族と一緒なら、来店できるかもしれません。");
+    }
+    return null;
+  }
+  if (reason === "competitor") {
+    if (analysis.explained_visit_benefit || analysis.left_choice) {
+      state.resolutionType = "visitBenefit";
+      return customerTurnFromAudio(scenario.audio.possibleAgreements[2], "それなら店に行ってみます。");
+    }
+    return null;
+  }
+  if (reason === "work") {
+    if (analysis.proposed_weekend) {
+      state.resolutionType = "weekend";
+      return customerTurnFromAudio(scenario.audio.possibleAgreements[0], "土日なら行けるかもしれません。");
+    }
+    if (analysis.proposed_time) {
+      state.resolutionType = "time";
+      return customerTurnFromAudio(scenario.audio.possibleAgreements[1], "その時間なら行けそうです。");
+    }
+    return null;
+  }
+  if (analysis.proposed_weekend) {
+    state.resolutionType = "weekend";
+    return customerTurnFromAudio(scenario.audio.possibleAgreements[0], "土日なら行けるかもしれません。");
+  }
+  if (analysis.proposed_time) {
+    state.resolutionType = "time";
+    return customerTurnFromAudio(scenario.audio.possibleAgreements[1], "その時間なら行けそうです。");
+  }
+  if (analysis.explained_visit_benefit) {
+    state.resolutionType = "visitBenefit";
+    return customerTurnFromAudio(scenario.audio.possibleAgreements[2], "それなら店に行ってみます。");
+  }
+  return null;
 }
 
 function handleReply(event) {
@@ -527,6 +621,8 @@ function scoreRoleplay() {
     acc.accepted_pickup = Boolean(acc.accepted_pickup || item.accepted_pickup);
     acc.pressured_customer = Boolean(acc.pressured_customer || item.pressured_customer);
     acc.refused_pickup = Boolean(acc.refused_pickup || item.refused_pickup);
+    acc.proposed_time = Boolean(acc.proposed_time || item.proposed_time);
+    acc.proposed_family_visit = Boolean(acc.proposed_family_visit || item.proposed_family_visit);
     return acc;
   }, {});
 
@@ -545,14 +641,19 @@ function scoreRoleplay() {
     score -= 10;
     penalties.push("引取を強く拒否する表現がありました");
   }
+  if (!proposalMatchesCustomerReason(merged)) {
+    score -= 15;
+    penalties.push("お客様の事情に合った提案を選ぶ必要があります");
+  }
 
   score = Math.max(0, Math.min(100, score));
 
   const good = [];
   const improve = [];
   scenario.scoring.forEach((metric) => {
-    if (merged[metric.key]) good.push(`${metric.label}ことができています`);
-    else improve.push(`${metric.label}を入れると、より良い応対になります`);
+    const action = metric.action || metric.label;
+    if (merged[metric.key]) good.push(`${action}ことができています`);
+    else improve.push(`${action}ことを意識すると、より良い応対になります`);
   });
   penalties.forEach((penalty) => improve.unshift(penalty));
 
@@ -575,11 +676,24 @@ function selectRecommendedTalk() {
     .map((message) => message.text)
     .join(" ");
 
-  if (includesAny(customerText, ["運転に自信", "運転が不安", "運転するのが不安"])) {
-    return scenario.recommendedTalks?.drivingConfidence || scenario.recommendedTalk;
-  }
+  const transcriptReason = classifyCustomerReason(customerText);
+  const reason = transcriptReason || state.pickupReason || state.currentObjection || "work";
+  return scenario.recommendedTalks?.[reason] || scenario.recommendedTalk;
+}
 
-  return scenario.recommendedTalk;
+function proposalMatchesCustomerReason(analysis) {
+  const reason = state.pickupReason || state.currentObjection;
+  if (!reason) return true;
+  if (reason === "work") return Boolean(analysis.proposed_weekend || analysis.proposed_time);
+  if (["distance", "drivingConfidence"].includes(reason)) {
+    return Boolean(analysis.proposed_other_store || analysis.proposed_family_visit);
+  }
+  if (reason === "competitor") return Boolean(analysis.explained_visit_benefit);
+  if (reason === "misunderstanding") {
+    return Boolean(analysis.acknowledged_request && (analysis.asked_reason || analysis.explained_visit_benefit));
+  }
+  if (reason === "family") return Boolean(analysis.left_choice && analysis.next_action_confirmed);
+  return true;
 }
 
 function renderResults(result) {
