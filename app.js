@@ -1,4 +1,5 @@
-const scenario = window.ROLEPLAY_SCENARIO;
+const scenarios = window.ROLEPLAY_SCENARIOS || [window.ROLEPLAY_SCENARIO];
+let scenario = scenarios[0];
 const audioDb = window.ROLEPLAY_AUDIO_DB || { basePath: "audio/", items: [] };
 const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 
@@ -15,6 +16,8 @@ const state = {
   ended: false,
   currentState: "START",
   turn: 0,
+  scriptStep: 0,
+  proposedAppointment: null,
   variantSeed: 0,
   pickupReason: null,
   currentObjection: null,
@@ -25,6 +28,8 @@ const state = {
 };
 
 const els = {
+  scenarioList: document.querySelector("#scenarioList"),
+  scenarioCount: document.querySelector("#scenarioCount"),
   startButton: document.querySelector("#startButton"),
   resetButton: document.querySelector("#resetButton"),
   finishButton: document.querySelector("#finishButton"),
@@ -34,6 +39,7 @@ const els = {
   staffInput: document.querySelector("#staffInput"),
   micButton: document.querySelector("#micButton"),
   speechNote: document.querySelector("#speechNote"),
+  scenarioNote: document.querySelector("#scenarioNote"),
   conversation: document.querySelector("#conversation"),
   progressStrip: document.querySelector("#progressStrip"),
   stateLabel: document.querySelector("#stateLabel"),
@@ -93,17 +99,69 @@ function isActivePickupRequest() {
   return state.currentState === "PICKUP_REQUEST" && asksPickup;
 }
 
+function renderScenarioList() {
+  els.scenarioCount.textContent = `${scenarios.length}件`;
+  els.scenarioNote.textContent = scenario.mode === "staff-led-scripted"
+    ? "案内内容が不足すると、AIお客様がその場面に合った聞き返しをします。"
+    : "AIお客様の質問・引取依頼・断り理由は、毎回ランダムに変わります。";
+  els.scenarioList.innerHTML = scenarios
+    .map((item) => {
+      const selected = item.id === scenario.id;
+      return `
+        <button class="scenario-card ${selected ? "is-selected" : ""}" type="button"
+          data-scenario-id="${escapeHtml(item.id)}" aria-pressed="${selected}">
+          <span class="scenario-type">${escapeHtml(item.type || "ロープレ")}</span>
+          <strong>${escapeHtml(item.title)}</strong>
+          <span>${escapeHtml(item.description || "")}</span>
+        </button>`;
+    })
+    .join("");
+}
+
+function selectScenario(scenarioId) {
+  const selected = scenarios.find((item) => item.id === scenarioId);
+  if (!selected || selected.id === scenario.id) return;
+  stopSpeechInput();
+  scenario = selected;
+  state.started = false;
+  state.ended = false;
+  state.currentState = "START";
+  state.turn = 0;
+  state.scriptStep = 0;
+  state.proposedAppointment = null;
+  state.transcript = [];
+  state.analyses = [];
+  state.usedVariants = {};
+  clearStaffInput();
+  resetResults();
+  renderScenarioList();
+  renderConversation();
+  renderProgress();
+  els.staffInput.placeholder = scenario.mode === "staff-led-scripted"
+    ? "スタッフから最初の電話応対を入力"
+    : "スタッフとして返答を入力";
+  els.speechNote.textContent = scenario.mode === "staff-led-scripted"
+    ? "このシナリオはスタッフの発話から始まります。ロープレ開始後に本人確認をしてください。"
+    : "AIお客様の発話後に音声入力が始まります。";
+}
+
 function renderProgress() {
+  const currentIndex = state.started
+    ? scenario.progress.findIndex((item) => item.state === state.currentState)
+    : -1;
   els.progressStrip.innerHTML = scenario.progress
     .map((item) => {
-      const currentIndex = scenario.progress.findIndex((p) => p.state === state.currentState);
       const itemIndex = scenario.progress.findIndex((p) => p.state === item.state);
-      const klass = item.state === state.currentState ? "is-active" : itemIndex < currentIndex ? "is-done" : "";
+      const klass = state.started && item.state === state.currentState
+        ? "is-active"
+        : itemIndex < currentIndex
+          ? "is-done"
+          : "";
       return `<div class="progress-item ${klass}">${item.label}</div>`;
     })
     .join("");
   const active = scenario.progress.find((item) => item.state === state.currentState);
-  els.stateLabel.textContent = active ? active.label : "進行中";
+  els.stateLabel.textContent = !state.started ? "開始前" : active ? active.label : "進行中";
 }
 
 function audioPath(audioId) {
@@ -123,8 +181,10 @@ function addMessage(role, text, options = {}) {
   state.transcript.push(message);
   renderConversation();
   if (role === "customer") {
-    if (message.audioSrc && els.audioEnabled.checked) {
+    if (els.audioEnabled.checked && message.audioSrc) {
       playAudio(message.audioSrc, message.text, false, startSpeechInputAfterCustomer);
+    } else if (els.audioEnabled.checked) {
+      speakCustomerText(message.text, startSpeechInputAfterCustomer);
     } else {
       startSpeechInputAfterCustomer();
     }
@@ -147,7 +207,7 @@ function renderConversation() {
     .map((message, index) => {
       const roleClass = message.role === "customer" ? "customer" : message.role === "staff" ? "staff" : "system";
       const speaker = message.role === "customer" ? "AIお客様" : message.role === "staff" ? "スタッフ" : "判定メモ";
-      const audioButton = message.audioSrc
+      const audioButton = message.role === "customer"
         ? `<button class="play-audio" type="button" data-audio-index="${index}" aria-label="お客様音声を再生">再生</button>`
         : "";
       const issueButton = message.role === "customer"
@@ -182,6 +242,27 @@ function playAudio(src, fallbackText = "", showMissingMessage = true, onFinished
     }
     finishOnce();
   });
+}
+
+function speakCustomerText(text, onFinished = null) {
+  if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+    if (typeof onFinished === "function") onFinished();
+    return;
+  }
+  let finished = false;
+  const finishOnce = () => {
+    if (finished) return;
+    finished = true;
+    if (typeof onFinished === "function") onFinished();
+  };
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "ja-JP";
+  utterance.rate = 1.05;
+  utterance.pitch = 1;
+  utterance.addEventListener("end", finishOnce, { once: true });
+  utterance.addEventListener("error", finishOnce, { once: true });
+  window.speechSynthesis.speak(utterance);
 }
 
 function startSpeechInputAfterCustomer() {
@@ -271,8 +352,12 @@ function startRoleplay() {
   stopSpeechInput();
   state.started = true;
   state.ended = false;
-  state.currentState = "INSPECTION_REQUEST_RECEIVED";
+  state.currentState = scenario.mode === "staff-led-scripted"
+    ? scenario.steps[0].state
+    : "INSPECTION_REQUEST_RECEIVED";
   state.turn = 0;
+  state.scriptStep = 0;
+  state.proposedAppointment = null;
   state.variantSeed = Math.floor(Math.random() * 1000);
   state.pickupReason = null;
   state.currentObjection = null;
@@ -281,7 +366,12 @@ function startRoleplay() {
   state.analyses = [];
   state.usedVariants = {};
   resetResults();
-  addMessage("customer", scenario.initialCustomerMessage, { audioId: scenario.audio.initial });
+  if (scenario.mode === "staff-led-scripted") {
+    addMessage("system", scenario.startInstruction);
+    els.speechNote.textContent = "スタッフから発話を始めてください。マイクボタンまたはテキスト入力を利用できます。";
+  } else {
+    addMessage("customer", scenario.initialCustomerMessage, { audioId: scenario.audio.initial });
+  }
   renderProgress();
   els.staffInput.focus();
 }
@@ -576,6 +666,75 @@ function selectContextualCustomerResponse(analysis) {
   return null;
 }
 
+function analyzeScriptedStaff(text, step) {
+  const normalized = text.replace(/\s+/g, "");
+  const matchedGroups = step.requiredGroups.map((group) => group.filter((word) => normalized.includes(word)));
+  let passed = matchedGroups.every((matches) => matches.length > 0);
+
+  if (step.key === "proposed_appointment") {
+    const appointmentMatch = normalized.match(/(\d{1,2})月(\d{1,2})日.*?(\d{1,2})時/);
+    passed = Boolean(passed && appointmentMatch);
+    if (passed) {
+      state.proposedAppointment = {
+        month: appointmentMatch[1],
+        day: appointmentMatch[2],
+        hour: appointmentMatch[3]
+      };
+    }
+  }
+
+  if (step.key === "recapped_appointment") {
+    const appointment = state.proposedAppointment;
+    passed = Boolean(
+      passed
+      && appointment
+      && normalized.includes(`${appointment.month}月`)
+      && normalized.includes(`${appointment.day}日`)
+      && normalized.includes(`${appointment.hour}時`)
+    );
+  }
+  const analysis = {
+    scripted: true,
+    stepKey: step.key,
+    expected: step.expected,
+    passed,
+    confidence: passed ? 0.95 : 0.55,
+    evidence: matchedGroups.flat().slice(0, 8)
+  };
+  analysis[step.key] = passed;
+  state.analyses.push(analysis);
+  return analysis;
+}
+
+function handleScriptedStaffReply(text) {
+  const step = scenario.steps[state.scriptStep];
+  if (!step) {
+    finishRoleplay();
+    return;
+  }
+
+  const analysis = analyzeScriptedStaff(text, step);
+  state.turn += 1;
+
+  if (!analysis.passed) {
+    addMessage("customer", step.retryResponse);
+    els.speechNote.textContent = `不足している案内があります。現在の課題: ${step.expected}`;
+    renderProgress();
+    return;
+  }
+
+  state.scriptStep += 1;
+  const finished = state.scriptStep >= scenario.steps.length;
+  if (finished) {
+    state.ended = true;
+  } else {
+    state.currentState = scenario.steps[state.scriptStep].state;
+  }
+  addMessage("customer", step.customerResponse);
+  renderProgress();
+  if (finished) finishRoleplay();
+}
+
 function handleReply(event) {
   event.preventDefault();
   if (!state.started || state.ended) return;
@@ -585,6 +744,10 @@ function handleReply(event) {
   stopSpeechInput();
   clearStaffInput();
   addMessage("staff", text);
+  if (scenario.mode === "staff-led-scripted") {
+    handleScriptedStaffReply(text);
+    return;
+  }
   const analysis = analyzeStaff(text);
   state.turn += 1;
 
@@ -614,6 +777,8 @@ function finishRoleplay() {
 }
 
 function scoreRoleplay() {
+  if (scenario.mode === "staff-led-scripted") return scoreScriptedRoleplay();
+
   const merged = state.analyses.reduce((acc, item) => {
     scenario.scoring.forEach((metric) => {
       acc[metric.key] = Boolean(acc[metric.key] || item[metric.key]);
@@ -670,6 +835,48 @@ function scoreRoleplay() {
   };
 }
 
+function scoreScriptedRoleplay() {
+  const achieved = {};
+  scenario.scoring.forEach((metric) => {
+    achieved[metric.key] = state.analyses.some((analysis) => analysis[metric.key] === true);
+  });
+
+  const retryCount = state.analyses.filter((analysis) => analysis.scripted && !analysis.passed).length;
+  const baseScore = scenario.scoring.reduce(
+    (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
+    0
+  );
+  const score = Math.max(0, Math.min(100, baseScore - Math.min(20, retryCount * 2)));
+  const good = scenario.scoring
+    .filter((metric) => achieved[metric.key])
+    .map((metric) => `${metric.action}ことができています`);
+  const improve = scenario.scoring
+    .filter((metric) => !achieved[metric.key])
+    .map((metric) => `${metric.action}ことを意識すると、より良い応対になります`);
+  if (retryCount > 0) {
+    improve.unshift(`案内不足によるお客様の聞き返しが${retryCount}回ありました`);
+  }
+
+  const judgements = scenario.scoring.map((metric) => {
+    const attempts = state.analyses.filter((analysis) => analysis.stepKey === metric.key);
+    const status = achieved[metric.key] ? "○" : "要改善";
+    return `${metric.label}: ${status}${attempts.length > 1 ? `（${attempts.length}回発話）` : ""}`;
+  });
+
+  return {
+    score,
+    good: good.slice(0, 4),
+    improve: improve.slice(0, 4),
+    recommendedTalk: scenario.recommendedTalk,
+    judgements,
+    summary: score >= 90
+      ? "車検誘致の電話応対を、予約確定から事前案内まで正確に完結できています。"
+      : score >= 70
+        ? "基本の流れはできています。案内漏れを減らすと、より安定した電話応対になります。"
+        : "本人確認から予約復唱まで、車検誘致の電話手順を順番に練習しましょう。"
+  };
+}
+
 function selectRecommendedTalk() {
   const customerText = state.transcript
     .filter((message) => message.role === "customer")
@@ -699,11 +906,11 @@ function proposalMatchesCustomerReason(analysis) {
 function renderResults(result) {
   els.scoreBadge.textContent = "採点済み";
   els.scoreNumber.textContent = `${result.score}`;
-  els.scoreSummary.textContent = result.score >= 80
+  els.scoreSummary.textContent = result.summary || (result.score >= 80
     ? "来店促進の流れがよくできています。"
     : result.score >= 60
       ? "基本はできています。理由確認と次の約束を強めると安定します。"
-      : "引取依頼への対応手順をもう一度練習しましょう。";
+      : "引取依頼への対応手順をもう一度練習しましょう。");
   els.goodList.innerHTML = listHtml(result.good);
   els.improveList.innerHTML = listHtml(result.improve);
   els.judgementList.innerHTML = listHtml(result.judgements);
@@ -839,6 +1046,10 @@ els.resetButton.addEventListener("click", startRoleplay);
 els.finishButton.addEventListener("click", finishRoleplay);
 els.printButton.addEventListener("click", () => window.print());
 els.replyForm.addEventListener("submit", handleReply);
+els.scenarioList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-scenario-id]");
+  if (button) selectScenario(button.dataset.scenarioId);
+});
 els.conversation.addEventListener("click", (event) => {
   const reportButton = event.target.closest("[data-report-audio-index]");
   if (reportButton) {
@@ -865,17 +1076,18 @@ els.conversation.addEventListener("click", (event) => {
   const button = event.target.closest("[data-audio-index]");
   if (!button) return;
   const message = state.transcript[Number(button.dataset.audioIndex)];
-  if (message?.audioSrc) {
+  if (message?.role === "customer") {
     const shouldRestartMic = message.role === "customer" && state.started && !state.ended;
     if (shouldRestartMic) stopSpeechInput();
-    playAudio(
-      message.audioSrc,
-      message.text,
-      true,
-      shouldRestartMic ? startSpeechInputAfterCustomer : null
-    );
+    const onFinished = shouldRestartMic ? startSpeechInputAfterCustomer : null;
+    if (message.audioSrc) {
+      playAudio(message.audioSrc, message.text, true, onFinished);
+    } else {
+      speakCustomerText(message.text, onFinished);
+    }
   }
 });
 
+renderScenarioList();
 renderProgress();
 setupSpeech();

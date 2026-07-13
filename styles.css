@@ -131,16 +131,32 @@ h1 {
   font-weight: 700;
 }
 
+.scenario-list {
+  display: grid;
+  gap: 10px;
+}
+
 .scenario-card {
   display: grid;
   gap: 8px;
   width: 100%;
   padding: 16px;
-  border: 2px solid var(--blue);
+  border: 2px solid var(--line);
   border-radius: 8px;
   color: var(--text);
-  background: #f8fbff;
+  background: #fff;
   text-align: left;
+}
+
+.scenario-card:hover {
+  border-color: #9fb9df;
+  background: #f8fbff;
+}
+
+.scenario-card.is-selected {
+  border-color: var(--blue);
+  background: #eef5ff;
+  box-shadow: inset 4px 0 0 var(--blue);
 }
 
 .scenario-card strong {
@@ -691,7 +707,8 @@ textarea:focus {
   }
 
   .conversation {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.2mm;
     height: auto;
     max-height: none;
@@ -701,6 +718,7 @@ textarea:focus {
   }
 
   .message {
+    width: 100%;
     max-width: 100%;
     gap: 0.5mm;
     padding: 1.1mm 1.6mm;

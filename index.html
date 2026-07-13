@@ -20,14 +20,10 @@
       <aside class="scenario-panel">
         <div class="panel-head">
           <h2>シナリオ</h2>
-          <span>1件</span>
+          <span id="scenarioCount">2件</span>
         </div>
 
-        <button class="scenario-card is-selected" type="button" aria-pressed="true">
-          <span class="scenario-type">サービス工場</span>
-          <strong>12カ月点検・来店促進</strong>
-          <span>引取納車依頼を、来店メリットと代替案へつなげる練習</span>
-        </button>
+        <div class="scenario-list" id="scenarioList" aria-label="シナリオ選択"></div>
 
         <div class="manager-steps" aria-label="店長の操作">
           <div><span>1</span>シナリオ確認</div>
@@ -70,7 +66,7 @@
             </div>
           </div>
 
-          <p class="random-note">AIお客様の質問・引取依頼・断り理由は、毎回ランダムに変わります。</p>
+          <p class="random-note" id="scenarioNote">AIお客様の質問・引取依頼・断り理由は、毎回ランダムに変わります。</p>
 
           <form class="input-row" id="replyForm">
             <button class="icon-button" id="micButton" type="button" aria-label="音声入力">🎙</button>
