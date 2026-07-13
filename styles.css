@@ -600,7 +600,7 @@ textarea:focus {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm;
+    margin: 7mm;
   }
 
   html,
@@ -608,7 +608,7 @@ textarea:focus {
     width: auto;
     color: #000;
     background: #fff;
-    font-size: 10pt;
+    font-size: 7.5pt;
     -webkit-print-color-adjust: economy;
     print-color-adjust: economy;
   }
@@ -629,11 +629,15 @@ textarea:focus {
   }
 
   .topbar {
-    margin-bottom: 10px;
+    margin-bottom: 2mm;
   }
 
   h1 {
-    font-size: 22pt;
+    font-size: 15pt;
+  }
+
+  .eyebrow {
+    display: none;
   }
 
   .status-pill,
@@ -645,64 +649,151 @@ textarea:focus {
   .random-note,
   .print-button,
   .print-note,
-  .play-audio {
+  .play-audio,
+  .report-audio {
     display: none !important;
   }
 
   .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.9fr);
+    gap: 3mm;
+    align-items: start;
+  }
+
+  .workbench {
     display: block;
+    min-width: 0;
   }
 
   .workbench,
+  .chat-card,
   .result-panel {
     box-shadow: none;
   }
 
   .chat-card,
   .result-panel {
-    margin-bottom: 14px;
+    min-width: 0;
+    margin: 0;
     border: 1px solid #000;
+    border-radius: 0;
   }
 
   .chat-card {
-    break-after: page;
+    break-after: auto;
+    break-inside: avoid;
   }
 
   .result-panel {
-    break-inside: auto;
+    padding: 2.5mm;
+    break-inside: avoid;
   }
 
   .conversation {
+    display: flex;
+    gap: 1.2mm;
     height: auto;
     max-height: none;
+    padding: 2mm;
     overflow: visible;
     background: #fff;
   }
 
   .message {
     max-width: 100%;
-    padding: 8px 10px;
+    gap: 0.5mm;
+    padding: 1.1mm 1.6mm;
+    border-radius: 0;
     border-color: #000 !important;
     background: #fff !important;
     color: #111 !important;
     break-inside: avoid;
-    font-size: 9.5pt;
-    line-height: 1.45;
+    font-size: 6.6pt;
+    line-height: 1.25;
   }
 
-  .result-panel {
-    padding: 14px;
+  .message .speaker {
+    font-size: 6.4pt;
   }
 
-  .result-section,
+  .chat-head {
+    padding: 1.8mm 2mm;
+  }
+
+  .panel-head,
+  .chat-head {
+    margin-bottom: 1.5mm;
+  }
+
+  .panel-head h2,
+  .chat-head h2 {
+    margin: 0;
+    font-size: 10pt;
+  }
+
+  .panel-head span,
+  .chat-head p {
+    font-size: 6.5pt;
+  }
+
   .score-block {
+    grid-template-columns: 14mm 1fr;
+    gap: 2mm;
+    margin-bottom: 2mm;
+    padding: 2mm;
+    border: 1px solid #000;
+    border-radius: 0;
     break-inside: avoid;
   }
 
   .score-number {
+    width: 12mm;
+    height: 12mm;
     color: #111;
     background: #fff;
-    border: 2px solid #111;
+    border: 1px solid #111;
+    font-size: 12pt;
+  }
+
+  .score-block strong {
+    font-size: 8pt;
+  }
+
+  .score-block p {
+    margin-top: 0.6mm;
+    font-size: 6.5pt;
+    line-height: 1.25;
+  }
+
+  .result-section {
+    padding-top: 1.5mm;
+    break-inside: avoid;
+  }
+
+  .result-section h3 {
+    margin-bottom: 0.8mm;
+    font-size: 8pt;
+  }
+
+  .result-section ul {
+    margin: 0 0 1.5mm;
+    padding-left: 4mm;
+    font-size: 6.5pt;
+    line-height: 1.3;
+  }
+
+  .recommended-talk {
+    margin-bottom: 1.5mm;
+    padding: 1.5mm;
+    border-left: 1.2mm solid #000;
+    border-radius: 0;
+    font-size: 6.5pt;
+    line-height: 1.3;
+  }
+
+  .compact ul {
+    font-size: 6.2pt;
   }
 
   .chat-head,
