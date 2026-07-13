@@ -560,13 +560,26 @@ function scoreRoleplay() {
     score,
     good: good.slice(0, 4),
     improve: improve.slice(0, 4),
-    recommendedTalk: scenario.recommendedTalk,
+    recommendedTalk: selectRecommendedTalk(),
     judgements: state.analyses.map((analysis, index) => {
       const strength = analysis.pickup_acceptance_strength;
       const confidence = Math.round(analysis.confidence * 100);
       return `${index + 1}回目: 引取確定度 ${strength} / 信頼度 ${confidence}%`;
     })
   };
+}
+
+function selectRecommendedTalk() {
+  const customerText = state.transcript
+    .filter((message) => message.role === "customer")
+    .map((message) => message.text)
+    .join(" ");
+
+  if (includesAny(customerText, ["運転に自信", "運転が不安", "運転するのが不安"])) {
+    return scenario.recommendedTalks?.drivingConfidence || scenario.recommendedTalk;
+  }
+
+  return scenario.recommendedTalk;
 }
 
 function renderResults(result) {
