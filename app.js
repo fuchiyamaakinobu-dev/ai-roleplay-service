@@ -174,8 +174,8 @@ function playAudio(src, fallbackText = "", showMissingMessage = true, onFinished
 function startSpeechInputAfterCustomer() {
   window.setTimeout(() => {
     if (!state.started || state.ended || !speechRecognition || speechListening) return;
+    clearStaffInput();
     speechListening = true;
-    speechBaseText = els.staffInput.value.trim();
     updateMicButton(true);
     els.speechNote.textContent = "AIお客様の発話が終了しました。音声入力中です。話し終えたら送信を押してください。";
     try {
@@ -186,6 +186,12 @@ function startSpeechInputAfterCustomer() {
       els.speechNote.textContent = "音声入力を開始できませんでした。マイクボタンを押してください。";
     }
   }, 180);
+}
+
+function clearStaffInput() {
+  els.staffInput.value = "";
+  speechBaseText = "";
+  lastAcknowledgedText = "";
 }
 
 function escapeHtml(value) {
@@ -483,7 +489,7 @@ function handleReply(event) {
   if (!text) return;
 
   stopSpeechInput();
-  els.staffInput.value = "";
+  clearStaffInput();
   addMessage("staff", text);
   const analysis = analyzeStaff(text);
   state.turn += 1;
@@ -596,6 +602,7 @@ function setupSpeech() {
   speechRecognition.continuous = true;
 
   speechRecognition.addEventListener("result", (event) => {
+    if (!speechListening || state.ended) return;
     const text = Array.from(event.results).map((result) => result[0].transcript).join("");
     els.staffInput.value = `${speechBaseText}${speechBaseText && text ? " " : ""}${text}`;
     const latestResult = event.results[event.results.length - 1];
@@ -689,6 +696,7 @@ function stopSpeechInput() {
   }
   speechPausedForAck = false;
   lastAcknowledgedText = "";
+  speechBaseText = "";
   if (speechRecognition) {
     try {
       speechRecognition.stop();

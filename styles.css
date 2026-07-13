@@ -598,17 +598,42 @@ textarea:focus {
 }
 
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
   body {
+    width: auto;
+    color: #000;
     background: #fff;
+    font-size: 10pt;
+    -webkit-print-color-adjust: economy;
+    print-color-adjust: economy;
+  }
+
+  *,
+  *::before,
+  *::after {
+    color: #000 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
 
   .app-shell {
     width: 100%;
+    max-width: none;
     padding: 0;
   }
 
   .topbar {
     margin-bottom: 10px;
+  }
+
+  h1 {
+    font-size: 22pt;
   }
 
   .status-pill,
@@ -636,8 +661,15 @@ textarea:focus {
   .chat-card,
   .result-panel {
     margin-bottom: 14px;
-    border: 1px solid #9aa6b2;
-    break-inside: avoid;
+    border: 1px solid #000;
+  }
+
+  .chat-card {
+    break-after: page;
+  }
+
+  .result-panel {
+    break-inside: auto;
   }
 
   .conversation {
@@ -649,19 +681,33 @@ textarea:focus {
 
   .message {
     max-width: 100%;
-    border-color: #9aa6b2 !important;
+    padding: 8px 10px;
+    border-color: #000 !important;
     background: #fff !important;
     color: #111 !important;
     break-inside: avoid;
+    font-size: 9.5pt;
+    line-height: 1.45;
   }
 
   .result-panel {
     padding: 14px;
   }
 
+  .result-section,
+  .score-block {
+    break-inside: avoid;
+  }
+
   .score-number {
     color: #111;
     background: #fff;
     border: 2px solid #111;
+  }
+
+  .chat-head,
+  .result-section,
+  .score-block {
+    border-color: #000 !important;
   }
 }
