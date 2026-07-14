@@ -3,7 +3,7 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithRedirect,
+  signInWithPopup,
   signOut
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
@@ -289,9 +289,12 @@ async function saveDocument(documentName, statusMessage) {
 els.loginButton.addEventListener("click", async () => {
   els.loginStatus.textContent = "ログイン画面を開いています…";
   try {
-    await signInWithRedirect(auth, provider);
+    await signInWithPopup(auth, provider);
   } catch (error) {
-    els.loginStatus.textContent = `ログインできませんでした：${error.message}`;
+    const popupHint = ["auth/popup-blocked", "auth/cancelled-popup-request"].includes(error.code)
+      ? " ブラウザーのポップアップを許可して、もう一度お試しください。"
+      : "";
+    els.loginStatus.textContent = `ログインできませんでした：${error.message}${popupHint}`;
   }
 });
 
