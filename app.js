@@ -828,6 +828,18 @@ function analyzeScriptedStaff(text, step) {
   return analysis;
 }
 
+function scriptedStepMatches(text, step) {
+  const normalized = text.replace(/\s+/g, "");
+  return step.requiredGroups.every((group) =>
+    group.some((word) => normalized.includes(word))
+  );
+}
+
+function isPhoneGreetingOnly(text) {
+  const normalized = text.replace(/[\s、。,.!?！？]/g, "");
+  return /^(?:もしもし|はいもしもし|もしもしお世話になっております)$/.test(normalized);
+}
+
 function hasScriptedClosingIntent(text) {
   const normalized = text.replace(/\s+/g, "");
   const isQuestion = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized);
@@ -882,6 +894,31 @@ function handleScriptedStaffReply(text) {
   if (!step) {
     finishRoleplay();
     return;
+  }
+
+  if (step.key === "confirmed_identity" && isPhoneGreetingOnly(text)) {
+    state.turn += 1;
+    addMessage("customer", "はい、もしもし。", {
+      audioId: "inspection_phone_greeting_customer"
+    });
+    els.speechNote.textContent = "電話の挨拶を受けました。続けて、お客様のお名前を確認してください。";
+    renderProgress();
+    return;
+  }
+
+  if (step.key === "confirmed_identity" && !scriptedStepMatches(text, step)) {
+    const introductionStep = scenario.steps.find((item) => item.key === "introduced_self");
+    if (introductionStep && scriptedStepMatches(text, introductionStep)) {
+      analyzeScriptedStaff(text, step);
+      analyzeScriptedStaff(text, introductionStep);
+      state.turn += 1;
+      addMessage("customer", "はい。どちらにおかけですか？", {
+        audioId: "inspection_identity_missing_after_introduction"
+      });
+      els.speechNote.textContent = "店舗名と担当者名は確認できました。続けて、お客様のお名前を確認してください。";
+      renderProgress();
+      return;
+    }
   }
 
   const closingIntent = hasScriptedClosingIntent(text);
@@ -941,6 +978,16 @@ function handleScriptedStaffReply(text) {
 
   let responseStep = step;
   state.scriptStep += 1;
+
+  // 先に名乗りが済んでから本人確認へ戻った場合は、名乗りを繰り返させない。
+  while (
+    state.scriptStep < scenario.steps.length
+    && state.analyses.some((item) =>
+      item.stepKey === scenario.steps[state.scriptStep].key && item.passed
+    )
+  ) {
+    state.scriptStep += 1;
+  }
 
   // スタッフが本人確認・名乗りなどを一度に話した場合は、
   // 同じ発話で実際に満たした連続ステップもまとめて判定する。

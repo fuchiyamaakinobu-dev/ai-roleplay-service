@@ -296,6 +296,8 @@ window.ROLEPLAY_AUDIO_DB = {
 };
 
 const vehicleInspectionAudioLines = [
+  ["inspection_phone_greeting_customer", "電話冒頭・お客様挨拶", "はい、もしもし。"],
+  ["inspection_identity_missing_after_introduction", "名乗り済み・本人確認不足", "はい。どちらにおかけですか？"],
   ["inspection_confirmed_identity_customer", "本人確認・お客様回答", "そうです。"],
   ["inspection_confirmed_identity_retry", "本人確認・聞き返し", "はい。どちら様でしょうか？"],
   ["inspection_introduced_self_customer", "名乗り・お客様回答", "はい。"],
