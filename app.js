@@ -841,15 +841,33 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  let responseStep = step;
   state.scriptStep += 1;
+
+  // スタッフが本人確認・名乗りなどを一度に話した場合は、
+  // 同じ発話で実際に満たした連続ステップもまとめて判定する。
+  while (state.scriptStep < scenario.steps.length) {
+    const nextStep = scenario.steps[state.scriptStep];
+    const normalized = text.replace(/\s+/g, "");
+    const matchesNextStep = nextStep.requiredGroups.every((group) =>
+      group.some((word) => normalized.includes(word))
+    );
+    if (!matchesNextStep) break;
+
+    const nextAnalysis = analyzeScriptedStaff(text, nextStep);
+    if (!nextAnalysis.passed) break;
+    responseStep = nextStep;
+    state.scriptStep += 1;
+  }
+
   const finished = state.scriptStep >= scenario.steps.length;
   if (finished) {
     state.ended = true;
   } else {
     state.currentState = scenario.steps[state.scriptStep].state;
   }
-  addMessage("customer", step.customerResponse, {
-    audioId: `inspection_${step.key}_customer`
+  addMessage("customer", responseStep.customerResponse, {
+    audioId: `inspection_${responseStep.key}_customer`
   });
   renderProgress();
   if (finished) finishRoleplay();
