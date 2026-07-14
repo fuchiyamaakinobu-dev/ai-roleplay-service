@@ -3,12 +3,14 @@ window.ROLEPLAY_SCENARIO = {
   mode: "customer-led-branching",
   type: "サービス工場",
   title: "12カ月点検・来店促進",
-  description: "引取納車依頼を、来店メリットと代替案へつなげる練習",
+  description: "追加整備・気になる症状を確認し、引取納車依頼を来店メリットと代替案へつなげる練習",
   customerName: "池田の斎藤様",
   serviceTime: "1時間程度",
   initialCustomerMessage: "池田の斎藤です。12カ月点検の案内が来たんですが、お願いできますか？",
   audio: {
     initial: "initial",
+    additionalServiceRequest: "additionalServiceRequest",
+    additionalServiceNone: "additionalServiceNone",
     serviceTimeQuestions: [
       "serviceTimeQuestion",
       "serviceTimeQuestion02",
@@ -101,36 +103,39 @@ window.ROLEPLAY_SCENARIO = {
   progress: [
     { state: "START", label: "開始" },
     { state: "INSPECTION_REQUEST_RECEIVED", label: "点検受付" },
+    { state: "ADDITIONAL_SERVICE_REQUEST", label: "追加整備確認" },
+    { state: "ADDITIONAL_SERVICE_RECONFIRMATION", label: "追加整備再確認" },
     { state: "SERVICE_TIME_QUESTION", label: "時間説明" },
     { state: "PICKUP_REQUEST", label: "引取依頼" },
     { state: "VISIT_PROPOSAL", label: "来店提案" },
     { state: "ALTERNATIVE_PROPOSAL", label: "代替案" }
   ],
   scoring: [
-    { key: "acknowledged_request", label: "依頼を受け止めた", action: "依頼を受け止める", points: 10 },
-    { key: "explained_service_time", label: "作業時間を説明した", action: "作業時間を説明する", points: 10 },
-    { key: "asked_reason", label: "引取希望の理由を確認した", action: "引取希望の理由を確認する", points: 15 },
-    { key: "explained_visit_benefit", label: "来店メリットを説明した", action: "来店メリットを説明する", points: 15 },
-    { key: "proposed_weekend", label: "土日などを提案した", action: "土日などを提案する", points: 15 },
-    { key: "proposed_other_store", label: "他店舗などを提案した", action: "他店舗などを提案する", points: 10 },
-    { key: "left_choice", label: "選択肢を残した", action: "選択肢を残す", points: 10 },
-    { key: "next_action_confirmed", label: "次の約束につなげた", action: "次の約束につなげる", points: 15 }
+    { key: "acknowledged_request", label: "依頼を受け止めた", action: "依頼を受け止める", points: 8 },
+    { key: "asked_additional_service", label: "その他ご用命・気になる点", action: "点検以外のご用命と気になる点を確認する", points: 15 },
+    { key: "explained_service_time", label: "作業時間を説明した", action: "作業時間を説明する", points: 8 },
+    { key: "asked_reason", label: "引取希望の理由を確認した", action: "引取希望の理由を確認する", points: 13 },
+    { key: "explained_visit_benefit", label: "来店メリットを説明した", action: "来店メリットを説明する", points: 13 },
+    { key: "proposed_weekend", label: "土日などを提案した", action: "土日などを提案する", points: 13 },
+    { key: "proposed_other_store", label: "他店舗などを提案した", action: "他店舗などを提案する", points: 8 },
+    { key: "left_choice", label: "選択肢を残した", action: "選択肢を残す", points: 8 },
+    { key: "next_action_confirmed", label: "次の約束につなげた", action: "次の約束につなげる", points: 14 }
   ],
   recommendedTalk:
-    "お仕事で平日のご来店が難しいのですね。点検だけですと1時間程度です。土日に営業している週もありますので、ご都合はいかがでしょうか。ご来店いただければ、点検内容をお車を見ながら詳しくご説明できます。",
+    "12カ月点検のほかに、オイル交換などのご用命や、その他お車で気になる点はございませんか。お仕事で平日のご来店が難しいのですね。点検だけですと1時間程度です。土日に営業している週もありますので、ご都合はいかがでしょうか。ご来店いただければ、点検内容をお車を見ながら詳しくご説明できます。",
   recommendedTalks: {
     work:
-      "お仕事で平日のご来店が難しいのですね。点検は1時間程度です。土日営業日や、お仕事の前後で利用しやすい時間帯も確認できます。ご都合のよい曜日や時間帯を教えていただけますか。",
+      "12カ月点検のほかに、オイル交換などのご用命や、その他お車で気になる点はございませんか。お仕事で平日のご来店が難しいのですね。点検は1時間程度です。土日営業日や、お仕事の前後で利用しやすい時間帯も確認できます。ご都合のよい曜日や時間帯を教えていただけますか。",
     distance:
-      "ご自宅から距離があり、ご来店がご負担なのですね。お出かけの予定に合わせる方法や、ご自宅から近い店舗をご案内する方法もございます。無理のない方法を一緒に確認させてください。",
+      "12カ月点検のほかに、オイル交換などのご用命や、その他お車で気になる点はございませんか。ご自宅から距離があり、ご来店がご負担なのですね。お出かけの予定に合わせる方法や、ご自宅から近い店舗をご案内する方法もございます。無理のない方法を一緒に確認させてください。",
     competitor:
-      "他店の引取サービスも比較されているのですね。引取のご希望を否定せず、ご来店いただく場合はお車を見ながら点検内容を詳しくご説明できる点も含めて、ご都合に合う方法をお選びいただけます。何を一番重視されていますか。",
+      "12カ月点検のほかに、オイル交換などのご用命や、その他お車で気になる点はございませんか。他店の引取サービスも比較されているのですね。引取のご希望を否定せず、ご来店いただく場合はお車を見ながら点検内容を詳しくご説明できる点も含めて、ご都合に合う方法をお選びいただけます。何を一番重視されていますか。",
     misunderstanding:
-      "ご案内が分かりにくく、申し訳ございません。以前の説明内容と現在のご希望を確認させてください。そのうえで、来店またはほかの方法からご負担の少ない方法をご案内します。",
+      "12カ月点検のほかに、オイル交換などのご用命や、その他お車で気になる点はございませんか。ご案内が分かりにくく、申し訳ございません。以前の説明内容と現在のご希望を確認させてください。そのうえで、来店またはほかの方法からご負担の少ない方法をご案内します。",
     family:
-      "ご家族と相談されるのですね。もちろんお急ぎいただく必要はありません。ご相談に必要な点検時間や選択肢を整理し、こちらから再度ご連絡する時期を決めさせていただけますか。",
+      "12カ月点検のほかに、オイル交換などのご用命や、その他お車で気になる点はございませんか。ご家族と相談されるのですね。もちろんお急ぎいただく必要はありません。ご相談に必要な点検時間や選択肢を整理し、こちらから再度ご連絡する時期を決めさせていただけますか。",
     drivingConfidence:
-      "運転にご不安があるのですね。無理に運転なさらず、ご主人などご家族と一緒にご来店いただく方法や、ご自宅から近い店舗をご案内する方法もございます。どちらがご負担が少ないでしょうか。"
+      "12カ月点検のほかに、オイル交換などのご用命や、その他お車で気になる点はございませんか。運転にご不安があるのですね。無理に運転なさらず、ご主人などご家族と一緒にご来店いただく方法や、ご自宅から近い店舗をご案内する方法もございます。どちらがご負担が少ないでしょうか。"
   }
 };
 

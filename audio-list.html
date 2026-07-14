@@ -220,6 +220,16 @@
       font-weight: 900;
     }
 
+    .pending {
+      display: inline-flex;
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: #9a5a00;
+      background: #fff1cf;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
     .play {
       min-height: 32px;
       padding: 0 10px;
@@ -229,6 +239,11 @@
       background: #fff;
       font-weight: 900;
       cursor: pointer;
+    }
+
+    .play:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
     }
   </style>
 </head>
@@ -380,8 +395,8 @@
         <td>${escapeHtml(item.label)}</td>
         <td><code>${escapeHtml(item.file)}</code></td>
         <td>${escapeHtml(item.text)}</td>
-        <td><span class="ready">${escapeHtml(item.status)}</span></td>
-        <td><button class="play" type="button" data-audio-id="${escapeHtml(item.id)}" data-file="${escapeHtml(item.file)}">再生</button></td>
+        <td><span class="${item.status === "ready" ? "ready" : "pending"}">${escapeHtml(item.status)}</span></td>
+        <td><button class="play" type="button" data-audio-id="${escapeHtml(item.id)}" data-file="${escapeHtml(item.file)}" ${item.status === "ready" ? "" : "disabled"}>${item.status === "ready" ? "再生" : "音声準備待ち"}</button></td>
       </tr>
     `).join("");
 

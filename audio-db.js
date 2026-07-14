@@ -27,6 +27,20 @@ window.ROLEPLAY_AUDIO_DB = {
       status: "ready"
     },
     {
+      id: "additionalServiceRequest",
+      label: "追加整備の申告",
+      text: "オイル交換もお願いします。",
+      file: "customer_additional_service_request.mp3",
+      status: "ready"
+    },
+    {
+      id: "additionalServiceNone",
+      label: "追加整備・再確認後",
+      text: "そのほかは大丈夫です。",
+      file: "customer_additional_service_none.mp3",
+      status: "ready"
+    },
+    {
       id: "serviceTimeQuestion",
       label: "作業時間質問",
       text: "点検ってどれぐらい時間がかかるんですか？",

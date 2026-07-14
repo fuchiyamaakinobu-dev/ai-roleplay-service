@@ -63,6 +63,8 @@ const lexicon = {
   otherStore: ["他店舗", "別店舗", "市内", "帯広", "近くのお店", "近い店舗", "近くの店舗", "最寄りの店舗"],
   choice: ["無理に", "可能です", "選べ", "ご都合", "難しい場合", "検討"],
   nextAction: ["いつ", "候補", "予約", "ご都合", "何日", "午前", "午後", "連絡", "確認"],
+  additionalService: ["点検以外", "点検のほか", "点検の他", "ご用命", "追加整備", "オイル交換", "ほかに", "他に", "その他", "そのほか"],
+  vehicleConcern: ["気になる", "異音", "不具合", "症状", "調子", "違和感", "音"],
   pressure: ["必ず来店", "来てください", "来店しか", "できません", "無理です"],
   confirmedPickup: [
     "取りに伺います", "お取りに伺います", "車を取りに伺います",
@@ -105,7 +107,9 @@ function renderScenarioList() {
   els.scenarioCount.textContent = `${scenarios.length}件`;
   els.scenarioNote.textContent = scenario.mode === "staff-led-scripted"
     ? "入庫日時が確定すれば終話へ進めます。必須確認が不足すると、AIお客様が聞き返します。"
-    : "AIお客様の質問・引取依頼・断り理由は、毎回ランダムに変わります。";
+    : scenario.scoring.some((metric) => metric.key === "asked_additional_service")
+      ? "点検以外のご用命と、その他気になる点を確認しない場合は減点されますが、会話は進みます。"
+      : "AIお客様の質問・引取依頼・断り理由は、毎回ランダムに変わります。";
   els.scenarioList.innerHTML = scenarios
     .map((item) => {
       const selected = item.id === scenario.id;
@@ -409,7 +413,7 @@ function resetResults() {
 
 function analyzeStaff(text) {
   const normalized = text.replace(/\s+/g, "");
-  const isQuestion = /[？?]$/.test(text) || includesAny(normalized, ["でしょうか", "ですか", "ますか", "でしょう"]);
+  const isQuestion = /[？?]$/.test(text) || includesAny(normalized, ["でしょうか", "ですか", "ますか", "ませんか", "ないですか", "ございませんか", "でしょう"]);
   const isQuote = /「.*伺.*」|'.*伺.*'|以前|言った|ということ/.test(text);
   const hasConfirmedPickupWords = includesAny(normalized, lexicon.confirmedPickup);
   const isPickupRequestTurn = isActivePickupRequest();
@@ -464,6 +468,9 @@ function analyzeStaff(text) {
 
   const result = {
     acknowledged_request: includesAny(normalized, lexicon.thanks) || includesAny(normalized, ["承知", "かしこまり", "そうなのですね"]),
+    asked_additional_service: isQuestion
+      && includesAny(normalized, lexicon.additionalService)
+      && includesAny(normalized, lexicon.vehicleConcern),
     accepted_pickup: acceptedPickup,
     pickup_acceptance_strength: pickupStrength,
     asked_reason: includesAny(normalized, lexicon.reasonQuestion),
@@ -566,6 +573,38 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "INSPECTION_REQUEST_RECEIVED") {
+    if (analysis.asked_additional_service) {
+      state.currentState = "ADDITIONAL_SERVICE_REQUEST";
+      return customerTurnFromAudio(
+        scenario.audio.additionalServiceRequest,
+        "オイル交換もお願いします。"
+      );
+    }
+    state.currentState = "SERVICE_TIME_QUESTION";
+    const index = pickRandomIndex(scenario.serviceTimeQuestions, "service-time");
+    return customerTurn(
+      scenario.serviceTimeQuestions[index],
+      scenario.audio.serviceTimeQuestions[index]
+    );
+  }
+
+  if (state.currentState === "ADDITIONAL_SERVICE_REQUEST") {
+    if (analysis.asked_additional_service) {
+      state.currentState = "ADDITIONAL_SERVICE_RECONFIRMATION";
+      return customerTurnFromAudio(
+        scenario.audio.additionalServiceNone,
+        "そのほかは大丈夫です。"
+      );
+    }
+    state.currentState = "SERVICE_TIME_QUESTION";
+    const index = pickRandomIndex(scenario.serviceTimeQuestions, "service-time");
+    return customerTurn(
+      scenario.serviceTimeQuestions[index],
+      scenario.audio.serviceTimeQuestions[index]
+    );
+  }
+
+  if (state.currentState === "ADDITIONAL_SERVICE_RECONFIRMATION") {
     state.currentState = "SERVICE_TIME_QUESTION";
     const index = pickRandomIndex(scenario.serviceTimeQuestions, "service-time");
     return customerTurn(
