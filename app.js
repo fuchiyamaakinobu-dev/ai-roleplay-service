@@ -630,6 +630,11 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "PICKUP_REQUEST") {
+    const directAgreement = selectContextualCustomerResponse(analysis);
+    if (directAgreement) {
+      state.currentState = "ALTERNATIVE_PROPOSAL";
+      return directAgreement;
+    }
     state.currentState = "VISIT_PROPOSAL";
     state.currentObjection = selectObjection(analysis);
     const objection = scenario.objections[state.currentObjection];
