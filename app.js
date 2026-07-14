@@ -22,6 +22,8 @@ const state = {
   pickupReason: null,
   currentObjection: null,
   resolutionType: null,
+  additionalServiceAnswered: false,
+  additionalServiceResumeState: null,
   transcript: [],
   analyses: [],
   usedVariants: {}
@@ -63,7 +65,7 @@ const lexicon = {
   otherStore: ["他店舗", "別店舗", "市内", "帯広", "近くのお店", "近い店舗", "近くの店舗", "最寄りの店舗"],
   choice: ["無理に", "可能です", "選べ", "ご都合", "難しい場合", "検討"],
   nextAction: ["いつ", "候補", "予約", "ご都合", "何日", "午前", "午後", "連絡", "確認"],
-  additionalService: ["点検以外", "点検のほか", "点検の他", "ご用命", "追加整備", "オイル交換", "ほかに", "他に", "その他", "そのほか"],
+  additionalService: ["点検以外", "点検のほか", "点検の他", "ご用命", "追加整備", "オイル交換", "ほかに", "他に", "その他", "そのほか", "何か", "なにか"],
   vehicleConcern: ["気になる", "異音", "不具合", "症状", "調子", "違和感", "音"],
   pressure: ["必ず来店", "来てください", "来店しか", "できません", "無理です"],
   confirmedPickup: [
@@ -135,6 +137,8 @@ function selectScenario(scenarioId) {
   state.turn = 0;
   state.scriptStep = 0;
   state.proposedAppointment = null;
+  state.additionalServiceAnswered = false;
+  state.additionalServiceResumeState = null;
   state.transcript = [];
   state.analyses = [];
   state.usedVariants = {};
@@ -387,6 +391,8 @@ function startRoleplay() {
   state.pickupReason = null;
   state.currentObjection = null;
   state.resolutionType = null;
+  state.additionalServiceAnswered = false;
+  state.additionalServiceResumeState = null;
   state.transcript = [];
   state.analyses = [];
   state.usedVariants = {};
@@ -572,14 +578,21 @@ function nextCustomerMessage(analysis) {
     );
   }
 
+  if (
+    scenario.scoring.some((metric) => metric.key === "asked_additional_service")
+    && analysis.asked_additional_service
+    && !state.additionalServiceAnswered
+  ) {
+    state.additionalServiceAnswered = true;
+    state.additionalServiceResumeState = state.currentState;
+    state.currentState = "ADDITIONAL_SERVICE_REQUEST";
+    return customerTurnFromAudio(
+      scenario.audio.additionalServiceRequest,
+      "オイル交換もお願いします。"
+    );
+  }
+
   if (state.currentState === "INSPECTION_REQUEST_RECEIVED") {
-    if (analysis.asked_additional_service) {
-      state.currentState = "ADDITIONAL_SERVICE_REQUEST";
-      return customerTurnFromAudio(
-        scenario.audio.additionalServiceRequest,
-        "オイル交換もお願いします。"
-      );
-    }
     state.currentState = "SERVICE_TIME_QUESTION";
     const index = pickRandomIndex(scenario.serviceTimeQuestions, "service-time");
     return customerTurn(
@@ -596,21 +609,17 @@ function nextCustomerMessage(analysis) {
         "そのほかは大丈夫です。"
       );
     }
-    state.currentState = "SERVICE_TIME_QUESTION";
-    const index = pickRandomIndex(scenario.serviceTimeQuestions, "service-time");
-    return customerTurn(
-      scenario.serviceTimeQuestions[index],
-      scenario.audio.serviceTimeQuestions[index]
-    );
+    const resumeState = state.additionalServiceResumeState || "INSPECTION_REQUEST_RECEIVED";
+    state.additionalServiceResumeState = null;
+    state.currentState = resumeState;
+    return nextCustomerMessage(analysis);
   }
 
   if (state.currentState === "ADDITIONAL_SERVICE_RECONFIRMATION") {
-    state.currentState = "SERVICE_TIME_QUESTION";
-    const index = pickRandomIndex(scenario.serviceTimeQuestions, "service-time");
-    return customerTurn(
-      scenario.serviceTimeQuestions[index],
-      scenario.audio.serviceTimeQuestions[index]
-    );
+    const resumeState = state.additionalServiceResumeState || "INSPECTION_REQUEST_RECEIVED";
+    state.additionalServiceResumeState = null;
+    state.currentState = resumeState;
+    return nextCustomerMessage(analysis);
   }
 
   if (state.currentState === "SERVICE_TIME_QUESTION") {
