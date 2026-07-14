@@ -102,7 +102,7 @@ function isActivePickupRequest() {
 function renderScenarioList() {
   els.scenarioCount.textContent = `${scenarios.length}件`;
   els.scenarioNote.textContent = scenario.mode === "staff-led-scripted"
-    ? "案内内容が不足すると、AIお客様がその場面に合った聞き返しをします。"
+    ? "入庫日時が確定すれば終話へ進めます。必須確認が不足すると、AIお客様が聞き返します。"
     : "AIお客様の質問・引取依頼・断り理由は、毎回ランダムに変わります。";
   els.scenarioList.innerHTML = scenarios
     .map((item) => {
@@ -693,17 +693,69 @@ function analyzeScriptedStaff(text, step) {
       && normalized.includes(`${appointment.hour}時`)
     );
   }
+  const canAdvance = passed || step.advanceOnFailure === true;
   const analysis = {
     scripted: true,
     stepKey: step.key,
     expected: step.expected,
     passed,
+    canAdvance,
+    blocked: !canAdvance,
     confidence: passed ? 0.95 : 0.55,
     evidence: matchedGroups.flat().slice(0, 8)
   };
   analysis[step.key] = passed;
   state.analyses.push(analysis);
   return analysis;
+}
+
+function hasScriptedClosingIntent(text) {
+  const normalized = text.replace(/\s+/g, "");
+  const isQuestion = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized);
+  if (isQuestion) return false;
+
+  return [
+    /当日.*お待ち/,
+    /ご?予約.*承り/,
+    /以上.*(?:予約|案内)/,
+    /これで.*(?:予約|案内)/,
+    /ありがとうございました/
+  ].some((pattern) => pattern.test(normalized));
+}
+
+function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
+  const normalized = text.replace(/\s+/g, "");
+  const appointment = state.proposedAppointment;
+
+  scenario.steps.slice(startIndex, closingIndex).forEach((step) => {
+    if (!step.optionalAfterAppointment) return;
+    const matchedGroups = step.requiredGroups.map((group) => group.filter((word) => normalized.includes(word)));
+    let passed = matchedGroups.every((matches) => matches.length > 0);
+
+    if (step.key === "recapped_appointment") {
+      passed = Boolean(
+        passed
+        && appointment
+        && normalized.includes(`${appointment.month}月`)
+        && normalized.includes(`${appointment.day}日`)
+        && normalized.includes(`${appointment.hour}時`)
+      );
+    }
+    if (!passed) return;
+
+    const analysis = {
+      scripted: true,
+      stepKey: step.key,
+      expected: step.expected,
+      passed: true,
+      canAdvance: true,
+      blocked: false,
+      confidence: 0.95,
+      evidence: matchedGroups.flat().slice(0, 8)
+    };
+    analysis[step.key] = true;
+    state.analyses.push(analysis);
+  });
 }
 
 function handleScriptedStaffReply(text) {
@@ -713,11 +765,56 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  const closingIntent = hasScriptedClosingIntent(text);
+  const closingIndex = scenario.steps.findIndex((item) => item.key === "closed_politely");
+
+  if (closingIntent && !state.proposedAppointment) {
+    const analysis = {
+      scripted: true,
+      stepKey: step.key,
+      expected: "入庫する日付と時間を確定する",
+      passed: false,
+      canAdvance: false,
+      blocked: true,
+      confidence: 0.95,
+      evidence: []
+    };
+    analysis[step.key] = false;
+    state.analyses.push(analysis);
+    state.turn += 1;
+    addMessage("customer", "いつ行けばいいんですか？", {
+      audioId: "inspection_missing_appointment_angry"
+    });
+    els.speechNote.textContent = "入庫に必要な最低限の確認として、予約の日付と時間を確定してください。";
+    renderProgress();
+    return;
+  }
+
+  if (
+    closingIntent
+    && state.proposedAppointment
+    && step.optionalAfterAppointment
+    && closingIndex > state.scriptStep
+  ) {
+    recordOptionalShortcutEvidence(text, state.scriptStep, closingIndex);
+    state.turn += 1;
+    state.scriptStep = closingIndex;
+    state.currentState = scenario.steps[closingIndex].state;
+    addMessage("customer", "お願いします。", {
+      audioId: "inspection_recapped_appointment_customer"
+    });
+    els.speechNote.textContent = "入庫日時が確定したため、最後の挨拶へ進みました。省略した案内は採点結果の改善点に表示されます。";
+    renderProgress();
+    return;
+  }
+
   const analysis = analyzeScriptedStaff(text, step);
   state.turn += 1;
 
-  if (!analysis.passed) {
-    addMessage("customer", step.retryResponse);
+  if (!analysis.canAdvance) {
+    addMessage("customer", step.retryResponse, {
+      audioId: `inspection_${step.key}_retry`
+    });
     els.speechNote.textContent = `不足している案内があります。現在の課題: ${step.expected}`;
     renderProgress();
     return;
@@ -730,7 +827,9 @@ function handleScriptedStaffReply(text) {
   } else {
     state.currentState = scenario.steps[state.scriptStep].state;
   }
-  addMessage("customer", step.customerResponse);
+  addMessage("customer", step.customerResponse, {
+    audioId: `inspection_${step.key}_customer`
+  });
   renderProgress();
   if (finished) finishRoleplay();
 }
@@ -841,7 +940,7 @@ function scoreScriptedRoleplay() {
     achieved[metric.key] = state.analyses.some((analysis) => analysis[metric.key] === true);
   });
 
-  const retryCount = state.analyses.filter((analysis) => analysis.scripted && !analysis.passed).length;
+  const retryCount = state.analyses.filter((analysis) => analysis.scripted && analysis.blocked).length;
   const baseScore = scenario.scoring.reduce(
     (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
     0

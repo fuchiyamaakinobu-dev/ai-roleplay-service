@@ -100,6 +100,8 @@
     .needed-list { display: grid; gap: 10px; }
     .needed-item { padding: 14px; border: 1px solid #ead8ae; border-radius: 9px; background: #fff; }
     .needed-item strong { display: block; margin-bottom: 5px; color: var(--navy); }
+    .voice-credit { margin: 18px 0 0; color: var(--muted); font-size: 13px; text-align: right; }
+    .voice-credit a { color: inherit; }
     .needed-meta { color: var(--muted); font-size: 13px; line-height: 1.6; }
     .empty-needed { margin: 0; color: var(--muted); font-weight: 700; }
     .resolve { margin-top: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--navy); font-weight: 800; cursor: pointer; }
@@ -302,6 +304,10 @@
         <tbody id="audioRows"></tbody>
       </table>
     </div>
+
+    <p class="voice-credit">
+      音声：<a href="https://voicevox.hiroshiba.jp/product/shikoku_metan/" target="_blank" rel="noopener noreferrer">VOICEVOX:四国めたん（ツンツン）</a>
+    </p>
   </main>
 
   <script src="./audio-db.js"></script>

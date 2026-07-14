@@ -613,6 +613,17 @@ textarea:focus {
   }
 }
 
+.voice-credit {
+  margin-top: 14px;
+  color: #5d6673;
+  font-size: 12px;
+  text-align: right;
+}
+
+.voice-credit a {
+  color: inherit;
+}
+
 @media print {
   @page {
     size: A4 portrait;
@@ -667,6 +678,10 @@ textarea:focus {
   .print-note,
   .play-audio,
   .report-audio {
+    display: none !important;
+  }
+
+  .voice-credit {
     display: none !important;
   }
 

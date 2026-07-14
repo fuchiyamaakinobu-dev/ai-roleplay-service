@@ -139,7 +139,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
   mode: "staff-led-scripted",
   type: "車検誘致・上級",
   title: "車検誘致・電話フォロー",
-  description: "スタッフの発話から始め、本人確認から予約・必要書類・事前連絡まで完結させる練習",
+  description: "スタッフの発話から始め、最低限の確認で予約を確定し、補足案内で得点を高める練習",
   customerName: "佐藤様",
   vehicleName: "ヤリス",
   expiryDate: "9月30日",
@@ -158,7 +158,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     { key: "confirmed_identity", label: "本人確認", action: "お客様のお名前を確認する", points: 4 },
     { key: "introduced_self", label: "店舗・担当者名", action: "店舗名と担当者名を名乗る", points: 6 },
     { key: "thanked_customer", label: "日頃の利用へのお礼", action: "日頃のご利用への感謝を伝える", points: 4 },
-    { key: "explained_inspection_notice", label: "車種・車検時期・電話目的", action: "車種と車検時期、電話の目的を説明する", points: 8 },
+    { key: "explained_inspection_notice", label: "車種・車検時期", action: "車種と車検時期を説明する", points: 8 },
     { key: "asked_availability", label: "都合確認", action: "お客様のご都合を確認する", points: 5 },
     { key: "explained_available_period", label: "満了日・入庫可能日", action: "満了日と作業可能日を案内する", points: 7 },
     { key: "explained_duration_and_wait", label: "作業時間・店内待ち", action: "基本作業時間と店内で待てることを説明する", points: 7 },
@@ -195,14 +195,15 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       key: "thanked_customer",
       expected: "日頃の利用へのお礼を伝える",
       requiredGroups: [["ご利用", "ご愛顧"], ["ありがとう", "感謝"]],
+      advanceOnFailure: true,
       customerResponse: "はい。",
       retryResponse: "はい。ご用件は何でしょうか？"
     },
     {
       state: "INSPECTION_GUIDANCE",
       key: "explained_inspection_notice",
-      expected: "車種、車検時期、電話した目的を説明する",
-      requiredGroups: [["ヤリス"], ["車検"], ["近", "時期"], ["電話", "連絡"]],
+      expected: "車種と車検時期を説明する",
+      requiredGroups: [["ヤリス"], ["車検"], ["近", "時期"]],
       customerResponse: "案内のはがきが来ていましたよ。",
       retryResponse: "何についてのお電話でしょうか？"
     },
@@ -259,6 +260,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       key: "confirmed_waiting",
       expected: "店内で待つか確認する",
       requiredGroups: [["待"]],
+      optionalAfterAppointment: true,
       customerResponse: "待っています。",
       retryResponse: "代車を借りるのと、待つのと、どちらですか？"
     },
@@ -267,6 +269,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       key: "asked_vehicle_concerns",
       expected: "車を使用していて気になる点がないか確認する",
       requiredGroups: [["気になる", "不具合", "調子", "具合"]],
+      optionalAfterAppointment: true,
       customerResponse: "別にないです。",
       retryResponse: "ほかに確認することはありますか？"
     },
@@ -275,6 +278,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       key: "explained_documents",
       expected: "荷物を降ろし、納税証明書・車検証・自賠責を用意するよう案内する",
       requiredGroups: [["荷物"], ["納税証明"], ["車検証"], ["自賠責"]],
+      optionalAfterAppointment: true,
       customerResponse: "はい。",
       retryResponse: "当日に必要な物を教えてください。"
     },
@@ -283,6 +287,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       key: "explained_lock_and_arrival",
       expected: "ロックナットアダプターと15分前来店を案内する",
       requiredGroups: [["ロック", "ホイールナット"], ["アダプター"], ["15分", "十五分"], ["早め", "前に"]],
+      optionalAfterAppointment: true,
       customerResponse: "分かりました。",
       retryResponse: "ほかに持って行く物や、到着時間の注意はありますか？"
     },
@@ -291,6 +296,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       key: "confirmed_reminder_contact",
       expected: "作業3日前の確認連絡と、希望する連絡先を確認する",
       requiredGroups: [["3日前", "三日前"], ["連絡"], ["どちら", "携帯", "電話番号"]],
+      optionalAfterAppointment: true,
       customerResponse: "この携帯にお願いします。",
       retryResponse: "事前の確認連絡はありますか？"
     },
@@ -299,6 +305,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       key: "recapped_appointment",
       expected: "お客様名と予約日時を復唱する",
       requiredGroups: [["佐藤"], ["月"], ["日"], ["時"], ["お待ち", "予約", "よろしく"]],
+      optionalAfterAppointment: true,
       customerResponse: "お願いします。",
       retryResponse: "最後に予約内容をもう一度お願いします。"
     },
@@ -312,7 +319,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     }
   ],
   recommendedTalk:
-    "本人確認、店舗名と担当者名、お礼、車種と車検時期、ご都合確認の順で用件を簡潔に伝えます。予約時は満了日と入庫可能日、所要時間、代車、具体的な日時、店内待ち、車の気になる点、必要書類、ロックナット、15分前来店、3日前確認連絡を漏れなく案内し、最後に予約日時を復唱してください。"
+    "本人確認、店舗名と担当者名、車種と車検時期を伝え、具体的な入庫日時を確定することが最低限の条件です。日時確定後は終話へ進めます。高得点を目指す場合は、お礼、満了日と入庫可能日、所要時間、代車、待ち方、車の気になる点、必要書類、ロックナット、15分前来店、3日前確認連絡、予約日時の復唱まで案内してください。"
 };
 
 window.ROLEPLAY_SCENARIOS = [

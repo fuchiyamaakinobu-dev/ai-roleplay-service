@@ -1,5 +1,11 @@
 window.ROLEPLAY_AUDIO_DB = {
-  version: "2026-07-12",
+  version: "2026-07-14",
+  voice: {
+    engine: "VOICEVOX 0.25.2",
+    speaker: "四国めたん",
+    style: "ツンツン",
+    speakerId: 6
+  },
   basePath: "audio/",
   items: [
     {
@@ -263,3 +269,49 @@ window.ROLEPLAY_AUDIO_DB = {
     }
   ]
 };
+
+const vehicleInspectionAudioLines = [
+  ["inspection_confirmed_identity_customer", "本人確認・お客様回答", "そうです。"],
+  ["inspection_confirmed_identity_retry", "本人確認・聞き返し", "はい。どちら様でしょうか？"],
+  ["inspection_introduced_self_customer", "名乗り・お客様回答", "はい。"],
+  ["inspection_introduced_self_retry", "名乗り・聞き返し", "どちらのお店の、どなたですか？"],
+  ["inspection_thanked_customer_customer", "利用へのお礼・お客様回答", "はい。"],
+  ["inspection_thanked_customer_retry", "利用へのお礼・聞き返し", "はい。ご用件は何でしょうか？"],
+  ["inspection_explained_inspection_notice_customer", "車検案内・お客様回答", "案内のはがきが来ていましたよ。"],
+  ["inspection_explained_inspection_notice_retry", "車検案内・聞き返し", "何についてのお電話でしょうか？"],
+  ["inspection_asked_availability_customer", "都合確認・お客様回答", "どうしたらいいですか？"],
+  ["inspection_asked_availability_retry", "都合確認・聞き返し", "それで、どうしたらいいですか？"],
+  ["inspection_explained_available_period_customer", "入庫可能日・お客様回答", "どれくらい時間がかかるのですか？"],
+  ["inspection_explained_available_period_retry", "入庫可能日・聞き返し", "いつから車検を受けられるのですか？"],
+  ["inspection_explained_duration_and_wait_customer", "作業時間・お客様回答", "代車は貸してもらえますか？"],
+  ["inspection_explained_duration_and_wait_retry", "作業時間・聞き返し", "時間と、店で待てるかを教えてください。"],
+  ["inspection_explained_loaner_customer", "代車案内・お客様回答", "予約しようかな。"],
+  ["inspection_explained_loaner_retry", "代車案内・聞き返し", "代車を借りるには、どうしたらいいですか？"],
+  ["inspection_confirmed_booking_time_customer", "予約時間確認・お客様回答", "大丈夫ですよ。"],
+  ["inspection_confirmed_booking_time_retry", "予約時間確認・聞き返し", "今、このまま予約できますか？"],
+  ["inspection_proposed_appointment_customer", "予約日時提案・お客様回答", "その日でお願いします。"],
+  ["inspection_proposed_appointment_retry", "予約日時提案・聞き返し", "具体的な日時を教えてください。"],
+  ["inspection_confirmed_waiting_customer", "待ち方確認・お客様回答", "待っています。"],
+  ["inspection_confirmed_waiting_retry", "待ち方確認・聞き返し", "代車を借りるのと、待つのと、どちらですか？"],
+  ["inspection_asked_vehicle_concerns_customer", "車両状態確認・お客様回答", "別にないです。"],
+  ["inspection_asked_vehicle_concerns_retry", "車両状態確認・聞き返し", "ほかに確認することはありますか？"],
+  ["inspection_explained_documents_customer", "持参品案内・お客様回答", "はい。"],
+  ["inspection_explained_documents_retry", "持参品案内・聞き返し", "当日に必要な物を教えてください。"],
+  ["inspection_explained_lock_and_arrival_customer", "ロックナット案内・お客様回答", "分かりました。"],
+  ["inspection_explained_lock_and_arrival_retry", "ロックナット案内・聞き返し", "ほかに持って行く物や、到着時間の注意はありますか？"],
+  ["inspection_confirmed_reminder_contact_customer", "事前連絡確認・お客様回答", "この携帯にお願いします。"],
+  ["inspection_confirmed_reminder_contact_retry", "事前連絡確認・聞き返し", "事前の確認連絡はありますか？"],
+  ["inspection_recapped_appointment_customer", "予約復唱・お客様回答", "お願いします。"],
+  ["inspection_recapped_appointment_retry", "予約復唱・聞き返し", "最後に予約内容をもう一度お願いします。"],
+  ["inspection_closed_politely_customer", "終話・お客様回答", "ありがとうございました。"],
+  ["inspection_closed_politely_retry", "終話・聞き返し", "はい。"],
+  ["inspection_missing_appointment_angry", "入庫日時未確定・少し怒り気味", "いつ行けばいいんですか？"]
+];
+
+window.ROLEPLAY_AUDIO_DB.items.push(...vehicleInspectionAudioLines.map(([id, label, text]) => ({
+  id,
+  label,
+  text,
+  file: `${id}.mp3`,
+  status: "ready"
+})));
