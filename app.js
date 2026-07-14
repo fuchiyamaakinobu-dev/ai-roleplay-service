@@ -35,6 +35,8 @@ const els = {
   finishButton: document.querySelector("#finishButton"),
   printButton: document.querySelector("#printButton"),
   audioEnabled: document.querySelector("#audioEnabled"),
+  voiceSelect: document.querySelector("#voiceSelect"),
+  voiceCredit: document.querySelector("#voiceCredit"),
   replyForm: document.querySelector("#replyForm"),
   staffInput: document.querySelector("#staffInput"),
   micButton: document.querySelector("#micButton"),
@@ -167,7 +169,19 @@ function renderProgress() {
 function audioPath(audioId) {
   const item = audioIndex.get(audioId);
   if (!item || item.status !== "ready") return "";
-  return `${audioDb.basePath || "audio/"}${item.file}`;
+  const voice = audioDb.voices?.[els.voiceSelect?.value] || audioDb.voices?.[audioDb.defaultVoice];
+  return `${voice?.basePath || audioDb.basePath || "audio/"}${item.file}`;
+}
+
+function updateVoiceSelection() {
+  const voiceKey = els.voiceSelect?.value || audioDb.defaultVoice;
+  const voice = audioDb.voices?.[voiceKey];
+  if (!voice) return;
+  localStorage.setItem("roleplayVoice", voiceKey);
+  if (els.voiceCredit) {
+    els.voiceCredit.textContent = voice.credit;
+    els.voiceCredit.href = voice.creditUrl;
+  }
 }
 
 function addMessage(role, text, options = {}) {
@@ -1144,6 +1158,7 @@ els.startButton.addEventListener("click", startRoleplay);
 els.resetButton.addEventListener("click", startRoleplay);
 els.finishButton.addEventListener("click", finishRoleplay);
 els.printButton.addEventListener("click", () => window.print());
+els.voiceSelect?.addEventListener("change", updateVoiceSelection);
 els.replyForm.addEventListener("submit", handleReply);
 els.scenarioList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-scenario-id]");
@@ -1187,6 +1202,11 @@ els.conversation.addEventListener("click", (event) => {
   }
 });
 
+const savedVoice = localStorage.getItem("roleplayVoice");
+if (savedVoice && audioDb.voices?.[savedVoice] && els.voiceSelect) {
+  els.voiceSelect.value = savedVoice;
+}
+updateVoiceSelection();
 renderScenarioList();
 renderProgress();
 setupSpeech();

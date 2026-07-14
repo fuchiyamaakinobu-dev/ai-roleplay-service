@@ -1,10 +1,21 @@
 window.ROLEPLAY_AUDIO_DB = {
   version: "2026-07-14",
-  voice: {
-    engine: "VOICEVOX 0.25.2",
-    speaker: "四国めたん",
-    style: "ツンツン",
-    speakerId: 6
+  defaultVoice: "shikoku_metan_tsuntsun",
+  voices: {
+    shikoku_metan_tsuntsun: {
+      label: "四国めたん（ツンツン）",
+      basePath: "audio/",
+      credit: "VOICEVOX:四国めたん",
+      creditUrl: "https://voicevox.hiroshiba.jp/product/shikoku_metan/",
+      speakerId: 6
+    },
+    kenzaki_mesuo: {
+      label: "剣崎雌雄（ノーマル）",
+      basePath: "audio-kenzaki/",
+      credit: "VOICEVOX:剣崎雌雄",
+      creditUrl: "https://voicevox.hiroshiba.jp/product/kenzaki_mesuo/",
+      speakerId: 21
+    }
   },
   basePath: "audio/",
   items: [

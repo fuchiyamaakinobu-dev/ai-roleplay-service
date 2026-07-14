@@ -102,6 +102,8 @@
     .needed-item strong { display: block; margin-bottom: 5px; color: var(--navy); }
     .voice-credit { margin: 18px 0 0; color: var(--muted); font-size: 13px; text-align: right; }
     .voice-credit a { color: inherit; }
+    .voice-picker { display: flex; align-items: center; gap: 10px; margin: 0 0 18px; font-weight: 900; }
+    .voice-picker select { min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--navy); background: #fff; font: inherit; }
     .needed-meta { color: var(--muted); font-size: 13px; line-height: 1.6; }
     .empty-needed { margin: 0; color: var(--muted); font-weight: 700; }
     .resolve { margin-top: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--navy); font-weight: 800; cursor: pointer; }
@@ -240,6 +242,11 @@
       <a href="./index.html">ロープレ画面へ戻る</a>
     </header>
 
+    <label class="voice-picker">
+      <span>再生する声</span>
+      <select id="voiceSelect"></select>
+    </label>
+
     <section class="guide" aria-labelledby="guideTitle">
       <h2 id="guideTitle">新しい音声ファイルが必要になった場合も作成できます</h2>
       <p>はい、自然なお客様音声を作成できます。必要なセリフと声のイメージを指定すると、日本語音声（MP3）を制作し、既存音声との入れ替えや新しい会話パターンへの追加ができます。</p>
@@ -259,7 +266,7 @@
       </div>
       <div class="automation-note">
         <strong>料金は無料ですか？</strong>
-        現在登録されている音声ファイルの再生には、音声生成の追加料金はかかりません。ただし、新しい音声を自動生成する機能を追加した場合は無料ではなく、利用する音声生成APIの使用量に応じた料金が発生します。ChatGPTの月額料金とは別の扱いです。少量の音声追加であれば大きな費用になりにくいものの、導入前に上限金額を設定し、使い過ぎを防止する運用を推奨します。料金は変更される場合があるため、<a href="https://openai.com/api/pricing/" target="_blank" rel="noopener noreferrer">OpenAI公式料金ページ</a>で最新情報を確認してください。
+        現在はパソコンにインストールしたVOICEVOXで音声を生成しているため、音声生成APIの追加料金はかかりません。公開利用時は、選択した音声の「VOICEVOX:キャラクター名」というクレジット表記と、各キャラクターの利用規約を守る必要があります。
       </div>
       <div class="automation-note">
         <strong>新しい音声が必要になったときの運用</strong>
@@ -306,7 +313,7 @@
     </div>
 
     <p class="voice-credit">
-      音声：<a href="https://voicevox.hiroshiba.jp/product/shikoku_metan/" target="_blank" rel="noopener noreferrer">VOICEVOX:四国めたん（ツンツン）</a>
+      音声：<a id="voiceCredit" href="https://voicevox.hiroshiba.jp/product/shikoku_metan/" target="_blank" rel="noopener noreferrer">VOICEVOX:四国めたん</a>
     </p>
   </main>
 
@@ -315,7 +322,29 @@
     const db = window.ROLEPLAY_AUDIO_DB;
     const rows = document.querySelector("#audioRows");
     const summary = document.querySelector("#summary");
-    const basePath = db.basePath || "audio/";
+    const voiceSelect = document.querySelector("#voiceSelect");
+    const voiceCredit = document.querySelector("#voiceCredit");
+    const voiceEntries = Object.entries(db.voices || {});
+
+    voiceSelect.innerHTML = voiceEntries
+      .map(([key, voice]) => `<option value="${escapeHtml(key)}">${escapeHtml(voice.label)}</option>`)
+      .join("");
+    const savedVoice = localStorage.getItem("roleplayVoice");
+    voiceSelect.value = db.voices?.[savedVoice] ? savedVoice : db.defaultVoice;
+
+    function selectedVoice() {
+      return db.voices?.[voiceSelect.value] || { basePath: db.basePath || "audio/" };
+    }
+
+    function updateVoice() {
+      const voice = selectedVoice();
+      localStorage.setItem("roleplayVoice", voiceSelect.value);
+      voiceCredit.textContent = voice.credit || "登録音声";
+      voiceCredit.href = voice.creditUrl || "#";
+    }
+
+    voiceSelect.addEventListener("change", updateVoice);
+    updateVoice();
 
     function renderNeededAudio() {
       const list = document.querySelector("#neededList");
@@ -359,7 +388,7 @@
     rows.addEventListener("click", (event) => {
       const button = event.target.closest("[data-file]");
       if (!button) return;
-      new Audio(`${basePath}${button.dataset.file}`).play();
+      new Audio(`${selectedVoice().basePath}${button.dataset.file}`).play();
     });
 
     function escapeHtml(value) {

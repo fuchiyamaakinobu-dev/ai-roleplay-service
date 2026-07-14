@@ -36,6 +36,14 @@
           <span>お客様音声を自動再生</span>
         </label>
 
+        <label class="voice-selector">
+          <span>お客様の声</span>
+          <select id="voiceSelect">
+            <option value="shikoku_metan_tsuntsun">四国めたん（ツンツン）</option>
+            <option value="kenzaki_mesuo">剣崎雌雄（ノーマル）</option>
+          </select>
+        </label>
+
         <a class="audio-manager-link" href="./audio-list.html">
           <span aria-hidden="true">🔊</span>
           <span><strong>お客様音声を管理</strong><small>自然な音声の作り方・追加方法</small></span>
@@ -118,7 +126,7 @@
     </section>
 
     <footer class="voice-credit">
-      音声：<a href="https://voicevox.hiroshiba.jp/product/shikoku_metan/" target="_blank" rel="noopener noreferrer">VOICEVOX:四国めたん（ツンツン）</a>
+      音声：<a id="voiceCredit" href="https://voicevox.hiroshiba.jp/product/shikoku_metan/" target="_blank" rel="noopener noreferrer">VOICEVOX:四国めたん</a>
     </footer>
   </main>
 
