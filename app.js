@@ -22,6 +22,7 @@ const state = {
   pickupReason: null,
   currentObjection: null,
   resolutionType: null,
+  serviceTimeExplained: false,
   additionalServiceAnswered: false,
   additionalServiceResumeState: null,
   transcript: [],
@@ -137,6 +138,7 @@ function selectScenario(scenarioId) {
   state.turn = 0;
   state.scriptStep = 0;
   state.proposedAppointment = null;
+  state.serviceTimeExplained = false;
   state.additionalServiceAnswered = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
@@ -391,6 +393,7 @@ function startRoleplay() {
   state.pickupReason = null;
   state.currentObjection = null;
   state.resolutionType = null;
+  state.serviceTimeExplained = false;
   state.additionalServiceAnswered = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
@@ -536,6 +539,13 @@ function customerTurnFromAudio(audioId, fallbackText = "") {
   return customerTurn(item?.text || fallbackText, audioId);
 }
 
+function pickupRequestTurn() {
+  state.currentState = "PICKUP_REQUEST";
+  const index = pickRandomIndex(scenario.pickupRequests, "pickup-request");
+  state.pickupReason = classifyCustomerReason(scenario.pickupRequests[index]);
+  return customerTurn(scenario.pickupRequests[index], scenario.audio.pickupRequests[index]);
+}
+
 function randomIndex(length) {
   if (length <= 1) return 0;
   if (window.crypto?.getRandomValues) {
@@ -565,6 +575,8 @@ function pickVariant(values, group = "default") {
 }
 
 function nextCustomerMessage(analysis) {
+  if (analysis.explained_service_time) state.serviceTimeExplained = true;
+
   if (analysis.decision === "pickup_accepted_immediately") {
     state.currentState = "PICKUP_REQUEST";
     state.ended = true;
@@ -593,6 +605,7 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "INSPECTION_REQUEST_RECEIVED") {
+    if (state.serviceTimeExplained) return pickupRequestTurn();
     state.currentState = "SERVICE_TIME_QUESTION";
     const index = pickRandomIndex(scenario.serviceTimeQuestions, "service-time");
     return customerTurn(
@@ -623,10 +636,7 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "SERVICE_TIME_QUESTION") {
-    state.currentState = "PICKUP_REQUEST";
-    const index = pickRandomIndex(scenario.pickupRequests, "pickup-request");
-    state.pickupReason = classifyCustomerReason(scenario.pickupRequests[index]);
-    return customerTurn(scenario.pickupRequests[index], scenario.audio.pickupRequests[index]);
+    return pickupRequestTurn();
   }
 
   if (state.currentState === "PICKUP_REQUEST") {
