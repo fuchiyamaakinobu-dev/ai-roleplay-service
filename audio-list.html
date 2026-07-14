@@ -243,7 +243,7 @@
     </header>
 
     <label class="voice-picker">
-      <span>再生する声</span>
+      <span>車検誘致で再生する声</span>
       <select id="voiceSelect"></select>
     </label>
 
@@ -381,14 +381,17 @@
         <td><code>${escapeHtml(item.file)}</code></td>
         <td>${escapeHtml(item.text)}</td>
         <td><span class="ready">${escapeHtml(item.status)}</span></td>
-        <td><button class="play" type="button" data-file="${escapeHtml(item.file)}">再生</button></td>
+        <td><button class="play" type="button" data-audio-id="${escapeHtml(item.id)}" data-file="${escapeHtml(item.file)}">再生</button></td>
       </tr>
     `).join("");
 
     rows.addEventListener("click", (event) => {
       const button = event.target.closest("[data-file]");
       if (!button) return;
-      new Audio(`${selectedVoice().basePath}${button.dataset.file}`).play();
+      const basePath = button.dataset.audioId.startsWith("inspection_")
+        ? selectedVoice().basePath
+        : (db.basePath || "audio/");
+      new Audio(`${basePath}${button.dataset.file}`).play();
     });
 
     function escapeHtml(value) {

@@ -136,6 +136,7 @@ function selectScenario(scenarioId) {
   state.usedVariants = {};
   clearStaffInput();
   resetResults();
+  updateVoiceSelection();
   renderScenarioList();
   renderConversation();
   renderProgress();
@@ -170,7 +171,10 @@ function audioPath(audioId) {
   const item = audioIndex.get(audioId);
   if (!item || item.status !== "ready") return "";
   const voice = audioDb.voices?.[els.voiceSelect?.value] || audioDb.voices?.[audioDb.defaultVoice];
-  return `${voice?.basePath || audioDb.basePath || "audio/"}${item.file}`;
+  const basePath = audioId.startsWith("inspection_")
+    ? voice?.basePath
+    : audioDb.basePath;
+  return `${basePath || "audio/"}${item.file}`;
 }
 
 function updateVoiceSelection() {
@@ -178,9 +182,12 @@ function updateVoiceSelection() {
   const voice = audioDb.voices?.[voiceKey];
   if (!voice) return;
   localStorage.setItem("roleplayVoice", voiceKey);
+  const usesVoicevox = scenario.id === "vehicle-inspection-phone-followup";
+  if (els.voiceSelect) els.voiceSelect.disabled = !usesVoicevox;
   if (els.voiceCredit) {
-    els.voiceCredit.textContent = voice.credit;
-    els.voiceCredit.href = voice.creditUrl;
+    els.voiceCredit.textContent = usesVoicevox ? voice.credit : "従来音声";
+    if (usesVoicevox) els.voiceCredit.href = voice.creditUrl;
+    else els.voiceCredit.removeAttribute("href");
   }
 }
 

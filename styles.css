@@ -248,6 +248,12 @@ h1 {
   font: inherit;
 }
 
+.voice-selector select:disabled {
+  color: #7b8492;
+  background: #eef1f5;
+  cursor: not-allowed;
+}
+
 .audio-manager-link {
   display: flex;
   align-items: center;
