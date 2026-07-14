@@ -3,7 +3,7 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithPopup,
+  signInWithRedirect,
   signOut
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
@@ -289,7 +289,7 @@ async function saveDocument(documentName, statusMessage) {
 els.loginButton.addEventListener("click", async () => {
   els.loginStatus.textContent = "ログイン画面を開いています…";
   try {
-    await signInWithPopup(auth, provider);
+    await signInWithRedirect(auth, provider);
   } catch (error) {
     els.loginStatus.textContent = `ログインできませんでした：${error.message}`;
   }
