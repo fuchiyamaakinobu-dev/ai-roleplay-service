@@ -108,7 +108,8 @@ window.ROLEPLAY_SCENARIO = {
     { state: "SERVICE_TIME_QUESTION", label: "時間説明" },
     { state: "PICKUP_REQUEST", label: "引取依頼" },
     { state: "VISIT_PROPOSAL", label: "来店提案" },
-    { state: "ALTERNATIVE_PROPOSAL", label: "代替案" }
+    { state: "ALTERNATIVE_PROPOSAL", label: "代替案" },
+    { state: "APPOINTMENT_CONFIRMATION", label: "日時確認" }
   ],
   scoring: [
     { key: "acknowledged_request", label: "依頼を受け止めた", action: "依頼を受け止める", points: 8 },

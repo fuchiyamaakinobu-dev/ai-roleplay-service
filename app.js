@@ -23,6 +23,8 @@ const state = {
   currentObjection: null,
   resolutionType: null,
   serviceTimeExplained: false,
+  appointmentDateConfirmed: false,
+  appointmentTimeConfirmed: false,
   additionalServiceAnswered: false,
   additionalServiceResumeState: null,
   transcript: [],
@@ -139,6 +141,8 @@ function selectScenario(scenarioId) {
   state.scriptStep = 0;
   state.proposedAppointment = null;
   state.serviceTimeExplained = false;
+  state.appointmentDateConfirmed = false;
+  state.appointmentTimeConfirmed = false;
   state.additionalServiceAnswered = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
@@ -394,6 +398,8 @@ function startRoleplay() {
   state.currentObjection = null;
   state.resolutionType = null;
   state.serviceTimeExplained = false;
+  state.appointmentDateConfirmed = false;
+  state.appointmentTimeConfirmed = false;
   state.additionalServiceAnswered = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
@@ -459,7 +465,9 @@ function analyzeStaff(text) {
     || includesAny(normalized, ["時間帯", "午前", "午後", "代車", "ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
   const proposedTime = includesAny(normalized, ["時間帯", "午前", "午後", "夕方", "仕事前", "仕事後"]);
   const proposedFamilyVisit = includesAny(normalized, ["ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
-  const hasConcreteSchedule = /\d{1,2}(?:月|日|時)|(?:月|火|水|木|金|土|日)曜日|午前|午後/.test(normalized);
+  const hasScheduleDate = /(?:\d{1,2}月)?\d{1,2}日|(?:今週|来週|再来週)?(?:月|火|水|木|金|土|日)曜日/.test(normalized);
+  const hasScheduleTime = /\d{1,2}時|午前|午後|朝|夕方/.test(normalized);
+  const hasConcreteSchedule = hasScheduleDate && hasScheduleTime;
   const hasConcreteExplanation = hasConcreteServiceTime
     || hasActionableProposal
     || includesAny(normalized, lexicon.visitBenefit)
@@ -489,6 +497,8 @@ function analyzeStaff(text) {
     proposed_other_store: includesAny(normalized, lexicon.otherStore),
     proposed_time: proposedTime,
     proposed_family_visit: proposedFamilyVisit,
+    has_schedule_date: hasScheduleDate,
+    has_schedule_time: hasScheduleTime,
     has_concrete_schedule: hasConcreteSchedule,
     mentioned_previous_pickup: includesAny(normalized, ["以前", "前回", "前に", "取りに来ると", "取りに伺うと"]),
     proposed_alternative: hasActionableProposal,
@@ -576,6 +586,10 @@ function pickVariant(values, group = "default") {
 
 function nextCustomerMessage(analysis) {
   if (analysis.explained_service_time) state.serviceTimeExplained = true;
+  if (["ALTERNATIVE_PROPOSAL", "APPOINTMENT_CONFIRMATION"].includes(state.currentState)) {
+    if (analysis.has_schedule_date) state.appointmentDateConfirmed = true;
+    if (analysis.has_schedule_time) state.appointmentTimeConfirmed = true;
+  }
 
   if (analysis.decision === "pickup_accepted_immediately") {
     state.currentState = "PICKUP_REQUEST";
@@ -670,11 +684,20 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "ALTERNATIVE_PROPOSAL") {
-    state.ended = true;
-    const closingId = analysis.has_concrete_schedule
-      ? scenario.audio.closings[0]
-      : scenario.audio.closings[1];
-    return customerTurnFromAudio(closingId, "よろしくお願いします。");
+    if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
+      state.ended = true;
+      return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
+    }
+    state.currentState = "APPOINTMENT_CONFIRMATION";
+    return appointmentFollowUpTurn();
+  }
+
+  if (state.currentState === "APPOINTMENT_CONFIRMATION") {
+    if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
+      state.ended = true;
+      return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
+    }
+    return appointmentFollowUpTurn();
   }
 
   return customerTurn("ありがとうございます。続けてお願いします。", "");
@@ -695,6 +718,18 @@ function selectObjection(analysis) {
   if (analysis.proposed_other_store) candidates.push("competitor");
   if (analysis.mentioned_previous_pickup) candidates.push("misunderstanding");
   return candidates[randomIndex(candidates.length)];
+}
+
+function appointmentFollowUpTurn() {
+  const index = state.appointmentDateConfirmed
+    ? 2
+    : pickRandomIndex(scenario.audio.followUps.slice(0, 2), "appointment-date-follow-up");
+  const fallbackTexts = [
+    "では、いつなら空いていますか？",
+    "今週だと空いている日はありますか？",
+    "午前中と午後ならどちらが空いていますか？"
+  ];
+  return customerTurnFromAudio(scenario.audio.followUps[index], fallbackTexts[index]);
 }
 
 function selectContextualCustomerResponse(analysis) {
