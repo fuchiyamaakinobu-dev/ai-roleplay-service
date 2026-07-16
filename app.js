@@ -29,6 +29,7 @@ const state = {
   additionalServiceResumeState: null,
   transcript: [],
   analyses: [],
+  scriptedPartialReplies: {},
   usedVariants: {}
 };
 
@@ -147,6 +148,7 @@ function selectScenario(scenarioId) {
   state.additionalServiceResumeState = null;
   state.transcript = [];
   state.analyses = [];
+  state.scriptedPartialReplies = {};
   state.usedVariants = {};
   clearStaffInput();
   resetResults();
@@ -419,6 +421,7 @@ function startRoleplay() {
   state.additionalServiceResumeState = null;
   state.transcript = [];
   state.analyses = [];
+  state.scriptedPartialReplies = {};
   state.usedVariants = {};
   resetResults();
   if (scenario.mode === "staff-led-scripted") {
@@ -885,6 +888,27 @@ function hasCourtesyExpression(text) {
   return /(?:お世話になって(?:おります|います)|ありがとうございます|感謝)/.test(normalized);
 }
 
+function isAffirmativeScriptedReply(text) {
+  const normalized = text.replace(/[\s、。,.!?！？]/g, "");
+  return /^(?:はい|ええ|もちろん|大丈夫|できます|可能です|はいできます|もちろんできます|大丈夫です)$/.test(normalized);
+}
+
+function combinedScriptedReply(text, step) {
+  const pending = state.scriptedPartialReplies[step.key];
+  if (!pending) return text;
+
+  const parts = [pending.text, text];
+  if (isAffirmativeScriptedReply(text)) {
+    if (pending.missingDetail === "waiting") {
+      parts.push("店内で待つことができます");
+    }
+    if (pending.missingDetail === "reminderDestination") {
+      parts.push("携帯へ連絡します");
+    }
+  }
+  return parts.filter(Boolean).join(" ");
+}
+
 function scriptedRetryForMissingDetails(text, step) {
   const normalized = text.replace(/\s+/g, "");
 
@@ -894,7 +918,8 @@ function scriptedRetryForMissingDetails(text, step) {
     if (hasDuration && !hasWaiting) {
       return {
         text: "店内で待つことはできますか？",
-        audioId: "inspection_duration_wait_missing_retry"
+        audioId: "inspection_duration_wait_missing_retry",
+        missingDetail: "waiting"
       };
     }
   }
@@ -906,14 +931,16 @@ function scriptedRetryForMissingDetails(text, step) {
     if (hasReminder && !hasDestination) {
       return {
         text: "連絡先は、この携帯でいいですか？",
-        audioId: "inspection_reminder_destination_missing_retry"
+        audioId: "inspection_reminder_destination_missing_retry",
+        missingDetail: "reminderDestination"
       };
     }
   }
 
   return {
     text: step.retryResponse,
-    audioId: `inspection_${step.key}_retry`
+    audioId: `inspection_${step.key}_retry`,
+    missingDetail: null
   };
 }
 
@@ -1046,11 +1073,16 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
-  const analysis = analyzeScriptedStaff(text, step);
+  const combinedText = combinedScriptedReply(text, step);
+  const analysis = analyzeScriptedStaff(combinedText, step);
   state.turn += 1;
 
   if (!analysis.canAdvance) {
-    const retry = scriptedRetryForMissingDetails(text, step);
+    const retry = scriptedRetryForMissingDetails(combinedText, step);
+    state.scriptedPartialReplies[step.key] = {
+      text: combinedText,
+      missingDetail: retry.missingDetail
+    };
     addMessage("customer", retry.text, {
       audioId: retry.audioId
     });
@@ -1058,6 +1090,8 @@ function handleScriptedStaffReply(text) {
     renderProgress();
     return;
   }
+
+  delete state.scriptedPartialReplies[step.key];
 
   let responseStep = step;
   state.scriptStep += 1;
