@@ -997,10 +997,12 @@ function handleScriptedStaffReply(text) {
     const matchesNextStep = nextStep.requiredGroups.every((group) =>
       group.some((word) => normalized.includes(word))
     );
-    if (!matchesNextStep) break;
+    const hasCombinedCourtesy = nextStep.key === "thanked_customer"
+      && /(?:お世話になって(?:おります|います)|ありがとうございます|感謝)/.test(normalized);
+    if (!matchesNextStep && !hasCombinedCourtesy) break;
 
     const nextAnalysis = analyzeScriptedStaff(text, nextStep);
-    if (!nextAnalysis.passed) break;
+    if (!nextAnalysis.canAdvance) break;
     responseStep = nextStep;
     state.scriptStep += 1;
   }
