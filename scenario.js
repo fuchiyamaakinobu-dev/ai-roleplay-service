@@ -186,15 +186,15 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       expected: "お客様名を呼び、本人か確認する",
       requiredGroups: [["佐藤", "様"], ["でしょうか", "ですか"]],
       customerResponse: "そうです。",
-      retryResponse: "はい。どちら様でしょうか？"
+      retryResponse: "どちらにお掛けですか？"
     },
     {
       state: "PHONE_OPENING",
       key: "introduced_self",
       expected: "店舗名と担当者名を名乗る",
       requiredGroups: [["トヨタモビリティ", "トヨタ"], ["です", "申します"]],
-      customerResponse: "はい。",
-      retryResponse: "どちらのお店の、どなたですか？"
+      customerResponse: "お世話になっております。",
+      retryResponse: "どちら様でしょうか？"
     },
     {
       state: "PHONE_OPENING",
@@ -202,8 +202,8 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       expected: "日頃の利用へのお礼を伝える",
       requiredGroups: [["ご利用", "ご愛顧"], ["ありがとう", "感謝"]],
       advanceOnFailure: true,
-      customerResponse: "はい。",
-      retryResponse: "はい。ご用件は何でしょうか？"
+      customerResponse: "こちらこそ。",
+      retryResponse: "はい。"
     },
     {
       state: "INSPECTION_GUIDANCE",
@@ -211,14 +211,14 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       expected: "車種と車検時期を説明する",
       requiredGroups: [["ヤリス"], ["車検"], ["近", "時期"]],
       customerResponse: "案内のはがきが来ていましたよ。",
-      retryResponse: "何についてのお電話でしょうか？"
+      retryResponse: "はい？ ご用件は何ですか？"
     },
     {
       state: "INSPECTION_GUIDANCE",
       key: "asked_availability",
       expected: "車検の都合を確認する",
       requiredGroups: [["ご都合", "予定", "日程"]],
-      customerResponse: "どうしたらいいですか？",
+      customerResponse: "お願いしたいんですけど、いつできますか？",
       retryResponse: "それで、どうしたらいいですか？"
     },
     {
@@ -235,7 +235,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       expected: "基本作業は1時間程度で、店内待ちも可能と伝える",
       requiredGroups: [["1時間", "一時間", "60分"], ["待", "店内"]],
       customerResponse: "代車は貸してもらえますか？",
-      retryResponse: "時間と、店で待てるかを教えてください。"
+      retryResponse: "どれくらい時間がかかるのですか？"
     },
     {
       state: "SERVICE_EXPLANATION",
@@ -243,7 +243,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       expected: "早めの予約で代車を用意できると伝える",
       requiredGroups: [["代車"], ["早め", "お早め"], ["予約"], ["用意", "ご用意"]],
       customerResponse: "予約しようかな。",
-      retryResponse: "代車を借りるには、どうしたらいいですか？"
+      retryResponse: "代車を用意してもらえますか？"
     },
     {
       state: "SERVICE_EXPLANATION",
@@ -258,7 +258,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       key: "proposed_appointment",
       expected: "具体的な月日と時間を提案する",
       requiredGroups: [["月"], ["日"], ["時"], ["いかが", "どうでしょう"]],
-      customerResponse: "その日でお願いします。",
+      customerResponse: "では、その日でお願いします。",
       retryResponse: "具体的な日時を教えてください。"
     },
     {
