@@ -1,5 +1,5 @@
 window.ROLEPLAY_AUDIO_DB = {
-  version: "2026-07-16",
+  version: "2026-07-16.2",
   defaultVoice: "shikoku_metan_tsuntsun",
   voices: {
     shikoku_metan_tsuntsun: {
@@ -312,6 +312,7 @@ const vehicleInspectionAudioLines = [
   ["inspection_explained_available_period_retry", "入庫可能日・聞き返し", "いつから車検を受けられるのですか？"],
   ["inspection_explained_duration_and_wait_customer", "作業時間・お客様回答", "代車は貸してもらえますか？"],
   ["inspection_explained_duration_and_wait_retry", "作業時間・聞き返し", "どれくらい時間がかかるのですか？"],
+  ["inspection_duration_wait_missing_retry", "店内待ち案内不足・聞き返し", "店内で待つことはできますか？"],
   ["inspection_explained_loaner_customer", "代車案内・お客様回答", "予約しようかな。"],
   ["inspection_explained_loaner_retry", "代車案内・聞き返し", "代車を用意してもらえますか？"],
   ["inspection_confirmed_booking_time_customer", "予約時間確認・お客様回答", "大丈夫ですよ。"],
@@ -328,6 +329,7 @@ const vehicleInspectionAudioLines = [
   ["inspection_explained_lock_and_arrival_retry", "ロックナット案内・聞き返し", "ほかに持って行く物や、到着時間の注意はありますか？"],
   ["inspection_confirmed_reminder_contact_customer", "事前連絡確認・お客様回答", "この携帯にお願いします。"],
   ["inspection_confirmed_reminder_contact_retry", "事前連絡確認・聞き返し", "事前の確認連絡はありますか？"],
+  ["inspection_reminder_destination_missing_retry", "事前連絡先不足・聞き返し", "連絡先は、この携帯でいいですか？"],
   ["inspection_recapped_appointment_customer", "予約復唱・お客様回答", "お願いします。"],
   ["inspection_recapped_appointment_retry", "予約復唱・聞き返し", "最後に予約内容をもう一度お願いします。"],
   ["inspection_closed_politely_customer", "終話・お客様回答", "ありがとうございました。"],

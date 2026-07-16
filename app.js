@@ -300,21 +300,36 @@ function speakCustomerText(text, onFinished = null) {
   window.speechSynthesis.speak(utterance);
 }
 
+function beginAutomaticSpeechInput(noteText) {
+  if (!state.started || state.ended || speechListening) return false;
+  if (!speechRecognition) {
+    els.speechNote.textContent = "このブラウザでは音声入力を利用できません。テキスト入力で練習できます。";
+    return false;
+  }
+
+  clearStaffInput();
+  speechListening = true;
+  updateMicButton(true);
+  els.speechNote.textContent = noteText;
+  try {
+    speechRecognition.start();
+    return true;
+  } catch (_) {
+    speechListening = false;
+    updateMicButton(false);
+    els.speechNote.textContent = "音声入力を開始できませんでした。マイクボタンを押してください。";
+    return false;
+  }
+}
+
 function startSpeechInputAfterCustomer() {
   window.setTimeout(() => {
-    if (!state.started || state.ended || !speechRecognition || speechListening) return;
-    clearStaffInput();
-    speechListening = true;
-    updateMicButton(true);
-    els.speechNote.textContent = "AIお客様の発話が終了しました。音声入力中です。話し終えたら送信を押してください。";
-    try {
-      speechRecognition.start();
-    } catch (_) {
-      speechListening = false;
-      updateMicButton(false);
-      els.speechNote.textContent = "音声入力を開始できませんでした。マイクボタンを押してください。";
-    }
+    beginAutomaticSpeechInput("AIお客様の発話が終了しました。音声入力中です。話し終えたら送信を押してください。");
   }, 180);
+}
+
+function startSpeechInputForStaffOpening() {
+  beginAutomaticSpeechInput("音声入力中です。お客様のお名前を確認する発話から始めてください。");
 }
 
 function clearStaffInput() {
@@ -408,7 +423,7 @@ function startRoleplay() {
   resetResults();
   if (scenario.mode === "staff-led-scripted") {
     addMessage("system", scenario.startInstruction);
-    els.speechNote.textContent = "スタッフから発話を始めてください。マイクボタンまたはテキスト入力を利用できます。";
+    startSpeechInputForStaffOpening();
   } else {
     addMessage("customer", scenario.initialCustomerMessage, { audioId: scenario.audio.initial });
   }
@@ -714,7 +729,8 @@ function selectObjection(analysis) {
   }[state.pickupReason];
   if (linkedObjection) return linkedObjection;
 
-  const candidates = ["work", "distance", "family"];
+  // 家族相談は引取希望の理由ではないため、理由確認直後のランダム回答には使用しない。
+  const candidates = ["work", "distance"];
   if (analysis.proposed_other_store) candidates.push("competitor");
   if (analysis.mentioned_previous_pickup) candidates.push("misunderstanding");
   return candidates[randomIndex(candidates.length)];
@@ -788,7 +804,8 @@ function selectContextualCustomerResponse(analysis) {
 function analyzeScriptedStaff(text, step) {
   const normalized = text.replace(/\s+/g, "");
   const matchedGroups = step.requiredGroups.map((group) => group.filter((word) => normalized.includes(word)));
-  let passed = matchedGroups.every((matches) => matches.length > 0);
+  let passed = matchedGroups.every((matches) => matches.length > 0)
+    && scriptedStepSpecificMatches(normalized, step);
 
   if (step.key === "proposed_appointment") {
     const appointmentMatch = normalized.match(/(\d{1,2})月(\d{1,2})日.*?(\d{1,2})時/);
@@ -832,7 +849,72 @@ function scriptedStepMatches(text, step) {
   const normalized = text.replace(/\s+/g, "");
   return step.requiredGroups.every((group) =>
     group.some((word) => normalized.includes(word))
-  );
+  ) && scriptedStepSpecificMatches(normalized, step);
+}
+
+function isScriptedQuestion(normalized) {
+  return /(?:でしょうか|ますか|ですか|ませんか|ございませんか|[?？])/.test(normalized);
+}
+
+function scriptedStepSpecificMatches(normalized, step) {
+  if (step.key === "confirmed_identity") {
+    const customerName = String(scenario.customerName || "佐藤")
+      .replace(/様/g, "")
+      .replace(/\s+/g, "");
+    const acceptedNames = new Set([customerName, "佐藤", "斉藤"]);
+    return [...acceptedNames].filter(Boolean).some((name) => normalized.includes(name));
+  }
+
+  if (step.key === "introduced_self") {
+    return /(?:トヨタモビリティ(?:帯広)?|トヨタ).{0,16}(?:の|、).{1,12}(?:です|と申します)/.test(normalized);
+  }
+
+  if (step.key === "confirmed_waiting") {
+    return isScriptedQuestion(normalized);
+  }
+
+  if (step.key === "asked_vehicle_concerns") {
+    return isScriptedQuestion(normalized);
+  }
+
+  return true;
+}
+
+function hasCourtesyExpression(text) {
+  const normalized = text.replace(/\s+/g, "");
+  return /(?:お世話になって(?:おります|います)|ありがとうございます|感謝)/.test(normalized);
+}
+
+function scriptedRetryForMissingDetails(text, step) {
+  const normalized = text.replace(/\s+/g, "");
+
+  if (step.key === "explained_duration_and_wait") {
+    const hasDuration = ["1時間", "一時間", "60分"].some((word) => normalized.includes(word));
+    const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
+    if (hasDuration && !hasWaiting) {
+      return {
+        text: "店内で待つことはできますか？",
+        audioId: "inspection_duration_wait_missing_retry"
+      };
+    }
+  }
+
+  if (step.key === "confirmed_reminder_contact") {
+    const hasReminder = ["3日前", "三日前"].some((word) => normalized.includes(word))
+      && normalized.includes("連絡");
+    const hasDestination = ["どちら", "携帯", "電話番号"].some((word) => normalized.includes(word));
+    if (hasReminder && !hasDestination) {
+      return {
+        text: "連絡先は、この携帯でいいですか？",
+        audioId: "inspection_reminder_destination_missing_retry"
+      };
+    }
+  }
+
+  return {
+    text: step.retryResponse,
+    audioId: `inspection_${step.key}_retry`
+  };
 }
 
 function isPhoneGreetingOnly(text) {
@@ -968,8 +1050,9 @@ function handleScriptedStaffReply(text) {
   state.turn += 1;
 
   if (!analysis.canAdvance) {
-    addMessage("customer", step.retryResponse, {
-      audioId: `inspection_${step.key}_retry`
+    const retry = scriptedRetryForMissingDetails(text, step);
+    addMessage("customer", retry.text, {
+      audioId: retry.audioId
     });
     els.speechNote.textContent = `不足している案内があります。現在の課題: ${step.expected}`;
     renderProgress();
@@ -993,12 +1076,9 @@ function handleScriptedStaffReply(text) {
   // 同じ発話で実際に満たした連続ステップもまとめて判定する。
   while (state.scriptStep < scenario.steps.length) {
     const nextStep = scenario.steps[state.scriptStep];
-    const normalized = text.replace(/\s+/g, "");
-    const matchesNextStep = nextStep.requiredGroups.every((group) =>
-      group.some((word) => normalized.includes(word))
-    );
+    const matchesNextStep = scriptedStepMatches(text, nextStep);
     const hasCombinedCourtesy = nextStep.key === "thanked_customer"
-      && /(?:お世話になって(?:おります|います)|ありがとうございます|感謝)/.test(normalized);
+      && hasCourtesyExpression(text);
     if (!matchesNextStep && !hasCombinedCourtesy) break;
 
     const nextAnalysis = analyzeScriptedStaff(text, nextStep);
@@ -1013,8 +1093,14 @@ function handleScriptedStaffReply(text) {
   } else {
     state.currentState = scenario.steps[state.scriptStep].state;
   }
-  addMessage("customer", responseStep.customerResponse, {
-    audioId: `inspection_${responseStep.key}_customer`
+  const useAdvanceRetry = responseStep === step
+    && !analysis.passed
+    && step.advanceOnFailure === true
+    && !hasCourtesyExpression(text);
+  addMessage("customer", useAdvanceRetry ? step.retryResponse : responseStep.customerResponse, {
+    audioId: useAdvanceRetry
+      ? `inspection_${step.key}_retry`
+      : `inspection_${responseStep.key}_customer`
   });
   renderProgress();
   if (finished) finishRoleplay();
@@ -1076,7 +1162,26 @@ function scoreRoleplay() {
     return acc;
   }, {});
 
-  let score = scenario.scoring.reduce((sum, metric) => sum + (merged[metric.key] ? metric.points : 0), 0);
+  const reason = state.pickupReason || state.currentObjection;
+  const applicableMetrics = scenario.scoring.filter((metric) => {
+    if (metric.key === "proposed_weekend") return !reason || reason === "work";
+    if (metric.key === "proposed_other_store") {
+      return !reason || ["distance", "drivingConfidence"].includes(reason);
+    }
+    return true;
+  });
+  const metricAchieved = (metric) => {
+    if (metric.key === "proposed_other_store" && ["distance", "drivingConfidence"].includes(reason)) {
+      return Boolean(merged.proposed_other_store || merged.proposed_family_visit);
+    }
+    return Boolean(merged[metric.key]);
+  };
+  const applicableMaximum = applicableMetrics.reduce((sum, metric) => sum + metric.points, 0);
+  const earnedPoints = applicableMetrics.reduce(
+    (sum, metric) => sum + (metricAchieved(metric) ? metric.points : 0),
+    0
+  );
+  let score = applicableMaximum > 0 ? Math.round((earnedPoints / applicableMaximum) * 100) : 0;
   const penalties = [];
 
   if (merged.accepted_pickup && !merged.explained_visit_benefit) {
@@ -1100,9 +1205,9 @@ function scoreRoleplay() {
 
   const good = [];
   const improve = [];
-  scenario.scoring.forEach((metric) => {
+  applicableMetrics.forEach((metric) => {
     const action = metric.action || metric.label;
-    if (merged[metric.key]) good.push(`${action}ことができています`);
+    if (metricAchieved(metric)) good.push(`${action}ことができています`);
     else improve.push(`${action}ことを意識すると、より良い応対になります`);
   });
   penalties.forEach((penalty) => improve.unshift(penalty));
