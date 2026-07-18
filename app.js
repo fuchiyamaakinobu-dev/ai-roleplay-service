@@ -877,6 +877,16 @@ function scriptedStepSpecificMatches(normalized, step) {
     return /(?:トヨタモビリティ(?:帯広)?|トヨタ).{0,16}(?:の|、).{1,12}(?:です|と申します)/.test(normalized);
   }
 
+  if (step.key === "asked_availability") {
+    return isScriptedQuestion(normalized);
+  }
+
+  if (step.key === "explained_available_period") {
+    const concreteDates = normalized.match(/\d{1,2}月\d{1,2}日/g) || [];
+    return new Set(concreteDates).size >= 2
+      && /(?:作業|車検|入庫|可能)/.test(normalized);
+  }
+
   if (step.key === "confirmed_waiting") {
     return isScriptedQuestion(normalized);
   }
