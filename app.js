@@ -501,11 +501,16 @@ function analyzeStaff(text) {
     && !hasConcreteExplanation
     && !acceptedPickup;
 
+  const askedServiceRequest = isQuestion
+    && includesAny(normalized, lexicon.additionalService);
+  const askedVehicleConcern = isQuestion
+    && includesAny(normalized, lexicon.vehicleConcern);
+
   const result = {
     acknowledged_request: includesAny(normalized, lexicon.thanks) || includesAny(normalized, ["承知", "かしこまり", "そうなのですね"]),
-    asked_additional_service: isQuestion
-      && includesAny(normalized, lexicon.additionalService)
-      && includesAny(normalized, lexicon.vehicleConcern),
+    asked_service_request: askedServiceRequest,
+    asked_vehicle_concern: askedVehicleConcern,
+    asked_additional_service: askedServiceRequest && askedVehicleConcern,
     accepted_pickup: acceptedPickup,
     pickup_acceptance_strength: pickupStrength,
     asked_reason: includesAny(normalized, lexicon.reasonQuestion),
@@ -624,7 +629,7 @@ function nextCustomerMessage(analysis) {
 
   if (
     scenario.scoring.some((metric) => metric.key === "asked_additional_service")
-    && analysis.asked_additional_service
+    && (analysis.asked_additional_service || analysis.asked_vehicle_concern)
     && !state.additionalServiceAnswered
   ) {
     state.additionalServiceAnswered = true;
