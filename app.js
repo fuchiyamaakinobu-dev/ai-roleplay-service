@@ -10,6 +10,9 @@ let speechRestartTimer = null;
 let speechDecisionTimer = null;
 let speechPausedForAck = false;
 let lastAcknowledgedText = "";
+let activeCustomerAudio = null;
+let customerPlaybackGeneration = 0;
+let speechInputStartTimer = null;
 
 const state = {
   started: false,
@@ -135,6 +138,7 @@ function selectScenario(scenarioId) {
   const selected = scenarios.find((item) => item.id === scenarioId);
   if (!selected || selected.id === scenario.id) return;
   stopSpeechInput();
+  stopCustomerPlayback();
   scenario = selected;
   state.started = false;
   state.ended = false;
@@ -265,12 +269,38 @@ function renderConversation() {
   els.conversation.scrollTop = els.conversation.scrollHeight;
 }
 
+function stopCustomerPlayback() {
+  customerPlaybackGeneration += 1;
+  if (speechInputStartTimer) {
+    window.clearTimeout(speechInputStartTimer);
+    speechInputStartTimer = null;
+  }
+  if (activeCustomerAudio) {
+    const audio = activeCustomerAudio;
+    activeCustomerAudio = null;
+    audio.pause();
+    audio.removeAttribute("src");
+    try {
+      audio.load();
+    } catch (_) {
+      // 再生停止後の解放に失敗しても、次の会話進行は止めない。
+    }
+  }
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+}
+
 function playAudio(src, fallbackText = "", showMissingMessage = true, onFinished = null) {
+  stopCustomerPlayback();
+  const playbackGeneration = customerPlaybackGeneration;
   const audio = new Audio(src);
+  activeCustomerAudio = audio;
   let finished = false;
   const finishOnce = () => {
-    if (finished) return;
+    if (finished || playbackGeneration !== customerPlaybackGeneration) return;
     finished = true;
+    if (activeCustomerAudio === audio) activeCustomerAudio = null;
     if (typeof onFinished === "function") onFinished();
   };
   audio.addEventListener("ended", finishOnce, { once: true });
@@ -284,17 +314,18 @@ function playAudio(src, fallbackText = "", showMissingMessage = true, onFinished
 }
 
 function speakCustomerText(text, onFinished = null) {
+  stopCustomerPlayback();
   if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
     if (typeof onFinished === "function") onFinished();
     return;
   }
+  const playbackGeneration = customerPlaybackGeneration;
   let finished = false;
   const finishOnce = () => {
-    if (finished) return;
+    if (finished || playbackGeneration !== customerPlaybackGeneration) return;
     finished = true;
     if (typeof onFinished === "function") onFinished();
   };
-  window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "ja-JP";
   utterance.rate = 1.05;
@@ -327,7 +358,13 @@ function beginAutomaticSpeechInput(noteText) {
 }
 
 function startSpeechInputAfterCustomer() {
-  window.setTimeout(() => {
+  if (speechInputStartTimer) {
+    window.clearTimeout(speechInputStartTimer);
+  }
+  const playbackGeneration = customerPlaybackGeneration;
+  speechInputStartTimer = window.setTimeout(() => {
+    speechInputStartTimer = null;
+    if (playbackGeneration !== customerPlaybackGeneration) return;
     beginAutomaticSpeechInput("AIお客様の発話が終了しました。音声入力中です。話し終えたら送信を押してください。");
   }, 180);
 }
@@ -404,6 +441,7 @@ function acknowledgeAndContinue(text) {
 
 function startRoleplay() {
   stopSpeechInput();
+  stopCustomerPlayback();
   state.started = true;
   state.ended = false;
   state.currentState = scenario.mode === "staff-led-scripted"
@@ -762,7 +800,7 @@ function selectAppointmentTimeOption(analysis) {
   state.appointmentTime = `${selectedTime}時`;
   state.ended = true;
   return customerTurn(
-    "早いほうでお願いします。",
+    "では、早いほうでお願いします。",
     scenario.audio?.appointmentEarlierTime || "appointmentEarlierTime"
   );
 }
@@ -1202,7 +1240,7 @@ function handleScriptedStaffReply(text) {
       : `inspection_${responseStep.key}_customer`
   });
   renderProgress();
-  if (finished) finishRoleplay();
+  if (finished) finishRoleplay({ keepCustomerPlayback: true });
 }
 
 function handleReply(event) {
@@ -1212,6 +1250,7 @@ function handleReply(event) {
   if (!text) return;
 
   stopSpeechInput();
+  stopCustomerPlayback();
   clearStaffInput();
   addMessage("staff", text);
   if (scenario.mode === "staff-led-scripted") {
@@ -1226,7 +1265,7 @@ function handleReply(event) {
     addMessage("system", "引取を検出しました。ロープレを終了します。", {
       audioId: scenario.audio.pickupDetectedEnd
     });
-    finishRoleplay();
+    finishRoleplay({ keepCustomerPlayback: true });
     return;
   }
 
@@ -1234,11 +1273,12 @@ function handleReply(event) {
   addMessage("customer", customer.text, { audioId: customer.audioId });
 
   renderProgress();
-  if (state.ended) finishRoleplay();
+  if (state.ended) finishRoleplay({ keepCustomerPlayback: true });
 }
 
-function finishRoleplay() {
+function finishRoleplay(options = {}) {
   stopSpeechInput();
+  if (!options.keepCustomerPlayback) stopCustomerPlayback();
   if (!state.started) return;
   state.ended = true;
   const result = scoreRoleplay();
