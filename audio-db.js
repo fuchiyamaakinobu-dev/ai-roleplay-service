@@ -1,5 +1,5 @@
 window.ROLEPLAY_AUDIO_DB = {
-  version: "2026-07-24.2",
+  version: "2026-07-24.3",
   defaultVoice: "shikoku_metan_tsuntsun",
   voices: {
     shikoku_metan_tsuntsun: {
@@ -295,7 +295,7 @@ window.ROLEPLAY_AUDIO_DB = {
     {
       id: "appointmentEarlierTime",
       label: "複数時刻・早い時刻を選択",
-      text: "早いほうでお願いします。",
+      text: "では、早いほうでお願いします。",
       file: "customer_appointment_earlier_time.mp3",
       status: "ready"
     },
