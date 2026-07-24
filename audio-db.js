@@ -1,5 +1,5 @@
 window.ROLEPLAY_AUDIO_DB = {
-  version: "2026-07-16.2",
+  version: "2026-07-24.2",
   defaultVoice: "shikoku_metan_tsuntsun",
   voices: {
     shikoku_metan_tsuntsun: {
@@ -290,6 +290,41 @@ window.ROLEPLAY_AUDIO_DB = {
       label: "終了 2",
       text: "よろしくお願いします。",
       file: "customer_closing_02.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentEarlierTime",
+      label: "複数時刻・早い時刻を選択",
+      text: "早いほうでお願いします。",
+      file: "customer_appointment_earlier_time.mp3",
+      status: "ready"
+    },
+    {
+      id: "misunderstandingClarified",
+      label: "説明の食い違い・解消後",
+      text: "分かりました。では、負担の少ない方法を相談させてください。",
+      file: "customer_misunderstanding_clarified.mp3",
+      status: "ready"
+    },
+    {
+      id: "familyFollowUp",
+      label: "家族相談・再連絡",
+      text: "ありがとうございます。家族と相談して、改めてご連絡します。",
+      file: "customer_family_followup.mp3",
+      status: "ready"
+    },
+    {
+      id: "nearbyOrFamilyAgreement",
+      label: "近い店舗・家族来店への同意",
+      text: "近い店舗や家族と一緒なら、来店できるかもしれません。",
+      file: "customer_nearby_or_family_agreement.mp3",
+      status: "ready"
+    },
+    {
+      id: "continueGeneric",
+      label: "会話継続・汎用",
+      text: "ありがとうございます。続けてお願いします。",
+      file: "customer_continue_generic.mp3",
       status: "ready"
     }
   ]

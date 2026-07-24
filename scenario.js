@@ -39,7 +39,12 @@ window.ROLEPLAY_SCENARIO = {
     needsMoreContext: "needsMoreContext",
     possibleAgreements: ["possibleAgreement", "possibleAgreement02", "possibleAgreement03"],
     followUps: ["followUp", "followUp02", "followUp03"],
-    closings: ["closing", "closing02"]
+    closings: ["closing", "closing02"],
+    appointmentEarlierTime: "appointmentEarlierTime",
+    misunderstandingClarified: "misunderstandingClarified",
+    familyFollowUp: "familyFollowUp",
+    nearbyOrFamilyAgreement: "nearbyOrFamilyAgreement",
+    continueGeneric: "continueGeneric"
   },
   serviceTimeQuestions: [
     "点検ってどれぐらい時間がかかるんですか？",

@@ -25,6 +25,7 @@ const state = {
   serviceTimeExplained: false,
   appointmentDateConfirmed: false,
   appointmentTimeConfirmed: false,
+  appointmentTime: null,
   additionalServiceAnswered: false,
   additionalServiceResumeState: null,
   transcript: [],
@@ -144,6 +145,7 @@ function selectScenario(scenarioId) {
   state.serviceTimeExplained = false;
   state.appointmentDateConfirmed = false;
   state.appointmentTimeConfirmed = false;
+  state.appointmentTime = null;
   state.additionalServiceAnswered = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
@@ -417,6 +419,7 @@ function startRoleplay() {
   state.serviceTimeExplained = false;
   state.appointmentDateConfirmed = false;
   state.appointmentTimeConfirmed = false;
+  state.appointmentTime = null;
   state.additionalServiceAnswered = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
@@ -484,7 +487,9 @@ function analyzeStaff(text) {
   const proposedTime = includesAny(normalized, ["時間帯", "午前", "午後", "夕方", "仕事前", "仕事後"]);
   const proposedFamilyVisit = includesAny(normalized, ["ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
   const hasScheduleDate = /(?:\d{1,2}月)?\d{1,2}日|(?:今週|来週|再来週)?(?:月|火|水|木|金|土|日)曜日/.test(normalized);
-  const hasScheduleTime = /\d{1,2}時|午前|午後|朝|夕方/.test(normalized);
+  const scheduleTimeOptions = [...new Set(normalized.match(/\d{1,2}時/g) || [])];
+  const hasScheduleTime = scheduleTimeOptions.length === 1;
+  const hasMultipleScheduleTimes = scheduleTimeOptions.length > 1;
   const hasConcreteSchedule = hasScheduleDate && hasScheduleTime;
   const hasConcreteExplanation = hasConcreteServiceTime
     || hasActionableProposal
@@ -522,6 +527,8 @@ function analyzeStaff(text) {
     proposed_family_visit: proposedFamilyVisit,
     has_schedule_date: hasScheduleDate,
     has_schedule_time: hasScheduleTime,
+    has_multiple_schedule_times: hasMultipleScheduleTimes,
+    schedule_time_options: scheduleTimeOptions,
     has_concrete_schedule: hasConcreteSchedule,
     mentioned_previous_pickup: includesAny(normalized, ["以前", "前回", "前に", "取りに来ると", "取りに伺うと"]),
     proposed_alternative: hasActionableProposal,
@@ -611,7 +618,10 @@ function nextCustomerMessage(analysis) {
   if (analysis.explained_service_time) state.serviceTimeExplained = true;
   if (["ALTERNATIVE_PROPOSAL", "APPOINTMENT_CONFIRMATION"].includes(state.currentState)) {
     if (analysis.has_schedule_date) state.appointmentDateConfirmed = true;
-    if (analysis.has_schedule_time) state.appointmentTimeConfirmed = true;
+    if (analysis.has_schedule_time) {
+      state.appointmentTimeConfirmed = true;
+      state.appointmentTime = analysis.schedule_time_options[0];
+    }
   }
 
   if (analysis.decision === "pickup_accepted_immediately") {
@@ -707,6 +717,8 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "ALTERNATIVE_PROPOSAL") {
+    const selectedTime = selectAppointmentTimeOption(analysis);
+    if (selectedTime) return selectedTime;
     if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
       state.ended = true;
       return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
@@ -716,6 +728,8 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "APPOINTMENT_CONFIRMATION") {
+    const selectedTime = selectAppointmentTimeOption(analysis);
+    if (selectedTime) return selectedTime;
     if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
       state.ended = true;
       return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
@@ -723,7 +737,34 @@ function nextCustomerMessage(analysis) {
     return appointmentFollowUpTurn();
   }
 
-  return customerTurn("ありがとうございます。続けてお願いします。", "");
+  return customerTurn(
+    "ありがとうございます。続けてお願いします。",
+    scenario.audio?.continueGeneric || "continueGeneric"
+  );
+}
+
+function selectAppointmentTimeOption(analysis) {
+  if (
+    !state.appointmentDateConfirmed
+    || !analysis.has_multiple_schedule_times
+    || !analysis.schedule_time_options?.length
+  ) {
+    return null;
+  }
+
+  const selectedTime = analysis.schedule_time_options
+    .map((time) => Number.parseInt(time, 10))
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right)[0];
+  if (!Number.isFinite(selectedTime)) return null;
+
+  state.appointmentTimeConfirmed = true;
+  state.appointmentTime = `${selectedTime}時`;
+  state.ended = true;
+  return customerTurn(
+    "早いほうでお願いします。",
+    scenario.audio?.appointmentEarlierTime || "appointmentEarlierTime"
+  );
 }
 
 function selectObjection(analysis) {
@@ -760,19 +801,28 @@ function selectContextualCustomerResponse(analysis) {
   const reason = state.pickupReason || state.currentObjection;
   if (reason === "family") {
     state.resolutionType = "familyConsultation";
-    return customerTurn("ありがとうございます。家族と相談して、改めてご連絡します。");
+    return customerTurn(
+      "ありがとうございます。家族と相談して、改めてご連絡します。",
+      scenario.audio?.familyFollowUp || "familyFollowUp"
+    );
   }
   if (reason === "misunderstanding") {
     if (analysis.acknowledged_request || analysis.left_choice) {
       state.resolutionType = "clarified";
-      return customerTurn("分かりました。では、負担の少ない方法を相談させてください。");
+      return customerTurn(
+        "分かりました。では、負担の少ない方法を相談させてください。",
+        scenario.audio?.misunderstandingClarified || "misunderstandingClarified"
+      );
     }
     return null;
   }
   if (["distance", "drivingConfidence"].includes(reason)) {
     if (analysis.proposed_other_store || analysis.proposed_family_visit) {
       state.resolutionType = "nearbyOrFamily";
-      return customerTurn("近い店舗や家族と一緒なら、来店できるかもしれません。");
+      return customerTurn(
+        "近い店舗や家族と一緒なら、来店できるかもしれません。",
+        scenario.audio?.nearbyOrFamilyAgreement || "nearbyOrFamilyAgreement"
+      );
     }
     return null;
   }
