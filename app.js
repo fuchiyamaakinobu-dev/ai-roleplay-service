@@ -523,6 +523,12 @@ function analyzeStaff(text) {
     || includesAny(normalized, lexicon.otherStore)
     || includesAny(normalized, ["時間帯", "午前", "午後", "代車", "ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
   const proposedTime = includesAny(normalized, ["時間帯", "午前", "午後", "夕方", "仕事前", "仕事後"]);
+  const offeredTimeBandChoice = isQuestion
+    && normalized.includes("午前")
+    && normalized.includes("午後");
+  const offeredMorningTimeBand = isQuestion
+    && normalized.includes("午前")
+    && !normalized.includes("午後");
   const proposedFamilyVisit = includesAny(normalized, ["ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
   const hasScheduleDate = /(?:\d{1,2}月)?\d{1,2}日|(?:今週|来週|再来週)?(?:月|火|水|木|金|土|日)曜日/.test(normalized);
   const scheduleTimeOptions = [...new Set(normalized.match(/\d{1,2}時/g) || [])];
@@ -562,6 +568,8 @@ function analyzeStaff(text) {
     proposed_weekend: includesAny(normalized, lexicon.weekend),
     proposed_other_store: includesAny(normalized, lexicon.otherStore),
     proposed_time: proposedTime,
+    offered_time_band_choice: offeredTimeBandChoice,
+    offered_morning_time_band: offeredMorningTimeBand,
     proposed_family_visit: proposedFamilyVisit,
     has_schedule_date: hasScheduleDate,
     has_schedule_time: hasScheduleTime,
@@ -640,7 +648,15 @@ function pickRandomIndex(values, group) {
   const available = values
     .map((_, index) => index)
     .filter((index) => !used.includes(index));
-  const pool = available.length > 0 ? available : values.map((_, index) => index);
+  const lastSelected = used.at(-1);
+  const resetPool = values
+    .map((_, index) => index)
+    .filter((index) => values.length <= 1 || index !== lastSelected);
+  const pool = available.length > 0
+    ? available
+    : resetPool.length > 0
+      ? resetPool
+      : values.map((_, index) => index);
   const selected = pool[randomIndex(pool.length)];
   state.usedVariants[group] = available.length > 0 ? [...used, selected] : [selected];
   return selected;
@@ -762,7 +778,7 @@ function nextCustomerMessage(analysis) {
       return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
     }
     state.currentState = "APPOINTMENT_CONFIRMATION";
-    return appointmentFollowUpTurn();
+    return appointmentFollowUpTurn(analysis);
   }
 
   if (state.currentState === "APPOINTMENT_CONFIRMATION") {
@@ -772,7 +788,7 @@ function nextCustomerMessage(analysis) {
       state.ended = true;
       return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
     }
-    return appointmentFollowUpTurn();
+    return appointmentFollowUpTurn(analysis);
   }
 
   return customerTurn(
@@ -782,23 +798,41 @@ function nextCustomerMessage(analysis) {
 }
 
 function selectAppointmentTimeOption(analysis) {
-  if (
-    !state.appointmentDateConfirmed
-    || !analysis.has_multiple_schedule_times
-    || !analysis.schedule_time_options?.length
-  ) {
-    return null;
-  }
+  if (!state.appointmentDateConfirmed || !analysis.schedule_time_options?.length) return null;
 
-  const selectedTime = analysis.schedule_time_options
+  const timeOptions = analysis.schedule_time_options
     .map((time) => Number.parseInt(time, 10))
     .filter(Number.isFinite)
-    .sort((left, right) => left - right)[0];
+    .sort((left, right) => left - right);
+
+  if (analysis.has_schedule_time && timeOptions.length === 1) {
+    const selectedTime = timeOptions[0];
+    state.appointmentTimeConfirmed = true;
+    state.appointmentTime = `${selectedTime}時`;
+    state.ended = true;
+    return customerTurn(
+      "では、その時間でお願いします。",
+      scenario.audio?.appointmentSingleTime || "appointmentSingleTime"
+    );
+  }
+
+  if (!analysis.has_multiple_schedule_times || timeOptions.length < 2) return null;
+
+  const choice = pickVariant(["earlier", "later"], "appointment-time-choice");
+  const selectedTime = choice === "later"
+    ? timeOptions[timeOptions.length - 1]
+    : timeOptions[0];
   if (!Number.isFinite(selectedTime)) return null;
 
   state.appointmentTimeConfirmed = true;
   state.appointmentTime = `${selectedTime}時`;
   state.ended = true;
+  if (choice === "later") {
+    return customerTurn(
+      "では、遅い時間でお願いします。",
+      scenario.audio?.appointmentLaterTime || "appointmentLaterTime"
+    );
+  }
   return customerTurn(
     "では、早いほうでお願いします。",
     scenario.audio?.appointmentEarlierTime || "appointmentEarlierTime"
@@ -823,7 +857,23 @@ function selectObjection(analysis) {
   return candidates[randomIndex(candidates.length)];
 }
 
-function appointmentFollowUpTurn() {
+function appointmentFollowUpTurn(analysis = {}) {
+  if (
+    state.appointmentDateConfirmed
+    && analysis.offered_morning_time_band
+    && !analysis.has_schedule_time
+  ) {
+    return customerTurn(
+      "では、午前中でお願いします。何時が空いていますか？",
+      scenario.audio?.appointmentMorningNeedTime || "appointmentMorningNeedTime"
+    );
+  }
+  if (!state.appointmentDateConfirmed && analysis.offered_time_band_choice) {
+    return customerTurn(
+      "午前中がいいです。今週だと何日が空いていますか？",
+      scenario.audio?.appointmentMorningNeedDate || "appointmentMorningNeedDate"
+    );
+  }
   const index = state.appointmentDateConfirmed
     ? 2
     : pickRandomIndex(scenario.audio.followUps.slice(0, 2), "appointment-date-follow-up");

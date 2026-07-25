@@ -1,5 +1,5 @@
 window.ROLEPLAY_AUDIO_DB = {
-  version: "2026-07-24.3",
+  version: "2026-07-25.2",
   defaultVoice: "shikoku_metan_tsuntsun",
   voices: {
     shikoku_metan_tsuntsun: {
@@ -297,6 +297,34 @@ window.ROLEPLAY_AUDIO_DB = {
       label: "複数時刻・早い時刻を選択",
       text: "では、早いほうでお願いします。",
       file: "customer_appointment_earlier_time.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentLaterTime",
+      label: "複数時刻・遅い時刻を選択",
+      text: "では、遅い時間でお願いします。",
+      file: "customer_appointment_later_time.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentSingleTime",
+      label: "単一時刻を選択",
+      text: "では、その時間でお願いします。",
+      file: "customer_appointment_single_time.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentMorningNeedDate",
+      label: "午前希望・日付確認",
+      text: "午前中がいいです。今週だと何日が空いていますか？",
+      file: "customer_appointment_morning_need_date.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentMorningNeedTime",
+      label: "午前希望・時刻確認",
+      text: "では、午前中でお願いします。何時が空いていますか？",
+      file: "customer_appointment_morning_need_time.mp3",
       status: "ready"
     },
     {
