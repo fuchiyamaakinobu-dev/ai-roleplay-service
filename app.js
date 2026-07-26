@@ -62,6 +62,7 @@ const els = {
   goodList: document.querySelector("#goodList"),
   improveList: document.querySelector("#improveList"),
   judgementList: document.querySelector("#judgementList"),
+  recommendedTalkTitle: document.querySelector("#recommendedTalkTitle"),
   recommendedTalk: document.querySelector("#recommendedTalk")
 };
 
@@ -485,6 +486,9 @@ function resetResults() {
   els.goodList.innerHTML = "";
   els.improveList.innerHTML = "";
   els.judgementList.innerHTML = "";
+  els.recommendedTalkTitle.textContent = scenario.mode === "staff-led-scripted"
+    ? "推奨トーク"
+    : "次回の改善トーク";
   els.recommendedTalk.textContent = "結果に応じて表示されます。";
 }
 
@@ -1528,12 +1532,16 @@ function scoreRoleplay() {
     else improve.push(`${action}ことを意識すると、より良い応対になります`);
   });
   penalties.forEach((penalty) => improve.unshift(penalty));
+  const missingMetricKeys = applicableMetrics
+    .filter((metric) => !metricAchieved(metric))
+    .map((metric) => metric.key);
 
   return {
     score,
     good: good.slice(0, 4),
     improve: improve.slice(0, 4),
-    recommendedTalk: selectRecommendedTalk(),
+    recommendedTalkTitle: "次回の改善トーク",
+    recommendedTalk: buildImprovementTalk(missingMetricKeys, reason),
     judgements: state.analyses.map((analysis, index) => {
       const strength = analysis.pickup_acceptance_strength;
       const confidence = Math.round(analysis.confidence * 100);
@@ -1574,6 +1582,7 @@ function scoreScriptedRoleplay() {
     score,
     good: good.slice(0, 4),
     improve: improve.slice(0, 4),
+    recommendedTalkTitle: "推奨トーク",
     recommendedTalk: scenario.recommendedTalk,
     judgements,
     summary: score >= 90
@@ -1584,15 +1593,36 @@ function scoreScriptedRoleplay() {
   };
 }
 
-function selectRecommendedTalk() {
-  const customerText = state.transcript
-    .filter((message) => message.role === "customer")
-    .map((message) => message.text)
-    .join(" ");
+function buildImprovementTalk(missingMetricKeys, reason = "work") {
+  if (!missingMetricKeys.length) {
+    return "今回の応対で必要な確認と提案ができています。現在の流れを継続してください。";
+  }
 
-  const transcriptReason = classifyCustomerReason(customerText);
-  const reason = transcriptReason || state.pickupReason || state.currentObjection || "work";
-  return scenario.recommendedTalks?.[reason] || scenario.recommendedTalk;
+  const otherStoreTalk = ["distance", "drivingConfidence"].includes(reason)
+    ? "ご自宅から近い店舗のご案内や、ご家族と一緒にご来店いただく方法もございます。"
+    : "ご都合に合わせて利用しやすい店舗や方法をご案内できます。";
+  const talks = {
+    acknowledged_request: "ご連絡ありがとうございます。12カ月点検のご依頼ですね。",
+    asked_additional_service:
+      "12カ月点検のほかに、オイル交換などのご用命や、お車で気になる点はございませんか。",
+    explained_service_time: "点検は、追加整備がなければ1時間程度です。",
+    asked_reason:
+      "差し支えなければ、引取をご希望される理由をもう少し詳しくお聞かせいただけますか。",
+    explained_visit_benefit:
+      "ご来店いただければ、お車を確認しながら点検内容を詳しくご説明できます。",
+    proposed_weekend:
+      "土日営業日や、お仕事の前後で利用しやすい時間帯も確認できます。",
+    proposed_other_store: otherStoreTalk,
+    left_choice:
+      "ご来店が難しい場合も含め、ご負担の少ない方法を一緒に確認させてください。",
+    next_action_confirmed:
+      "ご都合のよい曜日や時間帯を教えていただけますか。"
+  };
+  return missingMetricKeys
+    .map((key) => talks[key])
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(" ");
 }
 
 function proposalMatchesCustomerReason(analysis) {
@@ -1621,6 +1651,7 @@ function renderResults(result) {
   els.goodList.innerHTML = listHtml(result.good);
   els.improveList.innerHTML = listHtml(result.improve);
   els.judgementList.innerHTML = listHtml(result.judgements);
+  els.recommendedTalkTitle.textContent = result.recommendedTalkTitle || "推奨トーク";
   els.recommendedTalk.textContent = result.recommendedTalk;
 }
 
