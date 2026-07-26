@@ -34,7 +34,8 @@ const state = {
   transcript: [],
   analyses: [],
   scriptedPartialReplies: {},
-  usedVariants: {}
+  usedVariants: {},
+  questionRepeats: {}
 };
 
 const els = {
@@ -156,6 +157,7 @@ function selectScenario(scenarioId) {
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.usedVariants = {};
+  state.questionRepeats = {};
   clearStaffInput();
   resetResults();
   updateVoiceSelection();
@@ -464,6 +466,7 @@ function startRoleplay() {
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.usedVariants = {};
+  state.questionRepeats = {};
   resetResults();
   if (scenario.mode === "staff-led-scripted") {
     addMessage("system", scenario.startInstruction);
@@ -483,6 +486,20 @@ function resetResults() {
   els.improveList.innerHTML = "";
   els.judgementList.innerHTML = "";
   els.recommendedTalk.textContent = "結果に応じて表示されます。";
+}
+
+function nextQuestionVariant(key, variants) {
+  const count = state.questionRepeats[key] || 0;
+  state.questionRepeats[key] = count + 1;
+  if (count < variants.length) return variants[count];
+  if (variants.length <= 1) return variants[0];
+  const repeatIndex = 1 + ((count - variants.length) % (variants.length - 1));
+  return variants[repeatIndex];
+}
+
+function customerQuestionTurn(key, variants) {
+  const selected = nextQuestionVariant(key, variants);
+  return customerTurn(selected.text, selected.audioId || "");
 }
 
 function normalizeFullWidthDigits(text) {
@@ -722,10 +739,20 @@ function nextCustomerMessage(analysis) {
   }
 
   if (analysis.decision === "needs_more_context") {
-    return customerTurnFromAudio(
-      scenario.audio.needsMoreContext,
-      "おっしゃっていることがよく分からないんですけど。"
-    );
+    return customerQuestionTurn(`needs-more-context:${state.currentState}`, [
+      {
+        text: "おっしゃっていることがよく分からないんですけど。",
+        audioId: scenario.audio.needsMoreContext
+      },
+      {
+        text: "すみません。もう一度、別の言い方でお願いします。",
+        audioId: "needsMoreContextRephrased"
+      },
+      {
+        text: "確認したい内容を、もう少し具体的に教えてください。",
+        audioId: "needsMoreContextSpecific"
+      }
+    ]);
   }
 
   if (
@@ -900,16 +927,52 @@ function appointmentFollowUpTurn(analysis = {}) {
     && analysis.offered_morning_time_band
     && !analysis.has_schedule_time
   ) {
-    return customerTurn(
-      "では、午前中でお願いします。何時が空いていますか？",
-      scenario.audio?.appointmentMorningNeedTime || "appointmentMorningNeedTime"
-    );
+    return customerQuestionTurn("appointment-morning-time", [
+      {
+        text: "では、午前中でお願いします。何時が空いていますか？",
+        audioId: scenario.audio?.appointmentMorningNeedTime || "appointmentMorningNeedTime"
+      },
+      {
+        text: "何時が空いていますか？",
+        audioId: "appointmentMorningTimeRepeat"
+      },
+      {
+        text: "午前中の何時が空いていますか？",
+        audioId: "appointmentMorningTimeSpecific"
+      }
+    ]);
   }
   if (!state.appointmentDateConfirmed && analysis.offered_time_band_choice) {
-    return customerTurn(
-      "午前中がいいです。今週だと何日が空いていますか？",
-      scenario.audio?.appointmentMorningNeedDate || "appointmentMorningNeedDate"
-    );
+    return customerQuestionTurn("appointment-morning-date", [
+      {
+        text: "午前中がいいです。今週だと何日が空いていますか？",
+        audioId: scenario.audio?.appointmentMorningNeedDate || "appointmentMorningNeedDate"
+      },
+      {
+        text: "午前中で空いている日はいつですか？",
+        audioId: "appointmentMorningDateRepeat"
+      },
+      {
+        text: "今週の何日が空いていますか？",
+        audioId: "appointmentMorningDateSpecific"
+      }
+    ]);
+  }
+  if (state.appointmentDateConfirmed) {
+    return customerQuestionTurn("appointment-time-missing", [
+      {
+        text: "午前中と午後ならどちらが空いていますか？",
+        audioId: scenario.audio.followUps[2]
+      },
+      {
+        text: "何時が空いていますか？",
+        audioId: "appointmentTimeRepeat"
+      },
+      {
+        text: "10時や16時など、具体的な時刻を教えてください。",
+        audioId: "appointmentTimeSpecific"
+      }
+    ]);
   }
   const index = state.appointmentDateConfirmed
     ? 2
@@ -1237,8 +1300,22 @@ function handleScriptedStaffReply(text) {
     analysis[step.key] = false;
     state.analyses.push(analysis);
     state.turn += 1;
-    addMessage("customer", "いつ行けばいいんですか？", {
-      audioId: "inspection_missing_appointment_angry"
+    const appointmentQuestion = customerQuestionTurn("inspection-missing-appointment", [
+      {
+        text: "いつ行けばいいんですか？",
+        audioId: "inspection_missing_appointment_angry"
+      },
+      {
+        text: "入庫する日と時間を教えてください。",
+        audioId: "inspection_missing_appointment_repeat"
+      },
+      {
+        text: "何月何日の何時に行けばよいですか？",
+        audioId: "inspection_missing_appointment_specific"
+      }
+    ]);
+    addMessage("customer", appointmentQuestion.text, {
+      audioId: appointmentQuestion.audioId
     });
     els.speechNote.textContent = "入庫に必要な最低限の確認として、予約の日付と時間を確定してください。";
     renderProgress();
@@ -1273,8 +1350,22 @@ function handleScriptedStaffReply(text) {
       text: combinedText,
       missingDetail: retry.missingDetail
     };
-    addMessage("customer", retry.text, {
-      audioId: retry.audioId
+    const retryQuestion = customerQuestionTurn(
+      `inspection-retry:${step.key}:${retry.missingDetail || "general"}`,
+      [
+        { text: retry.text, audioId: retry.audioId },
+        {
+          text: "必要な内容がまだ確認できていません。もう少し具体的にお願いします。",
+          audioId: `inspection_${step.key}_retry_rephrased`
+        },
+        {
+          text: "確認に必要な情報を、具体的にご案内いただけますか？",
+          audioId: `inspection_${step.key}_retry_specific`
+        }
+      ]
+    );
+    addMessage("customer", retryQuestion.text, {
+      audioId: retryQuestion.audioId
     });
     els.speechNote.textContent = `不足している案内があります。現在の課題: ${step.expected}`;
     renderProgress();

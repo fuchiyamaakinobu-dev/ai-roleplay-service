@@ -3,7 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
-const start = source.indexOf("function normalizeFullWidthDigits(");
+const start = source.indexOf("function nextQuestionVariant(");
 const analysisEnd = source.indexOf("function collectEvidence(", start);
 const timeSelectionStart = source.indexOf("function selectAppointmentTimeOption(");
 const timeSelectionEnd = source.indexOf("function selectObjection(", timeSelectionStart);
@@ -20,7 +20,8 @@ assert.notEqual(followUpEnd, -1, "日時確認の応答関数を切り出せま�
 const context = {
   state: {
     appointmentDateConfirmed: true,
-    analyses: []
+    analyses: [],
+    questionRepeats: {}
   },
   scenario: {
     audio: {
@@ -109,6 +110,24 @@ assert.deepEqual(
     audioId: "appointmentMorningNeedTime"
   },
   "肯定的な午前中の空き案内から、具体的な時刻確認へ進みません"
+);
+const repeatedResponse = context.appointmentFollowUpTurn(positiveAnalysis);
+assert.deepEqual(
+  repeatedResponse,
+  {
+    text: "何時が空いていますか？",
+    audioId: "appointmentMorningTimeRepeat"
+  },
+  "同じ午前中確認を繰り返さず、自然な再確認へ切り替えられません"
+);
+const specificResponse = context.appointmentFollowUpTurn(positiveAnalysis);
+assert.deepEqual(
+  specificResponse,
+  {
+    text: "午前中の何時が空いていますか？",
+    audioId: "appointmentMorningTimeSpecific"
+  },
+  "3回目の確認を具体的な時刻質問へ切り替えられません"
 );
 
 const negativeAnalysis = context.analyzeStaff("午前中は空いていません");
