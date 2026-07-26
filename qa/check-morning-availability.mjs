@@ -3,13 +3,17 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
-const start = source.indexOf("function isMorningTimeBandOffer(");
+const start = source.indexOf("function normalizeFullWidthDigits(");
 const analysisEnd = source.indexOf("function collectEvidence(", start);
+const timeSelectionStart = source.indexOf("function selectAppointmentTimeOption(");
+const timeSelectionEnd = source.indexOf("function selectObjection(", timeSelectionStart);
 const followUpStart = source.indexOf("function appointmentFollowUpTurn(");
 const followUpEnd = source.indexOf("function selectContextualCustomerResponse(", followUpStart);
 
 assert.notEqual(start, -1, "午前中提案の判定関数が見つかりません");
 assert.notEqual(analysisEnd, -1, "スタッフ発話の解析関数を切り出せません");
+assert.notEqual(timeSelectionStart, -1, "時刻候補の選択関数が見つかりません");
+assert.notEqual(timeSelectionEnd, -1, "時刻候補の選択関数を切り出せません");
 assert.notEqual(followUpStart, -1, "日時確認の応答関数が見つかりません");
 assert.notEqual(followUpEnd, -1, "日時確認の応答関数を切り出せません");
 
@@ -40,6 +44,9 @@ const context = {
   confidenceFor() {
     return 1;
   },
+  pickVariant() {
+    return "earlier";
+  },
   customerTurn(text, audioId) {
     return { text, audioId };
   }
@@ -47,9 +54,11 @@ const context = {
 vm.createContext(context);
 vm.runInContext(`
   ${source.slice(start, analysisEnd)}
+  ${source.slice(timeSelectionStart, timeSelectionEnd)}
   ${source.slice(followUpStart, followUpEnd)}
   this.isMorningTimeBandOffer = isMorningTimeBandOffer;
   this.analyzeStaff = analyzeStaff;
+  this.selectAppointmentTimeOption = selectAppointmentTimeOption;
   this.appointmentFollowUpTurn = appointmentFollowUpTurn;
 `, context);
 
@@ -108,5 +117,25 @@ assert.equal(
   false,
   "否定表現を午前中の提案として解析しました"
 );
+
+const multipleTimeAnalysis = context.analyzeStaff(
+  "午前中ですと10時、お昼からですと４時に空きがあります"
+);
+assert.equal(multipleTimeAnalysis.has_multiple_schedule_times, true);
+assert.deepEqual(
+  [...multipleTimeAnalysis.schedule_time_options],
+  ["10時", "16時"],
+  "スタッフ発話の解析で10時・16時の複数候補になりません"
+);
+const selectedTimeResponse = context.selectAppointmentTimeOption(multipleTimeAnalysis);
+assert.deepEqual(
+  selectedTimeResponse,
+  {
+    text: "では、早いほうでお願いします。",
+    audioId: "appointmentEarlierTime"
+  },
+  "10時・16時の候補から早い時刻を選ぶ返答へ進みません"
+);
+assert.equal(context.state.appointmentTime, "10時");
 
 console.log("午前中の肯定提案・否定表現の判定テスト: OK");

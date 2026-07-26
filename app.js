@@ -485,6 +485,35 @@ function resetResults() {
   els.recommendedTalk.textContent = "結果に応じて表示されます。";
 }
 
+function normalizeFullWidthDigits(text) {
+  return text.replace(/[０-９]/g, (character) =>
+    String.fromCharCode(character.charCodeAt(0) - 0xFEE0)
+  );
+}
+
+function extractScheduleTimeOptions(normalized) {
+  const timeOptions = [...normalized.matchAll(/(\d{1,2})時/g)].map((match) => {
+    let hour = Number.parseInt(match[1], 10);
+    const context = normalized.slice(Math.max(0, match.index - 24), match.index);
+    const lastMorningMarker = Math.max(
+      context.lastIndexOf("午前"),
+      context.lastIndexOf("朝")
+    );
+    const lastAfternoonMarker = Math.max(
+      context.lastIndexOf("午後"),
+      context.lastIndexOf("お昼から"),
+      context.lastIndexOf("昼から"),
+      context.lastIndexOf("夕方"),
+      context.lastIndexOf("夜")
+    );
+    if (lastAfternoonMarker > lastMorningMarker && hour >= 1 && hour < 12) {
+      hour += 12;
+    }
+    return `${hour}時`;
+  });
+  return [...new Set(timeOptions)];
+}
+
 function isMorningTimeBandOffer(normalized, isQuestion) {
   if (!normalized.includes("午前") || normalized.includes("午後")) return false;
 
@@ -496,7 +525,7 @@ function isMorningTimeBandOffer(normalized, isQuestion) {
 }
 
 function analyzeStaff(text) {
-  const normalized = text.replace(/\s+/g, "");
+  const normalized = normalizeFullWidthDigits(text.replace(/\s+/g, ""));
   const isQuestion = /[？?]$/.test(text) || includesAny(normalized, ["でしょうか", "ですか", "ますか", "ませんか", "ないですか", "ございませんか", "でしょう"]);
   const isQuote = /「.*伺.*」|'.*伺.*'|以前|言った|ということ/.test(text);
   const hasConfirmedPickupWords = includesAny(normalized, lexicon.confirmedPickup);
@@ -539,7 +568,7 @@ function analyzeStaff(text) {
   const offeredMorningTimeBand = isMorningTimeBandOffer(normalized, isQuestion);
   const proposedFamilyVisit = includesAny(normalized, ["ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
   const hasScheduleDate = /(?:\d{1,2}月)?\d{1,2}日|(?:今週|来週|再来週)?(?:月|火|水|木|金|土|日)曜日/.test(normalized);
-  const scheduleTimeOptions = [...new Set(normalized.match(/\d{1,2}時/g) || [])];
+  const scheduleTimeOptions = extractScheduleTimeOptions(normalized);
   const hasScheduleTime = scheduleTimeOptions.length === 1;
   const hasMultipleScheduleTimes = scheduleTimeOptions.length > 1;
   const hasConcreteSchedule = hasScheduleDate && hasScheduleTime;
