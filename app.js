@@ -485,6 +485,16 @@ function resetResults() {
   els.recommendedTalk.textContent = "結果に応じて表示されます。";
 }
 
+function isMorningTimeBandOffer(normalized, isQuestion) {
+  if (!normalized.includes("午前") || normalized.includes("午後")) return false;
+
+  const denied = /(?:午前中?|午前の時間帯).*?(?:空いていません|空いてない|空き(?:が|は)?(?:ありません|ございません)|予約(?:できません|不可)|ご案内(?:できません|不可)|対応(?:できません|不可)|難しい|埋まっています|いっぱい|無理)/.test(normalized);
+  if (denied) return false;
+  if (isQuestion) return true;
+
+  return /(?:午前中?|午前の時間帯)(?:が|に|は)?(?:空いて(?:います|おります)|空きが(?:あります|ございます)|予約(?:可能|できます)|ご案内(?:可能|できます)|対応(?:可能|できます))/.test(normalized);
+}
+
 function analyzeStaff(text) {
   const normalized = text.replace(/\s+/g, "");
   const isQuestion = /[？?]$/.test(text) || includesAny(normalized, ["でしょうか", "ですか", "ますか", "ませんか", "ないですか", "ございませんか", "でしょう"]);
@@ -526,9 +536,7 @@ function analyzeStaff(text) {
   const offeredTimeBandChoice = isQuestion
     && normalized.includes("午前")
     && normalized.includes("午後");
-  const offeredMorningTimeBand = isQuestion
-    && normalized.includes("午前")
-    && !normalized.includes("午後");
+  const offeredMorningTimeBand = isMorningTimeBandOffer(normalized, isQuestion);
   const proposedFamilyVisit = includesAny(normalized, ["ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
   const hasScheduleDate = /(?:\d{1,2}月)?\d{1,2}日|(?:今週|来週|再来週)?(?:月|火|水|木|金|土|日)曜日/.test(normalized);
   const scheduleTimeOptions = [...new Set(normalized.match(/\d{1,2}時/g) || [])];
