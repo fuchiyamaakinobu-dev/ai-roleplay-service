@@ -726,15 +726,24 @@ function pickVariant(values, group = "default") {
   return values[pickRandomIndex(values, group)];
 }
 
-function nextCustomerMessage(analysis) {
+function rememberCompletedCheckpoints(analysis) {
   if (analysis.explained_service_time) state.serviceTimeExplained = true;
-  if (["ALTERNATIVE_PROPOSAL", "APPOINTMENT_CONFIRMATION"].includes(state.currentState)) {
+  if ([
+    "PICKUP_REQUEST",
+    "VISIT_PROPOSAL",
+    "ALTERNATIVE_PROPOSAL",
+    "APPOINTMENT_CONFIRMATION"
+  ].includes(state.currentState)) {
     if (analysis.has_schedule_date) state.appointmentDateConfirmed = true;
     if (analysis.has_schedule_time) {
       state.appointmentTimeConfirmed = true;
       state.appointmentTime = analysis.schedule_time_options[0];
     }
   }
+}
+
+function nextCustomerMessage(analysis) {
+  rememberCompletedCheckpoints(analysis);
 
   if (analysis.decision === "pickup_accepted_immediately") {
     state.currentState = "PICKUP_REQUEST";
