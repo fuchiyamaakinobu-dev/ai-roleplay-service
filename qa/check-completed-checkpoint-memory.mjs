@@ -3,11 +3,15 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const helperStart = source.indexOf("function includesAny(");
+const helperEnd = source.indexOf("function classifyCustomerReason(", helperStart);
 const start = source.indexOf("function rememberCompletedCheckpoints(");
 const nextMessageStart = source.indexOf("function nextCustomerMessage(", start);
 const end = source.indexOf("function selectAppointmentTimeOption(", nextMessageStart);
 
 assert.notEqual(start, -1, "確認済み項目の保存関数が見つかりません");
+assert.notEqual(helperStart, -1, "作業時間の再確認判定関数が見つかりません");
+assert.notEqual(helperEnd, -1, "作業時間の再確認判定関数を読み込めません");
 assert.notEqual(nextMessageStart, -1, "お客様返答関数が見つかりません");
 assert.notEqual(end, -1, "確認済み項目とお客様返答関数を読み込めません");
 
@@ -54,10 +58,21 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(`
+  ${source.slice(helperStart, helperEnd)}
   ${source.slice(start, end)}
+  this.confirmsUnchangedServiceTime = confirmsUnchangedServiceTime;
+  this.isServiceTimeRequirementSatisfied = isServiceTimeRequirementSatisfied;
   this.rememberCompletedCheckpoints = rememberCompletedCheckpoints;
   this.nextCustomerMessage = nextCustomerMessage;
 `, context);
+
+assert.equal(context.confirmsUnchangedServiceTime("作業時間に変更はありません。"), true);
+assert.equal(context.confirmsUnchangedServiceTime("追加しても時間は変わりません。"), true);
+assert.equal(context.confirmsUnchangedServiceTime("オイル交換を追加しても時間に変更はないです。"), true);
+assert.equal(context.confirmsUnchangedServiceTime("内容に変更はありません。"), false);
+assert.equal(context.isServiceTimeRequirementSatisfied(true, false), true);
+assert.equal(context.isServiceTimeRequirementSatisfied(true, true), false);
+assert.equal(context.isServiceTimeRequirementSatisfied(false, false), false);
 
 context.rememberCompletedCheckpoints({
   explained_service_time: false,
@@ -123,6 +138,7 @@ const oilRequest = context.nextCustomerMessage({
 });
 assert.equal(oilRequest.text, "オイル交換もお願いします。");
 assert.equal(context.state.currentState, "ADDITIONAL_SERVICE_REQUEST");
+assert.equal(context.state.serviceTimeNeedsReconfirmation, true);
 
 const closing = context.nextCustomerMessage({
   explained_service_time: true,
@@ -133,10 +149,46 @@ const closing = context.nextCustomerMessage({
   schedule_time_options: []
 });
 assert.equal(context.state.serviceTimeExplained, true);
+assert.equal(context.state.serviceTimeNeedsReconfirmation, false);
 assert.equal(context.state.appointmentDateConfirmed, true);
 assert.equal(context.state.appointmentTimeConfirmed, true);
 assert.equal(context.state.ended, true);
 assert.equal(context.appointmentFollowUpCount, 0);
 assert.doesNotMatch(closing.text, /いつなら空いていますか/);
+
+context.state.serviceTimeExplained = true;
+context.state.serviceTimeNeedsReconfirmation = true;
+context.rememberCompletedCheckpoints({
+  explained_service_time: false,
+  confirmed_service_time_unchanged: true,
+  has_schedule_date: false,
+  has_schedule_time: false,
+  schedule_time_options: []
+});
+assert.equal(context.state.serviceTimeNeedsReconfirmation, false);
+
+context.state.currentState = "INSPECTION_REQUEST_RECEIVED";
+context.state.serviceTimeExplained = false;
+context.state.serviceTimeNeedsReconfirmation = false;
+context.state.additionalServiceAnswered = false;
+context.nextCustomerMessage({
+  explained_service_time: false,
+  confirmed_service_time_unchanged: false,
+  asked_additional_service: true,
+  asked_vehicle_concern: true,
+  has_schedule_date: false,
+  has_schedule_time: false,
+  schedule_time_options: []
+});
+assert.equal(context.state.serviceTimeNeedsReconfirmation, false);
+context.rememberCompletedCheckpoints({
+  explained_service_time: true,
+  confirmed_service_time_unchanged: false,
+  has_schedule_date: false,
+  has_schedule_time: false,
+  schedule_time_options: []
+});
+assert.equal(context.state.serviceTimeExplained, true);
+assert.equal(context.state.serviceTimeNeedsReconfirmation, false);
 
 console.log("確認済み項目への逆戻り防止テスト: OK");

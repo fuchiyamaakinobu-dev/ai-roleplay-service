@@ -3,6 +3,8 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const serviceTimeHelperStart = source.indexOf("function confirmsUnchangedServiceTime(");
+const serviceTimeHelperEnd = source.indexOf("function isServiceTimeRequirementSatisfied(", serviceTimeHelperStart);
 const start = source.indexOf("function nextQuestionVariant(");
 const analysisEnd = source.indexOf("function collectEvidence(", start);
 const timeSelectionStart = source.indexOf("function selectAppointmentTimeOption(");
@@ -11,6 +13,8 @@ const followUpStart = source.indexOf("function appointmentFollowUpTurn(");
 const followUpEnd = source.indexOf("function selectContextualCustomerResponse(", followUpStart);
 
 assert.notEqual(start, -1, "午前中提案の判定関数が見つかりません");
+assert.notEqual(serviceTimeHelperStart, -1, "作業時間変更なしの判定関数が見つかりません");
+assert.notEqual(serviceTimeHelperEnd, -1, "作業時間変更なしの判定関数を読み込めません");
 assert.notEqual(analysisEnd, -1, "スタッフ発話の解析関数を切り出せません");
 assert.notEqual(timeSelectionStart, -1, "時刻候補の選択関数が見つかりません");
 assert.notEqual(timeSelectionEnd, -1, "時刻候補の選択関数を切り出せません");
@@ -54,6 +58,7 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(`
+  ${source.slice(serviceTimeHelperStart, serviceTimeHelperEnd)}
   ${source.slice(start, analysisEnd)}
   ${source.slice(timeSelectionStart, timeSelectionEnd)}
   ${source.slice(followUpStart, followUpEnd)}
