@@ -30,6 +30,14 @@ assert.doesNotMatch(additionalServiceOnly, /引取をご希望される理由/);
 const achievedAll = context.buildImprovementTalk([], "work");
 assert.match(achievedAll, /必要な確認と提案ができています/);
 
+const serviceTimeReconfirmation = context.buildImprovementTalk(
+  ["explained_service_time"],
+  "work",
+  { serviceTimeNeedsReconfirmation: true }
+);
+assert.match(serviceTimeReconfirmation, /追加作業を含めた作業時間/);
+assert.match(serviceTimeReconfirmation, /変更がない/);
+
 const distanceTalk = context.buildImprovementTalk(["proposed_other_store"], "distance");
 assert.match(distanceTalk, /近い店舗|ご家族/);
 

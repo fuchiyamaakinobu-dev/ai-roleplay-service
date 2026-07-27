@@ -26,6 +26,7 @@ const state = {
   currentObjection: null,
   resolutionType: null,
   serviceTimeExplained: false,
+  serviceTimeNeedsReconfirmation: false,
   appointmentDateConfirmed: false,
   appointmentTimeConfirmed: false,
   appointmentTime: null,
@@ -91,6 +92,28 @@ function includesAny(text, words) {
   return words.some((word) => text.includes(word));
 }
 
+function confirmsUnchangedServiceTime(text) {
+  const normalized = text.replace(/\s+/g, "");
+  return normalized.includes("時間")
+    && includesAny(normalized, [
+      "変更はありません",
+      "変更ありません",
+      "変更ないです",
+      "変更はない",
+      "変更なし",
+      "変わりません",
+      "変わらない",
+      "変わらないです",
+      "同じです",
+      "同じになります",
+      "時間は同じ"
+    ]);
+}
+
+function isServiceTimeRequirementSatisfied(explainedServiceTime, needsReconfirmation) {
+  return Boolean(explainedServiceTime && !needsReconfirmation);
+}
+
 function classifyCustomerReason(text) {
   const normalized = text.replace(/\s+/g, "");
   if (includesAny(normalized, ["運転に自信", "運転が不安", "運転するのが不安"])) return "drivingConfidence";
@@ -149,6 +172,7 @@ function selectScenario(scenarioId) {
   state.scriptStep = 0;
   state.proposedAppointment = null;
   state.serviceTimeExplained = false;
+  state.serviceTimeNeedsReconfirmation = false;
   state.appointmentDateConfirmed = false;
   state.appointmentTimeConfirmed = false;
   state.appointmentTime = null;
@@ -458,6 +482,7 @@ function startRoleplay() {
   state.currentObjection = null;
   state.resolutionType = null;
   state.serviceTimeExplained = false;
+  state.serviceTimeNeedsReconfirmation = false;
   state.appointmentDateConfirmed = false;
   state.appointmentTimeConfirmed = false;
   state.appointmentTime = null;
@@ -579,6 +604,7 @@ function analyzeStaff(text) {
 
   const acceptedPickup = forcePickupAcceptance || (pickupStrength === "confirmed" && hasConcretePickup && !conditional);
   const hasConcreteServiceTime = includesAny(normalized, lexicon.serviceTime);
+  const confirmedServiceTimeUnchanged = confirmsUnchangedServiceTime(normalized);
   const hasActionableProposal = includesAny(normalized, lexicon.weekend)
     || includesAny(normalized, lexicon.otherStore)
     || includesAny(normalized, ["時間帯", "午前", "午後", "代車", "ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
@@ -622,6 +648,7 @@ function analyzeStaff(text) {
     pickup_acceptance_strength: pickupStrength,
     asked_reason: includesAny(normalized, lexicon.reasonQuestion),
     explained_service_time: hasConcreteServiceTime,
+    confirmed_service_time_unchanged: confirmedServiceTimeUnchanged,
     explained_visit_benefit: includesAny(normalized, lexicon.visitBenefit),
     proposed_weekend: includesAny(normalized, lexicon.weekend),
     proposed_other_store: includesAny(normalized, lexicon.otherStore),
@@ -726,15 +753,29 @@ function pickVariant(values, group = "default") {
   return values[pickRandomIndex(values, group)];
 }
 
-function nextCustomerMessage(analysis) {
-  if (analysis.explained_service_time) state.serviceTimeExplained = true;
-  if (["ALTERNATIVE_PROPOSAL", "APPOINTMENT_CONFIRMATION"].includes(state.currentState)) {
+function rememberCompletedCheckpoints(analysis) {
+  const serviceTimeReconfirmed = analysis.explained_service_time
+    || (state.serviceTimeExplained && analysis.confirmed_service_time_unchanged);
+  if (serviceTimeReconfirmed) {
+    state.serviceTimeExplained = true;
+    state.serviceTimeNeedsReconfirmation = false;
+  }
+  if ([
+    "PICKUP_REQUEST",
+    "VISIT_PROPOSAL",
+    "ALTERNATIVE_PROPOSAL",
+    "APPOINTMENT_CONFIRMATION"
+  ].includes(state.currentState)) {
     if (analysis.has_schedule_date) state.appointmentDateConfirmed = true;
     if (analysis.has_schedule_time) {
       state.appointmentTimeConfirmed = true;
       state.appointmentTime = analysis.schedule_time_options[0];
     }
   }
+}
+
+function nextCustomerMessage(analysis) {
+  rememberCompletedCheckpoints(analysis);
 
   if (analysis.decision === "pickup_accepted_immediately") {
     state.currentState = "PICKUP_REQUEST";
@@ -764,6 +805,7 @@ function nextCustomerMessage(analysis) {
     && (analysis.asked_additional_service || analysis.asked_vehicle_concern)
     && !state.additionalServiceAnswered
   ) {
+    if (state.serviceTimeExplained) state.serviceTimeNeedsReconfirmation = true;
     state.additionalServiceAnswered = true;
     state.additionalServiceResumeState = state.currentState;
     state.currentState = "ADDITIONAL_SERVICE_REQUEST";
@@ -1492,6 +1534,12 @@ function scoreRoleplay() {
     return true;
   });
   const metricAchieved = (metric) => {
+    if (metric.key === "explained_service_time") {
+      return isServiceTimeRequirementSatisfied(
+        merged.explained_service_time,
+        state.serviceTimeNeedsReconfirmation
+      );
+    }
     if (metric.key === "proposed_other_store" && ["distance", "drivingConfidence"].includes(reason)) {
       return Boolean(merged.proposed_other_store || merged.proposed_family_visit);
     }
@@ -1529,6 +1577,9 @@ function scoreRoleplay() {
   applicableMetrics.forEach((metric) => {
     const action = metric.action || metric.label;
     if (metricAchieved(metric)) good.push(`${action}ことができています`);
+    else if (metric.key === "explained_service_time" && state.serviceTimeNeedsReconfirmation) {
+      improve.push("追加作業を受け付けた後に、変更後の作業時間または時間に変更がないことを再案内しましょう");
+    }
     else improve.push(`${action}ことを意識すると、より良い応対になります`);
   });
   penalties.forEach((penalty) => improve.unshift(penalty));
@@ -1541,7 +1592,9 @@ function scoreRoleplay() {
     good: good.slice(0, 4),
     improve: improve.slice(0, 4),
     recommendedTalkTitle: "次回の改善トーク",
-    recommendedTalk: buildImprovementTalk(missingMetricKeys, reason),
+    recommendedTalk: buildImprovementTalk(missingMetricKeys, reason, {
+      serviceTimeNeedsReconfirmation: state.serviceTimeNeedsReconfirmation
+    }),
     judgements: state.analyses.map((analysis, index) => {
       const strength = analysis.pickup_acceptance_strength;
       const confidence = Math.round(analysis.confidence * 100);
@@ -1593,7 +1646,7 @@ function scoreScriptedRoleplay() {
   };
 }
 
-function buildImprovementTalk(missingMetricKeys, reason = "work") {
+function buildImprovementTalk(missingMetricKeys, reason = "work", options = {}) {
   if (!missingMetricKeys.length) {
     return "今回の応対で必要な確認と提案ができています。現在の流れを継続してください。";
   }
@@ -1605,7 +1658,9 @@ function buildImprovementTalk(missingMetricKeys, reason = "work") {
     acknowledged_request: "ご連絡ありがとうございます。12カ月点検のご依頼ですね。",
     asked_additional_service:
       "12カ月点検のほかに、オイル交換などのご用命や、お車で気になる点はございませんか。",
-    explained_service_time: "点検は、追加整備がなければ1時間程度です。",
+    explained_service_time: options.serviceTimeNeedsReconfirmation
+      ? "オイル交換などの追加作業を含めた作業時間、または作業時間に変更がないことを改めてご案内します。"
+      : "点検は、追加整備がなければ1時間程度です。",
     asked_reason:
       "差し支えなければ、引取をご希望される理由をもう少し詳しくお聞かせいただけますか。",
     explained_visit_benefit:
