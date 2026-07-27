@@ -36,6 +36,13 @@
           <span>お客様音声を自動再生</span>
         </label>
 
+        <label class="progress-toggle">
+          <span class="progress-toggle-copy">進行チェックを表示</span>
+          <input id="progressEnabled" type="checkbox" role="switch" checked>
+          <span class="switch-track" aria-hidden="true"><span></span></span>
+          <strong id="progressToggleState">ON</strong>
+        </label>
+
         <label class="voice-selector">
           <span>お客様の声（車検誘致用）</span>
           <select id="voiceSelect">
@@ -53,7 +60,15 @@
       </aside>
 
       <section class="workbench">
-        <div class="progress-strip" id="progressStrip" aria-label="進行状況"></div>
+        <div class="progress-panel" id="progressPanel">
+          <div class="progress-strip" id="progressStrip" aria-label="進行状況"></div>
+          <div class="progress-legend" aria-label="進行チェックの色の説明">
+            <span><i class="legend-current"></i>対応中</span>
+            <span><i class="legend-done"></i>確認済み</span>
+            <span><i class="legend-warning"></i>再確認必要</span>
+            <span><i class="legend-na"></i>対象外</span>
+          </div>
+        </div>
 
         <section class="chat-card" aria-label="会話">
           <div class="chat-head">

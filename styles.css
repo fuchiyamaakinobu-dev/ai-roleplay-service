@@ -228,6 +228,71 @@ h1 {
   accent-color: var(--blue);
 }
 
+.progress-toggle {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 9px;
+  margin: -6px 0 16px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--navy);
+  background: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.progress-toggle input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: #aab4c2;
+  transition: background 0.15s ease;
+}
+
+.switch-track span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(16, 42, 86, 0.25);
+  transition: transform 0.15s ease;
+}
+
+.progress-toggle input:checked + .switch-track {
+  background: var(--blue);
+}
+
+.progress-toggle input:checked + .switch-track span {
+  transform: translateX(18px);
+}
+
+.progress-toggle input:focus-visible + .switch-track {
+  outline: 3px solid rgba(16, 95, 194, 0.25);
+  outline-offset: 2px;
+}
+
+.progress-toggle strong {
+  min-width: 25px;
+  color: var(--blue);
+  font-size: 12px;
+  text-align: right;
+}
+
 .voice-selector {
   display: grid;
   gap: 7px;
@@ -313,6 +378,15 @@ h1 {
   gap: 12px;
 }
 
+.progress-panel {
+  display: grid;
+  gap: 7px;
+}
+
+.progress-panel[hidden] {
+  display: none;
+}
+
 .progress-strip {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -331,6 +405,13 @@ h1 {
   font-weight: 800;
 }
 
+.progress-status {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
 .progress-item.is-active {
   border-color: var(--blue);
   color: var(--blue);
@@ -341,6 +422,61 @@ h1 {
   border-color: rgba(8, 120, 74, 0.35);
   color: var(--green);
   background: #f0fbf5;
+}
+
+.progress-item.is-warning {
+  border-color: #d99216;
+  color: #8a4a00;
+  background: #fff7e8;
+}
+
+.progress-item.is-na {
+  border-color: #d6dbe3;
+  color: #7b8492;
+  background: #eef1f5;
+}
+
+.progress-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px 12px;
+  color: #657188;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.progress-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress-legend i {
+  width: 10px;
+  height: 10px;
+  border: 1px solid;
+  border-radius: 3px;
+}
+
+.legend-current {
+  border-color: var(--blue) !important;
+  background: #eef5ff;
+}
+
+.legend-done {
+  border-color: rgba(8, 120, 74, 0.45) !important;
+  background: #f0fbf5;
+}
+
+.legend-warning {
+  border-color: #d99216 !important;
+  background: #fff7e8;
+}
+
+.legend-na {
+  border-color: #d6dbe3 !important;
+  background: #eef1f5;
 }
 
 .chat-card {
@@ -695,7 +831,7 @@ textarea:focus {
 
   .status-pill,
   .scenario-panel,
-  .progress-strip,
+  .progress-panel,
   .chat-actions,
   .input-row,
   .speech-note,

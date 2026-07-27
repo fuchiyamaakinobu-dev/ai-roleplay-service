@@ -30,7 +30,9 @@ const state = {
   appointmentDateConfirmed: false,
   appointmentTimeConfirmed: false,
   appointmentTime: null,
+  pickupRequested: false,
   additionalServiceAnswered: false,
+  additionalServiceReconfirmed: false,
   additionalServiceResumeState: null,
   transcript: [],
   analyses: [],
@@ -47,6 +49,9 @@ const els = {
   finishButton: document.querySelector("#finishButton"),
   printButton: document.querySelector("#printButton"),
   audioEnabled: document.querySelector("#audioEnabled"),
+  progressEnabled: document.querySelector("#progressEnabled"),
+  progressToggleState: document.querySelector("#progressToggleState"),
+  progressPanel: document.querySelector("#progressPanel"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceCredit: document.querySelector("#voiceCredit"),
   replyForm: document.querySelector("#replyForm"),
@@ -176,7 +181,9 @@ function selectScenario(scenarioId) {
   state.appointmentDateConfirmed = false;
   state.appointmentTimeConfirmed = false;
   state.appointmentTime = null;
+  state.pickupRequested = false;
   state.additionalServiceAnswered = false;
+  state.additionalServiceReconfirmed = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
   state.analyses = [];
@@ -197,19 +204,123 @@ function selectScenario(scenarioId) {
     : "AIお客様の発話後に音声入力が始まります。";
 }
 
+function mergedProgressAchievements() {
+  return state.analyses.reduce((merged, analysis) => {
+    Object.entries(analysis).forEach(([key, value]) => {
+      if (value === true) merged[key] = true;
+    });
+    return merged;
+  }, {});
+}
+
+function serviceAlternativeAchieved(merged) {
+  if (state.pickupReason === "work") {
+    return Boolean(merged.proposed_weekend || merged.proposed_time);
+  }
+  if (["distance", "drivingConfidence"].includes(state.pickupReason)) {
+    return Boolean(merged.proposed_other_store || merged.proposed_family_visit);
+  }
+  if (state.pickupReason === "competitor") {
+    return Boolean(merged.explained_visit_benefit || merged.left_choice);
+  }
+  if (state.pickupReason === "misunderstanding") {
+    return Boolean(merged.acknowledged_request || merged.left_choice);
+  }
+  if (state.pickupReason === "family") {
+    return Boolean(state.resolutionType === "familyConsultation" || merged.next_action_confirmed);
+  }
+  return Boolean(
+    merged.proposed_weekend
+    || merged.proposed_time
+    || merged.proposed_other_store
+    || merged.proposed_family_visit
+  );
+}
+
+function serviceProgressStatus(item, merged) {
+  let achieved = false;
+  let notApplicable = false;
+
+  switch (item.state) {
+    case "START":
+      achieved = state.started;
+      break;
+    case "INSPECTION_REQUEST_RECEIVED":
+      achieved = Boolean(merged.acknowledged_request);
+      break;
+    case "ADDITIONAL_SERVICE_REQUEST":
+      achieved = Boolean(merged.asked_additional_service);
+      break;
+    case "ADDITIONAL_SERVICE_RECONFIRMATION":
+      achieved = state.additionalServiceReconfirmed;
+      notApplicable = !state.additionalServiceAnswered;
+      break;
+    case "SERVICE_TIME_QUESTION":
+      if (state.serviceTimeNeedsReconfirmation) return "warning";
+      achieved = isServiceTimeRequirementSatisfied(merged.explained_service_time, false);
+      break;
+    case "PICKUP_REQUEST":
+      achieved = state.pickupRequested;
+      break;
+    case "VISIT_PROPOSAL":
+      achieved = Boolean(merged.asked_reason && merged.explained_visit_benefit);
+      break;
+    case "ALTERNATIVE_PROPOSAL":
+      achieved = serviceAlternativeAchieved(merged);
+      break;
+    case "APPOINTMENT_CONFIRMATION":
+      achieved = state.appointmentDateConfirmed && state.appointmentTimeConfirmed;
+      break;
+    default:
+      break;
+  }
+
+  if (achieved) return "done";
+  if (state.started && !state.ended && item.state === state.currentState) return "active";
+  if (notApplicable) return "na";
+  return "";
+}
+
+function scriptedProgressStatus(item) {
+  const steps = scenario.steps.filter((step) => step.state === item.state);
+  const achieved = steps.length > 0
+    && steps.every((step) => state.analyses.some((analysis) => analysis[step.key] === true));
+  if (achieved) return "done";
+  if (state.started && !state.ended && item.state === state.currentState) return "active";
+  if (
+    state.ended
+    && steps.length > 0
+    && steps.every((step) => step.optionalAfterAppointment)
+  ) return "na";
+  return "";
+}
+
 function renderProgress() {
-  const currentIndex = state.started
-    ? scenario.progress.findIndex((item) => item.state === state.currentState)
-    : -1;
+  const visible = els.progressEnabled?.checked !== false;
+  if (els.progressPanel) els.progressPanel.hidden = !visible;
+  if (els.stateLabel) els.stateLabel.hidden = !visible;
+  if (els.progressToggleState) els.progressToggleState.textContent = visible ? "ON" : "OFF";
+  if (!visible) return;
+
+  const merged = mergedProgressAchievements();
+  const statusLabels = {
+    active: "対応中",
+    done: "確認済み",
+    warning: "再確認必要",
+    na: "対象外",
+    "": "未確認"
+  };
   els.progressStrip.innerHTML = scenario.progress
     .map((item) => {
-      const itemIndex = scenario.progress.findIndex((p) => p.state === item.state);
-      const klass = state.started && item.state === state.currentState
-        ? "is-active"
-        : itemIndex < currentIndex
-          ? "is-done"
-          : "";
-      return `<div class="progress-item ${klass}">${item.label}</div>`;
+      const status = scenario.mode === "staff-led-scripted"
+        ? scriptedProgressStatus(item)
+        : serviceProgressStatus(item, merged);
+      const klass = status ? `is-${status}` : "";
+      const statusLabel = statusLabels[status];
+      return `<div class="progress-item ${klass}" aria-label="${escapeHtml(item.label)}: ${statusLabel}">
+        ${escapeHtml(item.label)}
+        <span class="progress-status">${statusLabel}</span>
+      </div>`;
     })
     .join("");
   const active = scenario.progress.find((item) => item.state === state.currentState);
@@ -486,7 +597,9 @@ function startRoleplay() {
   state.appointmentDateConfirmed = false;
   state.appointmentTimeConfirmed = false;
   state.appointmentTime = null;
+  state.pickupRequested = false;
   state.additionalServiceAnswered = false;
+  state.additionalServiceReconfirmed = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
   state.analyses = [];
@@ -712,6 +825,7 @@ function customerTurnFromAudio(audioId, fallbackText = "") {
 
 function pickupRequestTurn() {
   state.currentState = "PICKUP_REQUEST";
+  state.pickupRequested = true;
   const index = pickRandomIndex(scenario.pickupRequests, "pickup-request");
   state.pickupReason = classifyCustomerReason(scenario.pickupRequests[index]);
   return customerTurn(scenario.pickupRequests[index], scenario.audio.pickupRequests[index]);
@@ -827,6 +941,7 @@ function nextCustomerMessage(analysis) {
 
   if (state.currentState === "ADDITIONAL_SERVICE_REQUEST") {
     if (analysis.asked_additional_service) {
+      state.additionalServiceReconfirmed = true;
       state.currentState = "ADDITIONAL_SERVICE_RECONFIRMATION";
       return customerTurnFromAudio(
         scenario.audio.additionalServiceNone,
@@ -1838,6 +1953,10 @@ els.startButton.addEventListener("click", startRoleplay);
 els.resetButton.addEventListener("click", startRoleplay);
 els.finishButton.addEventListener("click", finishRoleplay);
 els.printButton.addEventListener("click", () => window.print());
+els.progressEnabled?.addEventListener("change", () => {
+  localStorage.setItem("roleplayProgressVisible", String(els.progressEnabled.checked));
+  renderProgress();
+});
 els.voiceSelect?.addEventListener("change", updateVoiceSelection);
 els.replyForm.addEventListener("submit", handleReply);
 els.scenarioList.addEventListener("click", (event) => {
@@ -1885,6 +2004,10 @@ els.conversation.addEventListener("click", (event) => {
 const savedVoice = localStorage.getItem("roleplayVoice");
 if (savedVoice && audioDb.voices?.[savedVoice] && els.voiceSelect) {
   els.voiceSelect.value = savedVoice;
+}
+const savedProgressVisibility = localStorage.getItem("roleplayProgressVisible");
+if (els.progressEnabled) {
+  els.progressEnabled.checked = savedProgressVisibility !== "false";
 }
 updateVoiceSelection();
 renderScenarioList();
