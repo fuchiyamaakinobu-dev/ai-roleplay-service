@@ -8,11 +8,12 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 import {
   collection,
+  doc,
   getDocs,
   getFirestore,
-  limit,
   orderBy,
-  query
+  query,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -25,6 +26,7 @@ const firebaseConfig = {
 };
 
 const ADMIN_EMAIL = "fuchiyama.akinobu@gmail.com";
+const HISTORY_LIMIT = 500;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -173,19 +175,37 @@ async function loadHistory() {
   els.reloadButton.disabled = true;
   try {
     const [resultSnapshot, startSnapshot] = await Promise.all([
-      getDocs(query(collection(db, "roleplayResults"), orderBy("createdAt", "desc"), limit(500))),
-      getDocs(query(collection(db, "roleplayActivity"), orderBy("createdAt", "desc"), limit(500)))
+      getDocs(query(collection(db, "roleplayResults"), orderBy("createdAt", "desc"))),
+      getDocs(query(collection(db, "roleplayActivity"), orderBy("createdAt", "desc")))
     ]);
-    results = resultSnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-    starts = startSnapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+    const [deletedResults, deletedStarts] = await Promise.all([
+      pruneHistory("roleplayResults", resultSnapshot),
+      pruneHistory("roleplayActivity", startSnapshot)
+    ]);
+    results = resultSnapshot.docs.slice(0, HISTORY_LIMIT).map((item) => ({ id: item.id, ...item.data() }));
+    starts = startSnapshot.docs.slice(0, HISTORY_LIMIT).map((item) => ({ id: item.id, ...item.data() }));
     populateScenarioFilter();
     render();
-    els.historyStatus.textContent = `最新${results.length}件の採点履歴を表示できます。`;
+    const deletedCount = deletedResults + deletedStarts;
+    const cleanupMessage = deletedCount > 0 ? ` 古い履歴${deletedCount}件を整理しました。` : "";
+    els.historyStatus.textContent = `最新${results.length}件の採点履歴を表示できます。${cleanupMessage}`;
   } catch (error) {
     els.historyStatus.textContent = `履歴を読み込めませんでした：${error.message}`;
   } finally {
     els.reloadButton.disabled = false;
   }
+}
+
+async function pruneHistory(collectionName, snapshot) {
+  const excess = snapshot.docs.slice(HISTORY_LIMIT);
+  for (let index = 0; index < excess.length; index += 500) {
+    const batch = writeBatch(db);
+    excess.slice(index, index + 500).forEach((item) => {
+      batch.delete(doc(db, collectionName, item.id));
+    });
+    await batch.commit();
+  }
+  return excess.length;
 }
 
 function csvCell(value) {
