@@ -169,7 +169,7 @@ window.ROLEPLAY_AUDIO_DB = {
     {
       id: "objectionDistance03",
       label: "断り理由 距離 3",
-      text: "遠いし運転に自信が無いので本別には行けません。",
+      text: "遠いし運転に自信が無いのでお店には行けません。",
       file: "customer_objection_distance_03.mp3",
       status: "ready"
     },
