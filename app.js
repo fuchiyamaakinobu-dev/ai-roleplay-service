@@ -34,6 +34,9 @@ const state = {
   additionalServiceAnswered: false,
   additionalServiceReconfirmed: false,
   additionalServiceResumeState: null,
+  employeeCode: "",
+  startedAt: null,
+  resultSaved: false,
   transcript: [],
   analyses: [],
   scriptedPartialReplies: {},
@@ -52,6 +55,7 @@ const els = {
   progressEnabled: document.querySelector("#progressEnabled"),
   progressToggleState: document.querySelector("#progressToggleState"),
   progressPanel: document.querySelector("#progressPanel"),
+  employeeCode: document.querySelector("#employeeCode"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceCredit: document.querySelector("#voiceCredit"),
   replyForm: document.querySelector("#replyForm"),
@@ -69,8 +73,40 @@ const els = {
   improveList: document.querySelector("#improveList"),
   judgementList: document.querySelector("#judgementList"),
   recommendedTalkTitle: document.querySelector("#recommendedTalkTitle"),
-  recommendedTalk: document.querySelector("#recommendedTalk")
+  recommendedTalk: document.querySelector("#recommendedTalk"),
+  resultSaveStatus: document.querySelector("#resultSaveStatus")
 };
+
+function normalizeEmployeeCode(value) {
+  return String(value || "")
+    .replace(/[０-９]/g, (character) =>
+      String.fromCharCode(character.charCodeAt(0) - 0xFEE0)
+    )
+    .replace(/\D/g, "");
+}
+
+function isValidEmployeeCode(value) {
+  return /^\d{5}$/.test(normalizeEmployeeCode(value));
+}
+
+function queueHistoryRecord(method, payload) {
+  if (window.ROLEPLAY_RESULTS?.[method]) {
+    window.ROLEPLAY_RESULTS[method](payload);
+    return;
+  }
+  window.ROLEPLAY_RESULT_QUEUE = window.ROLEPLAY_RESULT_QUEUE || [];
+  const queuedRecord = { method, payload };
+  window.ROLEPLAY_RESULT_QUEUE.push(queuedRecord);
+  if (method === "saveResult" && els.resultSaveStatus) {
+    els.resultSaveStatus.textContent = "履歴保存サービスへ接続しています…";
+    els.resultSaveStatus.className = "result-save-status is-saving";
+    window.setTimeout?.(() => {
+      if (!window.ROLEPLAY_RESULT_QUEUE?.includes(queuedRecord)) return;
+      els.resultSaveStatus.textContent = "履歴保存サービスへ接続できませんでした。印刷結果は利用できます。";
+      els.resultSaveStatus.className = "result-save-status is-error";
+    }, 10000);
+  }
+}
 
 const lexicon = {
   thanks: ["ありがとう", "ありがとうございます", "ご連絡", "お電話"],
@@ -190,6 +226,13 @@ function selectScenario(scenarioId) {
   state.scriptedPartialReplies = {};
   state.usedVariants = {};
   state.questionRepeats = {};
+  state.startedAt = null;
+  state.resultSaved = false;
+  if (els.employeeCode) els.employeeCode.disabled = false;
+  if (els.resultSaveStatus) {
+    els.resultSaveStatus.textContent = "採点後、社員コードと結果を履歴へ保存します。";
+    els.resultSaveStatus.className = "result-save-status";
+  }
   clearStaffInput();
   resetResults();
   updateVoiceSelection();
@@ -580,6 +623,22 @@ function acknowledgeAndContinue(text) {
 function startRoleplay() {
   stopSpeechInput();
   stopCustomerPlayback();
+  const hasEmployeeCodeField = typeof els.employeeCode?.setCustomValidity === "function";
+  const employeeCode = hasEmployeeCodeField
+    ? normalizeEmployeeCode(els.employeeCode.value)
+    : "";
+  if (els.employeeCode) els.employeeCode.value = employeeCode;
+  if (hasEmployeeCodeField && !isValidEmployeeCode(employeeCode)) {
+    els.employeeCode?.setCustomValidity("社員コードは5桁の数字で入力してください。");
+    els.employeeCode?.reportValidity();
+    els.employeeCode?.focus();
+    if (els.resultSaveStatus) {
+      els.resultSaveStatus.textContent = "ロープレ開始前に5桁の社員コードを入力してください。";
+      els.resultSaveStatus.className = "result-save-status is-error";
+    }
+    return;
+  }
+  if (hasEmployeeCodeField) els.employeeCode.setCustomValidity("");
   state.started = true;
   state.ended = false;
   state.currentState = scenario.mode === "staff-led-scripted"
@@ -606,7 +665,20 @@ function startRoleplay() {
   state.scriptedPartialReplies = {};
   state.usedVariants = {};
   state.questionRepeats = {};
+  state.employeeCode = employeeCode;
+  state.startedAt = new Date().toISOString();
+  state.resultSaved = false;
+  if (els.employeeCode) els.employeeCode.disabled = true;
   resetResults();
+  if (isValidEmployeeCode(employeeCode)) {
+    queueHistoryRecord("recordStart", {
+      employeeCode,
+      scenarioId: scenario.id,
+      scenarioTitle: scenario.title,
+      scenarioMode: scenario.mode || "customer-led",
+      startedAt: state.startedAt
+    });
+  }
   if (scenario.mode === "staff-led-scripted") {
     addMessage("system", scenario.startInstruction);
     startSpeechInputForStaffOpening();
@@ -628,6 +700,14 @@ function resetResults() {
     ? "推奨トーク"
     : "次回の改善トーク";
   els.recommendedTalk.textContent = "結果に応じて表示されます。";
+  if (els.resultSaveStatus) {
+    els.resultSaveStatus.textContent = state.started
+      ? "ロープレ実施中です。採点すると結果を保存します。"
+      : "採点後、社員コードと結果を履歴へ保存します。";
+    els.resultSaveStatus.className = state.started
+      ? "result-save-status is-pending"
+      : "result-save-status";
+  }
 }
 
 function nextQuestionVariant(key, variants) {
@@ -1623,6 +1703,31 @@ function finishRoleplay(options = {}) {
   const result = scoreRoleplay();
   renderResults(result);
   renderProgress();
+  if (!state.resultSaved && isValidEmployeeCode(state.employeeCode)) {
+    state.resultSaved = true;
+    const completedAt = new Date().toISOString();
+    const startedAtMs = state.startedAt ? Date.parse(state.startedAt) : Date.now();
+    queueHistoryRecord("saveResult", {
+      employeeCode: state.employeeCode,
+      scenarioId: scenario.id,
+      scenarioTitle: scenario.title,
+      scenarioMode: scenario.mode || "customer-led",
+      score: result.score,
+      startedAt: state.startedAt || completedAt,
+      completedAt,
+      durationSeconds: Math.max(0, Math.round((Date.now() - startedAtMs) / 1000)),
+      good: result.good,
+      improve: result.improve,
+      judgements: result.judgements,
+      recommendedTalkTitle: result.recommendedTalkTitle || "推奨トーク",
+      recommendedTalk: result.recommendedTalk || "",
+      transcript: state.transcript.slice(0, 100).map((message) => ({
+        role: message.role,
+        text: String(message.text || "").slice(0, 1000)
+      }))
+    });
+  }
+  if (els.employeeCode) els.employeeCode.disabled = false;
 }
 
 function scoreRoleplay() {
@@ -1953,6 +2058,11 @@ els.startButton.addEventListener("click", startRoleplay);
 els.resetButton.addEventListener("click", startRoleplay);
 els.finishButton.addEventListener("click", finishRoleplay);
 els.printButton.addEventListener("click", () => window.print());
+els.employeeCode?.addEventListener("input", () => {
+  const normalized = normalizeEmployeeCode(els.employeeCode.value).slice(0, 5);
+  els.employeeCode.value = normalized;
+  els.employeeCode.setCustomValidity("");
+});
 els.progressEnabled?.addEventListener("change", () => {
   localStorage.setItem("roleplayProgressVisible", String(els.progressEnabled.checked));
   renderProgress();
@@ -2005,6 +2115,12 @@ const savedVoice = localStorage.getItem("roleplayVoice");
 if (savedVoice && audioDb.voices?.[savedVoice] && els.voiceSelect) {
   els.voiceSelect.value = savedVoice;
 }
+window.addEventListener?.("roleplay-history-status", (event) => {
+  if (!els.resultSaveStatus) return;
+  const detail = event.detail || {};
+  els.resultSaveStatus.textContent = detail.message || "";
+  els.resultSaveStatus.className = `result-save-status ${detail.status ? `is-${detail.status}` : ""}`.trim();
+});
 const savedProgressVisibility = localStorage.getItem("roleplayProgressVisible");
 if (els.progressEnabled) {
   els.progressEnabled.checked = savedProgressVisibility !== "false";

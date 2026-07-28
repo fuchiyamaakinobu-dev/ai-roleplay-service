@@ -56,6 +56,13 @@
           <span><strong>お客様音声を管理</strong><small>自然な音声の作り方・追加方法</small></span>
         </a>
 
+        <label class="employee-code-field" for="employeeCode">
+          <span>社員コード（5桁）</span>
+          <input id="employeeCode" type="text" inputmode="numeric" autocomplete="off"
+            pattern="[0-9]{5}" maxlength="5" placeholder="例：12345" aria-describedby="employeeCodeNote" required>
+          <small id="employeeCodeNote">採点履歴の集計に使用します。5桁の数字を入力してください。</small>
+        </label>
+
         <button class="primary-action" id="startButton" type="button">ロープレ開始</button>
       </aside>
 
@@ -106,6 +113,8 @@
           <span id="scoreBadge">未採点</span>
         </div>
 
+        <p class="result-save-status" id="resultSaveStatus">採点後、社員コードと結果を履歴へ保存します。</p>
+
         <button class="print-button" id="printButton" type="button">会話内容・評価を印刷</button>
         <p class="print-note">会話の全文と採点結果を、A4・白黒・1枚にまとめて印刷します。</p>
 
@@ -144,11 +153,14 @@
       音声：<a id="voiceCredit" href="https://voicevox.hiroshiba.jp/product/shikoku_metan/" target="_blank" rel="noopener noreferrer">VOICEVOX:四国めたん</a>
       <span aria-hidden="true">｜</span>
       <a href="./admin.html">管理画面</a>
+      <span aria-hidden="true">｜</span>
+      <a href="./history.html">実施履歴</a>
     </footer>
   </main>
 
   <script src="./audio-db.js"></script>
   <script src="./scenario.js"></script>
+  <script type="module" src="./results-store.js"></script>
   <script src="./cloud-scenario.js"></script>
 <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a19f8ef7f9fce3de',t:'MTc4Mzg1NDE3NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>

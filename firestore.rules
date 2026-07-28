@@ -1,0 +1,77 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'fuchiyama.akinobu@gmail.com';
+    }
+
+    function hasValidCommonFields() {
+      return request.resource.data.employeeCode is string
+        && request.resource.data.employeeCode.matches('^[0-9]{5}$')
+        && request.resource.data.scenarioId is string
+        && request.resource.data.scenarioId.size() <= 100
+        && request.resource.data.scenarioTitle is string
+        && request.resource.data.scenarioTitle.size() <= 200
+        && request.resource.data.scenarioMode is string
+        && request.resource.data.scenarioMode.size() <= 50
+        && request.resource.data.startedAt is string
+        && request.resource.data.startedAt.size() <= 40
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.version == 1;
+    }
+
+    match /roleplay/{documentId} {
+      allow read: if documentId == 'public' || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /roleplayActivity/{documentId} {
+      allow create: if hasValidCommonFields()
+        && request.resource.data.keys().hasOnly([
+          'employeeCode', 'scenarioId', 'scenarioTitle', 'scenarioMode',
+          'startedAt', 'createdAt', 'version', 'eventType'
+        ])
+        && request.resource.data.eventType == 'start';
+      allow read, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    match /roleplayResults/{documentId} {
+      allow create: if hasValidCommonFields()
+        && request.resource.data.keys().hasOnly([
+          'employeeCode', 'scenarioId', 'scenarioTitle', 'scenarioMode',
+          'startedAt', 'createdAt', 'version', 'completedAt', 'durationSeconds',
+          'score', 'good', 'improve', 'judgements', 'recommendedTalkTitle',
+          'recommendedTalk', 'transcript'
+        ])
+        && request.resource.data.completedAt is string
+        && request.resource.data.completedAt.size() <= 40
+        && request.resource.data.durationSeconds is int
+        && request.resource.data.durationSeconds >= 0
+        && request.resource.data.durationSeconds <= 86400
+        && request.resource.data.score is int
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= 100
+        && request.resource.data.good is list
+        && request.resource.data.good.size() <= 20
+        && request.resource.data.improve is list
+        && request.resource.data.improve.size() <= 20
+        && request.resource.data.judgements is list
+        && request.resource.data.judgements.size() <= 30
+        && request.resource.data.recommendedTalkTitle is string
+        && request.resource.data.recommendedTalkTitle.size() <= 100
+        && request.resource.data.recommendedTalk is string
+        && request.resource.data.recommendedTalk.size() <= 3000
+        && request.resource.data.transcript is list
+        && request.resource.data.transcript.size() <= 100;
+      allow read, delete: if isAdmin();
+      allow update: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

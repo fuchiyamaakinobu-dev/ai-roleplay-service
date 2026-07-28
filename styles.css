@@ -228,6 +228,45 @@ h1 {
   accent-color: var(--blue);
 }
 
+.employee-code-field {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.employee-code-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--navy);
+  background: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.employee-code-field input:focus {
+  border-color: var(--blue);
+  outline: 3px solid rgba(16, 95, 194, 0.15);
+}
+
+.employee-code-field input:disabled {
+  color: #526176;
+  background: #eef1f5;
+}
+
+.employee-code-field small {
+  color: #68768a;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .progress-toggle {
   display: grid;
   grid-template-columns: 1fr auto auto;
@@ -376,6 +415,33 @@ h1 {
 .workbench {
   display: grid;
   gap: 12px;
+}
+
+.result-save-status {
+  margin: 0 0 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: #526176;
+  background: #f2f5f9;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.result-save-status.is-pending,
+.result-save-status.is-saving {
+  color: #725000;
+  background: #fff7da;
+}
+
+.result-save-status.is-saved {
+  color: #08784a;
+  background: #edf9f3;
+}
+
+.result-save-status.is-error {
+  color: #a33a00;
+  background: #fff0e8;
 }
 
 .progress-panel {
@@ -831,6 +897,7 @@ textarea:focus {
 
   .status-pill,
   .scenario-panel,
+  .result-save-status,
   .progress-panel,
   .chat-actions,
   .input-row,

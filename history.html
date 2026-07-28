@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ロープレ実施履歴</title>
+  <link rel="stylesheet" href="./admin.css">
+</head>
+<body>
+  <header class="admin-header">
+    <div>
+      <p>AI接客ロープレ</p>
+      <h1>実施履歴・点数一覧</h1>
+    </div>
+    <nav class="admin-nav">
+      <a href="./admin.html">シナリオ管理</a>
+      <a href="./index.html">ロープレ画面</a>
+    </nav>
+  </header>
+
+  <main class="admin-shell">
+    <section class="login-card" id="loginCard">
+      <h2>管理者ログイン</h2>
+      <p>実施履歴は登録済みの管理者だけが閲覧できます。</p>
+      <button class="primary" id="loginButton" type="button">Googleでログイン</button>
+      <p class="status" id="loginStatus"></p>
+    </section>
+
+    <section class="history-shell" id="historyShell" hidden>
+      <div class="history-toolbar">
+        <div class="user-card history-user">
+          <strong id="userName"></strong>
+          <small id="userEmail"></small>
+          <button class="link-button" id="logoutButton" type="button">ログアウト</button>
+        </div>
+        <div class="history-actions">
+          <button id="reloadButton" type="button">再読込</button>
+          <button class="primary" id="csvButton" type="button">CSV出力</button>
+        </div>
+      </div>
+
+      <div class="history-filters" aria-label="履歴の絞り込み">
+        <label>
+          <span>社員コード</span>
+          <input id="employeeFilter" type="text" inputmode="numeric" maxlength="5" placeholder="5桁・空欄は全員">
+        </label>
+        <label>
+          <span>シナリオ</span>
+          <select id="scenarioFilter">
+            <option value="">すべて</option>
+          </select>
+        </label>
+        <p id="historyStatus">履歴を読み込んでいます…</p>
+      </div>
+
+      <div class="history-summary">
+        <article><span>採点件数</span><strong id="resultCount">--</strong></article>
+        <article><span>平均点</span><strong id="averageScore">--</strong></article>
+        <article><span>開始回数</span><strong id="startCount">--</strong></article>
+        <article><span>表示範囲</span><strong id="displayCount">--</strong></article>
+      </div>
+
+      <section class="history-card">
+        <h2>採点結果</h2>
+        <div class="history-table-wrap">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>実施日時</th>
+                <th>社員コード</th>
+                <th>シナリオ</th>
+                <th>点数</th>
+                <th>時間</th>
+                <th>詳細</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="./history.js"></script>
+</body>
+</html>
