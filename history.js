@@ -126,7 +126,7 @@ function render() {
   filteredResults.forEach((item) => {
     const row = document.createElement("tr");
     addText(row, "td", formatDate(item));
-    addText(row, "td", item.employeeCode || "-----", "employee-code-cell");
+    addText(row, "td", item.employeeCode || "------", "employee-code-cell");
     addText(row, "td", item.scenarioTitle || item.scenarioId || "--");
     addText(row, "td", `${Number(item.score) || 0}点`, "score-cell");
     addText(row, "td", formatDuration(item.durationSeconds));
@@ -246,7 +246,7 @@ els.logoutButton.addEventListener("click", () => signOut(auth));
 els.reloadButton.addEventListener("click", loadHistory);
 els.csvButton.addEventListener("click", exportCsv);
 els.employeeFilter.addEventListener("input", () => {
-  els.employeeFilter.value = els.employeeFilter.value.replace(/\D/g, "").slice(0, 5);
+  els.employeeFilter.value = els.employeeFilter.value.replace(/\D/g, "").slice(0, 6);
   render();
 });
 els.scenarioFilter.addEventListener("change", render);

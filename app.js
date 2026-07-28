@@ -86,7 +86,7 @@ function normalizeEmployeeCode(value) {
 }
 
 function isValidEmployeeCode(value) {
-  return /^\d{5}$/.test(normalizeEmployeeCode(value));
+  return /^\d{6}$/.test(normalizeEmployeeCode(value));
 }
 
 function queueHistoryRecord(method, payload) {
@@ -629,11 +629,11 @@ function startRoleplay() {
     : "";
   if (els.employeeCode) els.employeeCode.value = employeeCode;
   if (hasEmployeeCodeField && !isValidEmployeeCode(employeeCode)) {
-    els.employeeCode?.setCustomValidity("社員コードは5桁の数字で入力してください。");
+    els.employeeCode?.setCustomValidity("社員コードは6桁の数字で入力してください。");
     els.employeeCode?.reportValidity();
     els.employeeCode?.focus();
     if (els.resultSaveStatus) {
-      els.resultSaveStatus.textContent = "ロープレ開始前に5桁の社員コードを入力してください。";
+      els.resultSaveStatus.textContent = "ロープレ開始前に6桁の社員コードを入力してください。";
       els.resultSaveStatus.className = "result-save-status is-error";
     }
     return;
@@ -2059,7 +2059,7 @@ els.resetButton.addEventListener("click", startRoleplay);
 els.finishButton.addEventListener("click", finishRoleplay);
 els.printButton.addEventListener("click", () => window.print());
 els.employeeCode?.addEventListener("input", () => {
-  const normalized = normalizeEmployeeCode(els.employeeCode.value).slice(0, 5);
+  const normalized = normalizeEmployeeCode(els.employeeCode.value).slice(0, 6);
   els.employeeCode.value = normalized;
   els.employeeCode.setCustomValidity("");
 });

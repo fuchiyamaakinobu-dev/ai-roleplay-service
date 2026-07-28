@@ -30,7 +30,7 @@ function cleanText(value, maximum = 1000) {
 
 function cleanBase(payload) {
   return {
-    employeeCode: cleanText(payload.employeeCode, 5),
+    employeeCode: cleanText(payload.employeeCode, 6),
     scenarioId: cleanText(payload.scenarioId, 100),
     scenarioTitle: cleanText(payload.scenarioTitle, 200),
     scenarioMode: cleanText(payload.scenarioMode, 50),

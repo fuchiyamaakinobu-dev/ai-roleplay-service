@@ -9,7 +9,7 @@ service cloud.firestore {
 
     function hasValidCommonFields() {
       return request.resource.data.employeeCode is string
-        && request.resource.data.employeeCode.matches('^[0-9]{5}$')
+        && request.resource.data.employeeCode.matches('^[0-9]{6}$')
         && request.resource.data.scenarioId is string
         && request.resource.data.scenarioId.size() <= 100
         && request.resource.data.scenarioTitle is string

@@ -57,10 +57,10 @@
         </a>
 
         <label class="employee-code-field" for="employeeCode">
-          <span>社員コード（5桁）</span>
+          <span>社員コード（6桁）</span>
           <input id="employeeCode" type="text" inputmode="numeric" autocomplete="off"
-            pattern="[0-9]{5}" maxlength="5" placeholder="例：12345" aria-describedby="employeeCodeNote" required>
-          <small id="employeeCodeNote">採点履歴の集計に使用します。5桁の数字を入力してください。</small>
+            pattern="[0-9]{6}" maxlength="6" placeholder="例：123456" aria-describedby="employeeCodeNote" required>
+          <small id="employeeCodeNote">採点履歴の集計に使用します。6桁の数字を入力してください。</small>
         </label>
 
         <button class="primary-action" id="startButton" type="button">ロープレ開始</button>
