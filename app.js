@@ -385,11 +385,11 @@ function updateVoiceSelection() {
   const voice = audioDb.voices?.[voiceKey];
   if (!voice) return;
   localStorage.setItem("roleplayVoice", voiceKey);
-  const usesVoicevox = scenario.id === "vehicle-inspection-phone-followup";
-  if (els.voiceSelect) els.voiceSelect.disabled = !usesVoicevox;
+  const usesInspectionVoice = scenario.id === "vehicle-inspection-phone-followup";
+  if (els.voiceSelect) els.voiceSelect.disabled = !usesInspectionVoice;
   if (els.voiceCredit) {
-    els.voiceCredit.textContent = usesVoicevox ? voice.credit : "従来音声";
-    if (usesVoicevox) els.voiceCredit.href = voice.creditUrl;
+    els.voiceCredit.textContent = usesInspectionVoice ? voice.credit : "従来音声";
+    if (usesInspectionVoice) els.voiceCredit.href = voice.creditUrl;
     else els.voiceCredit.removeAttribute("href");
   }
 }
@@ -1411,7 +1411,7 @@ function scriptedRetryForMissingDetails(text, step) {
     const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
     if (hasDuration && !hasWaiting) {
       return {
-        text: "店内で待つことはできますか？",
+        text: "お店で待つことはできますか？",
         audioId: "inspection_duration_wait_missing_retry",
         missingDetail: "waiting"
       };
@@ -1424,7 +1424,7 @@ function scriptedRetryForMissingDetails(text, step) {
     const hasDestination = ["どちら", "携帯", "電話番号"].some((word) => normalized.includes(word));
     if (hasReminder && !hasDestination) {
       return {
-        text: "連絡先は、この携帯でいいですか？",
+        text: "連絡は、この携帯に来ますか？",
         audioId: "inspection_reminder_destination_missing_retry",
         missingDetail: "reminderDestination"
       };

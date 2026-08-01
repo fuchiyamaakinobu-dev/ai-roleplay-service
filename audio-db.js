@@ -1,20 +1,12 @@
 window.ROLEPLAY_AUDIO_DB = {
-  version: "2026-07-25.2",
-  defaultVoice: "shikoku_metan_tsuntsun",
+  version: "2026-08-01.1",
+  defaultVoice: "makoto_customer_support",
   voices: {
-    shikoku_metan_tsuntsun: {
-      label: "四国めたん（ツンツン）",
-      basePath: "audio/",
-      credit: "VOICEVOX:四国めたん",
-      creditUrl: "https://voicevox.hiroshiba.jp/product/shikoku_metan/",
-      speakerId: 6
-    },
-    kenzaki_mesuo: {
-      label: "剣崎雌雄（ノーマル）",
-      basePath: "audio-kenzaki/",
-      credit: "VOICEVOX:剣崎雌雄",
-      creditUrl: "https://voicevox.hiroshiba.jp/product/kenzaki_mesuo/",
-      speakerId: 21
+    makoto_customer_support: {
+      label: "まこと（カスタマーサポート）",
+      basePath: "audio-ondoku/",
+      credit: "音読さん：まこと",
+      creditUrl: "https://ondoku3.com/ja/"
     }
   },
   basePath: "audio/",
@@ -375,7 +367,7 @@ const vehicleInspectionAudioLines = [
   ["inspection_explained_available_period_retry", "入庫可能日・聞き返し", "いつから車検を受けられるのですか？"],
   ["inspection_explained_duration_and_wait_customer", "作業時間・お客様回答", "代車は貸してもらえますか？"],
   ["inspection_explained_duration_and_wait_retry", "作業時間・聞き返し", "どれくらい時間がかかるのですか？"],
-  ["inspection_duration_wait_missing_retry", "店内待ち案内不足・聞き返し", "店内で待つことはできますか？"],
+  ["inspection_duration_wait_missing_retry", "店内待ち案内不足・聞き返し", "お店で待つことはできますか？"],
   ["inspection_explained_loaner_customer", "代車案内・お客様回答", "予約しようかな。"],
   ["inspection_explained_loaner_retry", "代車案内・聞き返し", "代車を用意してもらえますか？"],
   ["inspection_confirmed_booking_time_customer", "予約時間確認・お客様回答", "大丈夫ですよ。"],
@@ -391,10 +383,10 @@ const vehicleInspectionAudioLines = [
   ["inspection_explained_lock_and_arrival_customer", "ロックナット案内・お客様回答", "分かりました。"],
   ["inspection_explained_lock_and_arrival_retry", "ロックナット案内・聞き返し", "ほかに持って行く物や、到着時間の注意はありますか？"],
   ["inspection_confirmed_reminder_contact_customer", "事前連絡確認・お客様回答", "この携帯にお願いします。"],
-  ["inspection_confirmed_reminder_contact_retry", "事前連絡確認・聞き返し", "事前の確認連絡はありますか？"],
-  ["inspection_reminder_destination_missing_retry", "事前連絡先不足・聞き返し", "連絡先は、この携帯でいいですか？"],
+  ["inspection_confirmed_reminder_contact_retry", "事前連絡確認・聞き返し", "事前に確認の連絡はありますか？"],
+  ["inspection_reminder_destination_missing_retry", "事前連絡先不足・聞き返し", "連絡は、この携帯に来ますか？"],
   ["inspection_recapped_appointment_customer", "予約復唱・お客様回答", "お願いします。"],
-  ["inspection_recapped_appointment_retry", "予約復唱・聞き返し", "最後に予約内容をもう一度お願いします。"],
+  ["inspection_recapped_appointment_retry", "予約復唱・聞き返し", "ん！？、何日の予定でしたっけ？"],
   ["inspection_closed_politely_customer", "終話・お客様回答", "ありがとうございました。"],
   ["inspection_closed_politely_retry", "終話・聞き返し", "はい。"],
   ["inspection_missing_appointment_angry", "入庫日時未確定・少し怒り気味", "いつ行けばいいんですか？"]
