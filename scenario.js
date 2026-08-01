@@ -313,7 +313,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       requiredGroups: [["3日前", "三日前"], ["連絡"], ["どちら", "携帯", "電話番号"]],
       optionalAfterAppointment: true,
       customerResponse: "この携帯にお願いします。",
-      retryResponse: "事前の確認連絡はありますか？"
+      retryResponse: "事前に確認の連絡はありますか？"
     },
     {
       state: "FINAL_CONFIRMATION",
@@ -322,7 +322,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       requiredGroups: [["佐藤"], ["月"], ["日"], ["時"], ["お待ち", "予約", "よろしく"]],
       optionalAfterAppointment: true,
       customerResponse: "お願いします。",
-      retryResponse: "最後に予約内容をもう一度お願いします。"
+      retryResponse: "ん！？、何日の予定でしたっけ？"
     },
     {
       state: "FINAL_CONFIRMATION",
