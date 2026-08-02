@@ -160,7 +160,10 @@ window.VEHICLE_INSPECTION_SCENARIO = {
   expiryDate: "9月30日",
   availableFrom: "8月1日",
   appointmentDate: "8月20日10時",
-  startInstruction: "電話がつながりました。顧客情報は『佐藤様／ヤリス／車検満了日9月30日／8月1日以降作業可能』です。スタッフから『佐藤様でしょうか』と本人確認を始めてください。",
+  ringbackAudioId: "inspection_call_ringback",
+  openingCustomerMessage: "はい、もしもし。",
+  openingCustomerAudioId: "inspection_phone_greeting_customer",
+  startInstruction: "電話をかけています。呼び出し音の後にお客様が『はい、もしもし』と応答します。顧客情報は『佐藤様／ヤリス／車検満了日9月30日／8月1日以降作業可能』です。応答後に『佐藤様でしょうか』と本人確認を始めてください。",
   progress: [
     { state: "PHONE_OPENING", label: "本人確認・名乗り" },
     { state: "INSPECTION_GUIDANCE", label: "車検のご案内" },
