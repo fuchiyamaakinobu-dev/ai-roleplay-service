@@ -236,7 +236,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       expected: "車検満了日を案内する",
       requiredGroups: [["9月30日"], ["満了", "車検"]],
       customerResponse: "どれくらい時間がかかるのですか？",
-      retryResponse: "車検の満了日はいつですか？"
+      retryResponse: "車検はいつまでですか？"
     },
     {
       state: "SERVICE_EXPLANATION",

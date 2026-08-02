@@ -21,13 +21,15 @@
 - 既存QA: 9件すべて合格
 - `git diff --check`: 合格
 
-## 音声準備待ち
+## 追加済み音声
 
 - `inspection_explained_available_period_retry.mp3`
-- 発話文: 「車検の満了日はいつですか？」
-- 新しい音声が届くまでは登録状態を`pending`とし、古い内容のMP3を再生しない
+- 発話文: 「車検はいつまでですか？」
+- `inspection_expiry_deadline_retry.mp3`
+- 発話文: 「いつまでに受けなきゃダメですか？」
+- 音読さんの「まこと（カスタマーサポート）」で作成した提供音声を登録し、`pending`を解除
 
-## 追加済み音声
+## 既存の追加済み音声
 
 - `inspection_available_from_optional_question.mp3`
 - 発話文: 「いつから車検を受けられるんですか？」

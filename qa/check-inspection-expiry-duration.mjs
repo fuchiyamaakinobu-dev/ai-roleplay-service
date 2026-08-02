@@ -62,6 +62,41 @@ assert.match(
   /inspection_available_from_optional_question",\s*"入庫可能日・任意質問",\s*"いつから車検を受けられるんですか？"/,
   "任意質問の表示文と音声登録文が一致していません"
 );
+assert.match(
+  scenarioSource,
+  /retryResponse:\s*"車検はいつまでですか？"/,
+  "満了日不足時の初回質問が自然な表現になっていません"
+);
+assert.match(
+  appSource,
+  /alternatives:\s*\[[\s\S]*?車検はいつまでですか？[\s\S]*?いつまでに受けなきゃダメですか？/,
+  "満了日不足時の質問を自然な別表現へ切り替えられません"
+);
+assert.doesNotMatch(
+  scenarioSource + audioDbSource,
+  /車検の満了日はいつですか？/,
+  "お客様発話に社内用語の『満了日』が残っています"
+);
+assert.match(
+  audioDbSource,
+  /inspection_expiry_deadline_retry",\s*"車検期限・聞き返し（言い換え）",\s*"いつまでに受けなきゃダメですか？"\]/,
+  "言い換え質問の表示文と音声登録文が一致していません"
+);
+assert.doesNotMatch(
+  audioDbSource,
+  /inspection_(?:explained_available_period_retry|expiry_deadline_retry)"[^\]]*"pending"/,
+  "提供済みの車検期限音声が準備待ちのままです"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_explained_available_period_retry.mp3", import.meta.url)),
+  true,
+  "『車検はいつまでですか？』の音声ファイルがありません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_expiry_deadline_retry.mp3", import.meta.url)),
+  true,
+  "『いつまでに受けなきゃダメですか？』の音声ファイルがありません"
+);
 
 const questionStart = appSource.indexOf("function isScriptedQuestion");
 const specificEnd = appSource.indexOf("function hasCourtesyExpression", questionStart);
