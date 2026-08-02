@@ -444,7 +444,7 @@ h1 {
   background: #fff0e8;
 }
 
-.progress-panel {
+.sticky-context {
   position: sticky;
   top: 8px;
   z-index: 20;
@@ -458,8 +458,38 @@ h1 {
   box-shadow: 0 5px 14px rgba(16, 42, 86, 0.12);
 }
 
+.sticky-context[hidden],
+.customer-info-panel[hidden],
 .progress-panel[hidden] {
   display: none;
+}
+
+.customer-info-panel {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid rgba(8, 120, 74, 0.35);
+  border-radius: 8px;
+  color: #074b31;
+  background: #f0fbf5;
+}
+
+.customer-info-panel strong {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.customer-info-panel p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.progress-panel {
+  display: grid;
+  gap: 7px;
 }
 
 .progress-strip {
@@ -837,6 +867,12 @@ textarea:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .customer-info-panel {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
   .input-row {
     grid-template-columns: 44px 1fr;
   }
@@ -907,6 +943,7 @@ textarea:focus {
   .status-pill,
   .scenario-panel,
   .result-save-status,
+  .sticky-context,
   .progress-panel,
   .chat-actions,
   .input-row,

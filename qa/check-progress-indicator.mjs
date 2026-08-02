@@ -12,14 +12,26 @@ assert.notEqual(start, -1, "進行チェックの実績集約関数が見つか�
 assert.notEqual(end, -1, "進行チェックの状態判定関数を読み込めません");
 assert.match(html, /id="progressEnabled"/);
 assert.match(html, /id="progressPanel"/);
+assert.match(html, /id="stickyContext"/);
+assert.match(html, /id="customerInfoPanel"[\s\S]*?id="customerInfoText"/);
 assert.match(styles, /\.progress-item\.is-warning/);
 assert.match(styles, /\.progress-item\.is-na/);
 assert.match(
   styles,
-  /\.progress-panel\s*\{[^}]*position:\s*sticky;[^}]*top:\s*8px;/s,
-  "進行チェックが画面上部へ固定されていません"
+  /\.sticky-context\s*\{[^}]*position:\s*sticky;[^}]*top:\s*8px;/s,
+  "お客様情報と進行チェックの領域が画面上部へ固定されていません"
 );
 assert.match(source, /roleplayProgressVisible/);
+assert.match(
+  source,
+  /function renderCustomerInfo\(\)[\s\S]*?vehicle-inspection-phone-followup[\s\S]*?車検満了日\$\{scenario\.expiryDate\}[\s\S]*?\$\{scenario\.availableFrom\}以降作業可能/,
+  "車検誘致のお客様情報をシナリオデータから作成できません"
+);
+assert.match(
+  source,
+  /els\.stickyContext\.hidden = !customerVisible && !visible/,
+  "進行チェックOFF時に車検のお客様情報まで非表示になります"
+);
 
 const state = {
   started: true,

@@ -55,6 +55,9 @@ const els = {
   audioEnabled: document.querySelector("#audioEnabled"),
   progressEnabled: document.querySelector("#progressEnabled"),
   progressToggleState: document.querySelector("#progressToggleState"),
+  stickyContext: document.querySelector("#stickyContext"),
+  customerInfoPanel: document.querySelector("#customerInfoPanel"),
+  customerInfoText: document.querySelector("#customerInfoText"),
   progressPanel: document.querySelector("#progressPanel"),
   employeeCode: document.querySelector("#employeeCode"),
   voiceSelect: document.querySelector("#voiceSelect"),
@@ -340,8 +343,25 @@ function scriptedProgressStatus(item) {
   return "";
 }
 
+function renderCustomerInfo() {
+  const visible = scenario.id === "vehicle-inspection-phone-followup";
+  if (els.customerInfoPanel) els.customerInfoPanel.hidden = !visible;
+  if (!visible || !els.customerInfoText) return visible;
+
+  const details = [
+    scenario.customerName,
+    scenario.vehicleName,
+    scenario.expiryDate ? `車検満了日${scenario.expiryDate}` : "",
+    scenario.availableFrom ? `${scenario.availableFrom}以降作業可能` : ""
+  ].filter(Boolean);
+  els.customerInfoText.textContent = details.join("／");
+  return visible;
+}
+
 function renderProgress() {
   const visible = els.progressEnabled?.checked !== false;
+  const customerVisible = renderCustomerInfo();
+  if (els.stickyContext) els.stickyContext.hidden = !customerVisible && !visible;
   if (els.progressPanel) els.progressPanel.hidden = !visible;
   if (els.stateLabel) els.stateLabel.hidden = !visible;
   if (els.progressToggleState) els.progressToggleState.textContent = visible ? "ON" : "OFF";
