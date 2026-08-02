@@ -1337,6 +1337,14 @@ function hasBookingContinuationConfirmation(text) {
 
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   if (matchedGroups.every((matches) => matches.length > 0)) return true;
+
+  // Firestoreの公開シナリオに旧キーワードが残っていても、
+  // 確定済みの作業時間（60・75・90分）と店内待ちの判定を維持する。
+  if (step.key === "explained_duration_and_wait") {
+    const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
+    return hasSupportedInspectionDuration(normalized) && hasWaiting;
+  }
+
   if (step.key !== "explained_inspection_notice") return false;
 
   const vehicleName = normalizeScriptedText(scenario.vehicleName || "");

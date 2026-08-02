@@ -32,6 +32,36 @@ for (const phrase of ["45分です", "2時間です", "1時間45分です"]) {
   assert.equal(context.hasSupportedInspectionDuration(phrase), false, `${phrase}を有効時間として誤認識しています`);
 }
 
+const publishedLegacyDurationStep = {
+  key: "explained_duration_and_wait",
+  requiredGroups: [["1時間", "一時間", "60分"], ["待", "店内"]]
+};
+function requiredGroupsMatch(text, step) {
+  const normalized = context.normalizeScriptedText(text);
+  const matchedGroups = step.requiredGroups.map((group) =>
+    group.filter((word) => normalized.includes(word))
+  );
+  return context.scriptedRequiredGroupsMatch(normalized, step, matchedGroups);
+}
+
+const durationTalk = "作業時間は基本作業ですと90分程度となります。";
+const waitingTalk = "お店でお待ちいただくこともできます。";
+assert.equal(
+  requiredGroupsMatch(durationTalk, publishedLegacyDurationStep),
+  false,
+  "90分だけで店内待ちまで達成扱いにしています"
+);
+assert.equal(
+  requiredGroupsMatch(waitingTalk, publishedLegacyDurationStep),
+  false,
+  "店内待ちだけで作業時間まで達成扱いにしています"
+);
+assert.equal(
+  requiredGroupsMatch(`${durationTalk} ${waitingTalk}`, publishedLegacyDurationStep),
+  true,
+  "公開データに旧キーワードが残る場合、90分と店内待ちを合算して認識できません"
+);
+
 assert.match(
   scenarioSource,
   /requiredGroups:\s*\[\["9月30日"\],\s*\["満了",\s*"車検"\]\]/,
@@ -56,6 +86,11 @@ assert.match(
   appSource,
   /if \(state\.inspectionAvailabilityFollowUpPending\)[\s\S]*?!hasSupportedInspectionDuration\(text\)[\s\S]*?どれくらい時間がかかるのですか？/,
   "任意質問への回答後に作業時間へ進めません"
+);
+assert.match(
+  appSource,
+  /step\.key === "explained_duration_and_wait"[\s\S]*?hasSupportedInspectionDuration\(normalized\) && hasWaiting/,
+  "Firestore公開データより確定済み作業時間判定を優先できません"
 );
 assert.match(
   audioDbSource,
