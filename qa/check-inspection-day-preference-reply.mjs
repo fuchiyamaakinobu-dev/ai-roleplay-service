@@ -47,13 +47,18 @@ assert.match(
 );
 assert.match(
   appSource,
-  /週末の方が都合がいいです。それと、車検はいつまでに受ければよいですか？[\s\S]*?inspection_weekend_preference_and_expiry_question/,
+  /週末のほうが都合がいいです。それと、車検はいつまでに受ければよいですか？[\s\S]*?inspection_weekend_preference_and_expiry_question/,
   "自然な週末希望の言い換え候補がありません"
 );
 assert.match(
   audioDbSource,
-  /inspection_weekend_preference_and_expiry_question",\s*"週末希望回答・車検期限確認",\s*"週末の方が都合がいいです。それと、車検はいつまでに受ければよいですか？",\s*"pending"/,
-  "週末希望の言い換え音声が準備中として登録されていません"
+  /inspection_weekend_preference_and_expiry_question",\s*"週末希望回答・車検期限確認",\s*"週末のほうが都合がいいです。それと、車検はいつまでに受ければよいですか？"\s*\]/,
+  "週末希望の言い換え音声が再生可能として登録されていません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_weekend_preference_and_expiry_question.mp3", import.meta.url)),
+  true,
+  "週末希望の言い換えMP3がありません"
 );
 assert.match(
   audioDbSource,
