@@ -47,8 +47,13 @@ assert.match(
 );
 assert.match(
   audioDbSource,
-  /inspection_day_preference_and_expiry_question",\s*"曜日希望回答・車検期限確認",\s*"土日がいいです。ちなみに、車検はいつまでですか？",\s*"pending"/,
-  "新しいお客様発話が音声準備中として登録されていません"
+  /inspection_day_preference_and_expiry_question",\s*"曜日希望回答・車検期限確認",\s*"土日がいいです。ちなみに、車検はいつまでですか？"\]/,
+  "曜日希望回答・車検期限確認の音声が再生可能として登録されていません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_day_preference_and_expiry_question.mp3", import.meta.url)),
+  true,
+  "曜日希望回答・車検期限確認のMP3がありません"
 );
 
 console.log("車検誘致・曜日希望質問への返答テスト: OK");
