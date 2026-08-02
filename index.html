@@ -66,13 +66,20 @@
       </aside>
 
       <section class="workbench">
-        <div class="progress-panel" id="progressPanel">
-          <div class="progress-strip" id="progressStrip" aria-label="進行状況"></div>
-          <div class="progress-legend" aria-label="進行チェックの色の説明">
-            <span><i class="legend-current"></i>対応中</span>
-            <span><i class="legend-done"></i>確認済み</span>
-            <span><i class="legend-warning"></i>再確認必要</span>
-            <span><i class="legend-na"></i>対象外</span>
+        <div class="sticky-context" id="stickyContext">
+          <section class="customer-info-panel" id="customerInfoPanel" aria-label="お客様情報" hidden>
+            <strong>お客様情報</strong>
+            <p id="customerInfoText"></p>
+          </section>
+
+          <div class="progress-panel" id="progressPanel">
+            <div class="progress-strip" id="progressStrip" aria-label="進行状況"></div>
+            <div class="progress-legend" aria-label="進行チェックの色の説明">
+              <span><i class="legend-current"></i>対応中</span>
+              <span><i class="legend-done"></i>確認済み</span>
+              <span><i class="legend-warning"></i>再確認必要</span>
+              <span><i class="legend-na"></i>対象外</span>
+            </div>
           </div>
         </div>
 
