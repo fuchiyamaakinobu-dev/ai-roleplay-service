@@ -1413,12 +1413,17 @@ function selectContextualCustomerResponse(analysis) {
   return null;
 }
 
+function normalizeLoanerHomophone(text) {
+  return String(text || "").replace(/台車/g, "代車");
+}
+
 function normalizeScriptedText(text) {
   return String(text || "")
     .replace(/[０-９]/g, (character) =>
       String.fromCharCode(character.charCodeAt(0) - 0xFEE0)
     )
     .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1")
+    .replace(/台車/g, "代車")
     .replace(/\s+/g, "");
 }
 
@@ -2052,7 +2057,7 @@ function handleScriptedStaffReply(text) {
 function handleReply(event) {
   event.preventDefault();
   if (!state.started || state.ended || state.customerReplyPending) return;
-  const text = els.staffInput.value.trim();
+  const text = normalizeLoanerHomophone(els.staffInput.value.trim());
   if (!text) return;
 
   stopSpeechInput();

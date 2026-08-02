@@ -6,6 +6,39 @@ const appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8")
 const scenarioSource = fs.readFileSync(new URL("../scenario.js", import.meta.url), "utf8");
 const audioDbSource = fs.readFileSync(new URL("../audio-db.js", import.meta.url), "utf8");
 
+const normalizeStart = appSource.indexOf("function normalizeLoanerHomophone");
+const normalizeEnd = appSource.indexOf("function hasSupportedInspectionDuration", normalizeStart);
+assert.notEqual(normalizeStart, -1, "車検誘致の文字正規化関数が見つかりません");
+assert.notEqual(normalizeEnd, -1, "車検誘致の文字正規化関数の終端が見つかりません");
+const normalizeContext = {};
+vm.createContext(normalizeContext);
+vm.runInContext(appSource.slice(normalizeStart, normalizeEnd), normalizeContext);
+assert.equal(
+  normalizeContext.normalizeLoanerHomophone("台車を用意します"),
+  "代車を用意します",
+  "会話表示・保存用の文字を『代車』へ補正できません"
+);
+assert.equal(
+  normalizeContext.normalizeScriptedText("台車をお早めに予約いただければご用意できます"),
+  "代車をお早めに予約いただければご用意できます",
+  "音声認識の『台車』を『代車』へ補正できません"
+);
+assert.equal(
+  normalizeContext.normalizeScriptedText("代車をお早めに予約いただければご用意できます"),
+  "代車をお早めに予約いただければご用意できます",
+  "正しい『代車』表記が変化しています"
+);
+assert.match(
+  scenarioSource,
+  /key:\s*"explained_loaner"[\s\S]*?requiredGroups:\s*\[\["代車"\],\s*\["早め",\s*"お早め"\],\s*\["予約"\],\s*\["用意",\s*"ご用意"\]\]/,
+  "『台車』『代車』だけで達成せず、既存の代車予約条件を維持してください"
+);
+assert.match(
+  appSource,
+  /const text = normalizeLoanerHomophone\(els\.staffInput\.value\.trim\(\)\);[\s\S]*?addMessage\("staff", text\)/,
+  "スタッフ発話を表示・保存する前に『台車』を『代車』へ補正してください"
+);
+
 assert.match(
   appSource,
   /retry\.missingDetail === "waiting"[\s\S]*?state\.inspectionWaitingRequested = true/,
