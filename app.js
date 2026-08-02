@@ -1532,6 +1532,29 @@ function scriptedRetryForMissingDetails(text, step) {
   };
 }
 
+function naturalScriptedRetryVariants(retry, step) {
+  const variants = retry.alternatives?.length
+    ? retry.alternatives.map((item) => ({ ...item }))
+    : [{ text: retry.text, audioId: retry.audioId }];
+
+  const additionalTexts = step.key === "closed_politely"
+    ? [
+        "すみません、もう一度お願いします。",
+        "失礼ですが、もう一度お話しいただけますか？"
+      ]
+    : [
+        `すみません、${retry.text}`,
+        `確認のため、もう一度お伺いします。${retry.text}`
+      ];
+
+  additionalTexts.forEach((text) => {
+    if (!variants.some((item) => item.text === text)) {
+      variants.push({ text, audioId: "" });
+    }
+  });
+  return variants.slice(0, 3);
+}
+
 function isPhoneGreetingOnly(text) {
   const normalized = text.replace(/[\s、。,.!?！？]/g, "");
   return /^(?:もしもし|はいもしもし|もしもしお世話になっております)$/.test(normalized);
@@ -1703,22 +1726,12 @@ function handleScriptedStaffReply(text) {
     };
     const retryQuestion = customerQuestionTurn(
       `inspection-retry:${step.key}:${retry.missingDetail || "general"}`,
-      retry.alternatives || [
-        { text: retry.text, audioId: retry.audioId },
-        {
-          text: "必要な内容がまだ確認できていません。もう少し具体的にお願いします。",
-          audioId: `inspection_${step.key}_retry_rephrased`
-        },
-        {
-          text: "確認に必要な情報を、具体的にご案内いただけますか？",
-          audioId: `inspection_${step.key}_retry_specific`
-        }
-      ]
+      naturalScriptedRetryVariants(retry, step)
     );
     addMessage("customer", retryQuestion.text, {
       audioId: retryQuestion.audioId
     });
-    els.speechNote.textContent = `不足している案内があります。現在の課題: ${step.expected}`;
+    els.speechNote.textContent = `警告：案内が不足しています。現在の確認項目: ${step.expected}`;
     renderProgress();
     return;
   }
