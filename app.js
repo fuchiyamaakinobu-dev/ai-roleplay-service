@@ -1634,10 +1634,37 @@ function combinedScriptedReply(text, step) {
   return parts.filter(Boolean).join(" ");
 }
 
+function asksInspectionDayPreference(normalized) {
+  const hasDayChoice = /(?:平日|土日|週末|曜日)/.test(normalized);
+  const asksPreference = /(?:どちら|希望|都合|よろしい|良い)/.test(normalized);
+  return hasDayChoice && asksPreference && isScriptedQuestion(normalized);
+}
+
 function scriptedRetryForMissingDetails(text, step) {
   const normalized = normalizeScriptedText(text);
 
   if (step.key === "explained_available_period") {
+    if (asksInspectionDayPreference(normalized)) {
+      return {
+        text: "土日がいいです。ちなみに、車検はいつまでですか？",
+        audioId: "inspection_day_preference_and_expiry_question",
+        missingDetail: null,
+        alternatives: [
+          {
+            text: "土日がいいです。ちなみに、車検はいつまでですか？",
+            audioId: "inspection_day_preference_and_expiry_question"
+          },
+          {
+            text: "週末を希望します。それと、車検はいつまでに受ければよいですか？",
+            audioId: ""
+          },
+          {
+            text: "土日が希望です。車検の期限も教えてください。",
+            audioId: ""
+          }
+        ]
+      };
+    }
     return {
       text: "車検はいつまでですか？",
       audioId: "inspection_explained_available_period_retry",
