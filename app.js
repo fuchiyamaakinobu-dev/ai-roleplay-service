@@ -626,6 +626,42 @@ function startSpeechInputForStaffOpening() {
   beginAutomaticSpeechInput("音声入力中です。お客様のお名前を確認する発話から始めてください。");
 }
 
+function startStaffLedOpening() {
+  const isVehicleInspection = scenario.id === "vehicle-inspection-phone-followup";
+  const ringbackAudioId = scenario.ringbackAudioId
+    || (isVehicleInspection ? "inspection_call_ringback" : "");
+  const openingCustomerMessage = scenario.openingCustomerMessage
+    || (isVehicleInspection ? "はい、もしもし。" : "");
+  const openingCustomerAudioId = scenario.openingCustomerAudioId
+    || (isVehicleInspection ? "inspection_phone_greeting_customer" : "");
+
+  if (!openingCustomerMessage) {
+    startSpeechInputForStaffOpening();
+    return;
+  }
+
+  const playGreeting = () => addMessage("customer", openingCustomerMessage, {
+    audioId: openingCustomerAudioId,
+    immediate: true
+  });
+  const ringbackSrc = audioPath(ringbackAudioId);
+  if (els.audioEnabled.checked && ringbackSrc) {
+    playAudio(ringbackSrc, "", false, playGreeting);
+  } else {
+    playGreeting();
+  }
+}
+
+function staffLedStartInstruction() {
+  if (
+    scenario.id === "vehicle-inspection-phone-followup"
+    && !scenario.ringbackAudioId
+  ) {
+    return "電話をかけています。呼び出し音の後にお客様が『はい、もしもし』と応答します。顧客情報は『佐藤様／ヤリス／車検満了日9月30日／8月1日以降作業可能』です。応答後に『佐藤様でしょうか』と本人確認を始めてください。";
+  }
+  return scenario.startInstruction;
+}
+
 function clearStaffInput() {
   els.staffInput.value = "";
   speechBaseText = "";
@@ -755,8 +791,8 @@ function startRoleplay() {
     });
   }
   if (scenario.mode === "staff-led-scripted") {
-    addMessage("system", scenario.startInstruction);
-    startSpeechInputForStaffOpening();
+    addMessage("system", staffLedStartInstruction());
+    startStaffLedOpening();
   } else {
     addMessage("customer", scenario.initialCustomerMessage, { audioId: scenario.audio.initial });
   }
