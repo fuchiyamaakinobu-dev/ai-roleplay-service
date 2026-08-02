@@ -1757,6 +1757,18 @@ function handleScriptedStaffReply(text) {
   delete state.scriptedPartialReplies[step.key];
 
   let responseStep = step;
+  const followingStep = scenario.steps[state.scriptStep + 1];
+  if (
+    !analysis.passed
+    && step.advanceOnFailure === true
+    && followingStep
+    && !scriptedStepMatches(combinedText, followingStep)
+  ) {
+    state.scriptedPartialReplies[followingStep.key] = {
+      text: combinedText,
+      missingDetail: null
+    };
+  }
   state.scriptStep += 1;
 
   // 先に名乗りが済んでから本人確認へ戻った場合は、名乗りを繰り返させない。
@@ -1769,16 +1781,16 @@ function handleScriptedStaffReply(text) {
     state.scriptStep += 1;
   }
 
-  // スタッフが本人確認・名乗りなどを一度に話した場合は、
-  // 同じ発話で実際に満たした連続ステップもまとめて判定する。
+  // スタッフが複数項目を一度に話した場合や、直前の発話を補足した場合は、
+  // 合わせて実際に満たした連続ステップもまとめて判定する。
   while (state.scriptStep < scenario.steps.length) {
     const nextStep = scenario.steps[state.scriptStep];
-    const matchesNextStep = scriptedStepMatches(text, nextStep);
+    const matchesNextStep = scriptedStepMatches(combinedText, nextStep);
     const hasCombinedCourtesy = nextStep.key === "thanked_customer"
-      && hasCourtesyExpression(text);
+      && hasCourtesyExpression(combinedText);
     if (!matchesNextStep && !hasCombinedCourtesy) break;
 
-    const nextAnalysis = analyzeScriptedStaff(text, nextStep);
+    const nextAnalysis = analyzeScriptedStaff(combinedText, nextStep);
     if (!nextAnalysis.canAdvance) break;
     responseStep = nextStep;
     state.scriptStep += 1;

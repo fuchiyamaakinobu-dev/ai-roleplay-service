@@ -32,6 +32,9 @@ const expiryStep = {
 };
 
 const combinedTalk = "お使いでいらっしゃいますヤリスでございますが、車検が9月30日までとなっておりますので、ご案内のお電話でございました。ご都合の方はいかがかと思いまして、お電話してみたんですが、いかがでしょうか？";
+const earlyTalk = "お使いでいらっしゃいますヤリスでございますが、9月30日までとなりました。ご都合の方はいかがかと思いまして、お電話をしてみました。";
+const followUpTalk = "車検のご予定はお決まりでしたでしょうか？";
+const carriedTalk = `${earlyTalk} ${followUpTalk}`;
 
 assert.equal(
   context.scriptedStepMatches(combinedTalk, noticeStep),
@@ -57,6 +60,41 @@ assert.equal(
   context.scriptedStepMatches("ヤリスの車検時期が近くなりました。", noticeStep),
   true,
   "従来の車検時期案内を認識できなくなっています"
+);
+assert.equal(
+  context.scriptedStepMatches(earlyTalk, noticeStep),
+  false,
+  "車検という説明がない発話を単独で車検案内として誤認識しています"
+);
+assert.equal(
+  context.scriptedStepMatches(followUpTalk, noticeStep),
+  false,
+  "車種と時期がない補足発話を単独で車検案内として誤認識しています"
+);
+assert.equal(
+  context.scriptedStepMatches(carriedTalk, noticeStep),
+  true,
+  "直前の車種・満了日と次の車検説明を合わせて認識できません"
+);
+assert.equal(
+  context.scriptedStepMatches(carriedTalk, availabilityStep),
+  true,
+  "引き継いだ発話の都合確認を認識できません"
+);
+assert.equal(
+  context.scriptedStepMatches(carriedTalk, expiryStep),
+  true,
+  "引き継いだ発話の満了日案内を認識できません"
+);
+assert.match(
+  source,
+  /step\.advanceOnFailure === true[\s\S]*?state\.scriptedPartialReplies\[followingStep\.key\]/,
+  "お礼を省略して進んだ発話が次の項目へ引き継がれません"
+);
+assert.match(
+  source,
+  /scriptedStepMatches\(combinedText, nextStep\)/,
+  "補足前後の発話を連続項目の判定に使用していません"
 );
 
 console.log("車検時期・具体的満了日判定テスト: OK");
