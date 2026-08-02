@@ -1428,6 +1428,13 @@ function hasSupportedInspectionDuration(text) {
     || /(?:1|一)時間(?![0-9一二三四五六七八九十]*分)/.test(normalized);
 }
 
+function hasInspectionWaitingChoiceOffer(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasWaitingContext = /(?:待|店内)/.test(normalized);
+  const offersWaitingChoice = /(?:いかが(?:でしょうか|ですか)|お待ちになりますか|待たれますか|待っていただけますか)/.test(normalized);
+  return hasWaitingContext && offersWaitingChoice;
+}
+
 function hasInspectionAvailableFromInformation(text) {
   const normalized = normalizeScriptedText(text);
   const availableFrom = normalizeScriptedText(scenario.availableFrom || "");
@@ -1908,6 +1915,7 @@ function handleScriptedStaffReply(text) {
   delete state.scriptedPartialReplies[step.key];
 
   let responseStep = step;
+  let customerResponseOverride = null;
   const followingStep = scenario.steps[state.scriptStep + 1];
   if (
     !analysis.passed
@@ -1932,17 +1940,24 @@ function handleScriptedStaffReply(text) {
     state.scriptStep += 1;
   }
 
-  // お客様が店内待ちの可否を尋ね、スタッフが可能と回答した場合は、
-  // 同じ入庫で通常は不要な代車確認を対象外にして予約手続きへ進む。
+  // スタッフが店内待ちを選択肢として積極的に提案した場合は、
+  // 代車を対象外にして予約手続きへ進む。
+  // お客様から店内待ちを確認した場合は、外出に備えた代車希望へ進める。
   const waitingBranchLoanerStep = scenario.steps[state.scriptStep];
   if (
-    state.inspectionWaitingRequested
-    && waitingBranchLoanerStep?.key === "explained_loaner"
+    waitingBranchLoanerStep?.key === "explained_loaner"
     && !scriptedStepMatches(combinedText, waitingBranchLoanerStep)
   ) {
-    markScriptedStepNotApplicable(waitingBranchLoanerStep, "お客様が店内待ちを希望");
-    responseStep = waitingBranchLoanerStep;
-    state.scriptStep += 1;
+    if (!state.inspectionWaitingRequested && hasInspectionWaitingChoiceOffer(combinedText)) {
+      markScriptedStepNotApplicable(waitingBranchLoanerStep, "スタッフが店内待ちを提案");
+      responseStep = waitingBranchLoanerStep;
+      state.scriptStep += 1;
+    } else if (state.inspectionWaitingRequested) {
+      customerResponseOverride = {
+        text: "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？",
+        audioId: "inspection_waiting_followup_loaner_request"
+      };
+    }
   }
 
   // スタッフが複数項目を一度に話した場合や、直前の発話を補足した場合は、
@@ -1970,10 +1985,12 @@ function handleScriptedStaffReply(text) {
     && !analysis.passed
     && step.advanceOnFailure === true
     && !hasCourtesyExpression(text);
-  addMessage("customer", useAdvanceRetry ? step.retryResponse : responseStep.customerResponse, {
-    audioId: useAdvanceRetry
-      ? `inspection_${step.key}_retry`
-      : `inspection_${responseStep.key}_customer`,
+  addMessage("customer", customerResponseOverride?.text
+    || (useAdvanceRetry ? step.retryResponse : responseStep.customerResponse), {
+    audioId: customerResponseOverride?.audioId
+      || (useAdvanceRetry
+        ? `inspection_${step.key}_retry`
+        : `inspection_${responseStep.key}_customer`),
     onCommitted: finished
       ? () => finishRoleplay({ keepCustomerPlayback: true })
       : null
@@ -2185,7 +2202,7 @@ function scoreScriptedRoleplay() {
       analysis.stepKey === metric.key && analysis.notApplicable !== true
     );
     const status = notApplicableKeys.has(metric.key)
-      ? "対象外（店内待ち希望）"
+      ? "対象外（店内待ち提案済み）"
       : achieved[metric.key] ? "○" : "要改善";
     return `${metric.label}: ${status}${attempts.length > 1 ? `（${attempts.length}回発話）` : ""}`;
   });
