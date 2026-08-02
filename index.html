@@ -50,6 +50,19 @@
           </select>
         </label>
 
+        <label class="reply-delay-selector">
+          <span>お客様返答までの間隔</span>
+          <select id="replyDelaySelect">
+            <option value="0">すぐに返答</option>
+            <option value="500">0.5秒</option>
+            <option value="1000" selected>1秒</option>
+            <option value="1500">1.5秒</option>
+            <option value="2000">2秒</option>
+            <option value="3000">3秒</option>
+          </select>
+          <small>スタッフの発話送信後から、AIお客様が返答を始めるまでの時間です。</small>
+        </label>
+
         <a class="audio-manager-link" href="./audio-list.html">
           <span aria-hidden="true">🔊</span>
           <span><strong>お客様音声を管理</strong><small>自然な音声の作り方・追加方法</small></span>
@@ -107,7 +120,7 @@
           <form class="input-row" id="replyForm">
             <button class="icon-button" id="micButton" type="button" aria-label="音声入力">🎙</button>
             <textarea id="staffInput" rows="2" placeholder="スタッフとして返答を入力"></textarea>
-            <button class="send-button" type="submit">送信</button>
+            <button class="send-button" id="sendButton" type="submit">送信</button>
           </form>
           <p class="speech-note" id="speechNote">AIお客様の発話後に音声入力が始まり、文が完了すると自動的に次へ進みます。話が途中の場合は「はい」と相槌を入れて続きを聞きます。</p>
         </section>
