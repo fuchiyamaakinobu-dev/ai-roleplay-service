@@ -41,6 +41,7 @@ const state = {
   transcript: [],
   analyses: [],
   scriptedPartialReplies: {},
+  inspectionExpiryEvidence: "",
   inspectionAvailabilityFollowUpPending: false,
   inspectionWaitingRequested: false,
   usedVariants: {},
@@ -234,6 +235,7 @@ function selectScenario(scenarioId) {
   state.transcript = [];
   state.analyses = [];
   state.scriptedPartialReplies = {};
+  state.inspectionExpiryEvidence = "";
   state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionWaitingRequested = false;
   state.usedVariants = {};
@@ -782,6 +784,7 @@ function startRoleplay() {
   state.transcript = [];
   state.analyses = [];
   state.scriptedPartialReplies = {};
+  state.inspectionExpiryEvidence = "";
   state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionWaitingRequested = false;
   state.usedVariants = {};
@@ -1620,14 +1623,17 @@ function isAffirmativeScriptedReply(text) {
 
 function combinedScriptedReply(text, step) {
   const pending = state.scriptedPartialReplies[step.key];
-  if (!pending) return text;
+  const expiryEvidence = step.key === "explained_available_period"
+    ? state.inspectionExpiryEvidence
+    : "";
+  if (!pending && !expiryEvidence) return text;
 
-  const parts = [pending.text, text];
+  const parts = [expiryEvidence, pending?.text, text];
   if (isAffirmativeScriptedReply(text)) {
-    if (pending.missingDetail === "waiting") {
+    if (pending?.missingDetail === "waiting") {
       parts.push("店内で待つことができます");
     }
-    if (pending.missingDetail === "reminderDestination") {
+    if (pending?.missingDetail === "reminderDestination") {
       parts.push("携帯へ連絡します");
     }
   }
@@ -1638,6 +1644,12 @@ function asksInspectionDayPreference(normalized) {
   const hasDayChoice = /(?:平日|土日|週末|曜日)/.test(normalized);
   const asksPreference = /(?:どちら|希望|都合|よろしい|良い)/.test(normalized);
   return hasDayChoice && asksPreference && isScriptedQuestion(normalized);
+}
+
+function shouldAnswerDayPreferenceFromStoredExpiry(text, step) {
+  return step.key === "explained_available_period"
+    && Boolean(state.inspectionExpiryEvidence)
+    && asksInspectionDayPreference(normalizeScriptedText(text));
 }
 
 function scriptedRetryForMissingDetails(text, step) {
@@ -1799,6 +1811,11 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  const expiryStep = scenario.steps.find((item) => item.key === "explained_available_period");
+  if (expiryStep && scriptedStepMatches(text, expiryStep)) {
+    state.inspectionExpiryEvidence = text;
+  }
+
   // 車検満了日だけを案内した後の「いつから受けられるか」は任意質問。
   // 回答を省略して作業時間を案内しても、減点せず通常進行へ戻す。
   if (state.inspectionAvailabilityFollowUpPending) {
@@ -1896,6 +1913,7 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  const answeredDayPreferenceAfterExpiry = shouldAnswerDayPreferenceFromStoredExpiry(text, step);
   const combinedText = combinedScriptedReply(text, step);
   const analysis = analyzeScriptedStaff(combinedText, step);
   state.turn += 1;
@@ -1924,6 +1942,7 @@ function handleScriptedStaffReply(text) {
   const nextStep = scenario.steps[state.scriptStep + 1];
   const shouldAskAvailableFrom = step.key === "explained_available_period"
     && !hasInspectionAvailableFromInformation(combinedText)
+    && !answeredDayPreferenceAfterExpiry
     && !(nextStep && scriptedStepMatches(text, nextStep));
 
   if (shouldAskAvailableFrom) {
@@ -1942,7 +1961,12 @@ function handleScriptedStaffReply(text) {
   delete state.scriptedPartialReplies[step.key];
 
   let responseStep = step;
-  let customerResponseOverride = null;
+  let customerResponseOverride = answeredDayPreferenceAfterExpiry
+    ? {
+        text: "土日がいいです。",
+        audioId: "inspection_day_preference_answer"
+      }
+    : null;
   const followingStep = scenario.steps[state.scriptStep + 1];
   if (
     !analysis.passed

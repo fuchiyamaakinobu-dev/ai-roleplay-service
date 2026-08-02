@@ -28,6 +28,35 @@ for (const phrase of [
   );
 }
 
+const storedExpiryStart = appSource.indexOf("function shouldAnswerDayPreferenceFromStoredExpiry");
+const storedExpiryEnd = appSource.indexOf("function scriptedRetryForMissingDetails", storedExpiryStart);
+assert.notEqual(storedExpiryStart, -1, "満了日案内済みの曜日回答判定が見つかりません");
+assert.notEqual(storedExpiryEnd, -1, "満了日案内済みの曜日回答判定の終端が見つかりません");
+const storedExpiryContext = {
+  state: { inspectionExpiryEvidence: "ヤリスの車検は9月30日までです" },
+  normalizeScriptedText: (text) => String(text).replace(/\s+/g, ""),
+  asksInspectionDayPreference: preferenceContext.asksInspectionDayPreference
+};
+vm.createContext(storedExpiryContext);
+vm.runInContext(appSource.slice(storedExpiryStart, storedExpiryEnd), storedExpiryContext);
+assert.equal(
+  storedExpiryContext.shouldAnswerDayPreferenceFromStoredExpiry(
+    "平日と土日どちらがよろしいでしょうか？",
+    { key: "explained_available_period" }
+  ),
+  true,
+  "前の発話で満了日を案内済みでも、曜日だけを回答する判定になりません"
+);
+storedExpiryContext.state.inspectionExpiryEvidence = "";
+assert.equal(
+  storedExpiryContext.shouldAnswerDayPreferenceFromStoredExpiry(
+    "平日と土日どちらがよろしいでしょうか？",
+    { key: "explained_available_period" }
+  ),
+  false,
+  "満了日未案内なのに、期限を確認せず曜日だけ回答しています"
+);
+
 for (const phrase of [
   "平日と週末があります。",
   "車検はいつまでですか？",
@@ -44,6 +73,21 @@ assert.match(
   appSource,
   /asksInspectionDayPreference\(normalized\)[\s\S]*?土日がいいです。ちなみに、車検はいつまでですか？[\s\S]*?inspection_day_preference_and_expiry_question/,
   "曜日希望へ答えながら車検期限を確認する分岐がありません"
+);
+assert.match(
+  appSource,
+  /inspectionExpiryEvidence[\s\S]*?step\.key === "explained_available_period"[\s\S]*?answeredDayPreferenceAfterExpiry[\s\S]*?土日がいいです。[\s\S]*?inspection_day_preference_answer/,
+  "以前の発話で満了日を案内済みの場合に、期限を聞き直さず曜日だけ回答できません"
+);
+assert.match(
+  audioDbSource,
+  /inspection_day_preference_answer",\s*"満了日案内済み・曜日希望回答",\s*"土日がいいです。"\s*\]/,
+  "満了日案内済みの曜日回答音声が再生可能として登録されていません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_day_preference_answer.mp3", import.meta.url)),
+  true,
+  "満了日案内済みの曜日回答MP3がありません"
 );
 assert.match(
   appSource,
