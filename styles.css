@@ -445,8 +445,17 @@ h1 {
 }
 
 .progress-panel {
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+  align-self: start;
   display: grid;
   gap: 7px;
+  padding: 8px;
+  margin: -8px -8px 0;
+  border-radius: 10px;
+  background: rgba(238, 243, 250, 0.97);
+  box-shadow: 0 5px 14px rgba(16, 42, 86, 0.12);
 }
 
 .progress-panel[hidden] {

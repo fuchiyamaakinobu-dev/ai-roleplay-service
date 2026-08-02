@@ -14,6 +14,11 @@ assert.match(html, /id="progressEnabled"/);
 assert.match(html, /id="progressPanel"/);
 assert.match(styles, /\.progress-item\.is-warning/);
 assert.match(styles, /\.progress-item\.is-na/);
+assert.match(
+  styles,
+  /\.progress-panel\s*\{[^}]*position:\s*sticky;[^}]*top:\s*8px;/s,
+  "進行チェックが画面上部へ固定されていません"
+);
 assert.match(source, /roleplayProgressVisible/);
 
 const state = {
