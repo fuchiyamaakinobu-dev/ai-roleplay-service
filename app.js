@@ -336,8 +336,11 @@ function serviceProgressStatus(item, merged) {
 
 function scriptedProgressStatus(item) {
   const steps = scenario.steps.filter((step) => step.state === item.state);
-  const achieved = steps.length > 0
-    && steps.every((step) => state.analyses.some((analysis) => analysis[step.key] === true));
+  const requiredSteps = steps.filter((step) => step.advanceOnFailure !== true);
+  const achieved = requiredSteps.length > 0
+    && requiredSteps.every((step) =>
+      state.analyses.some((analysis) => analysis[step.key] === true)
+    );
   if (achieved) return "done";
   if (state.started && !state.ended && item.state === state.currentState) return "active";
   if (
