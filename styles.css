@@ -332,7 +332,8 @@ h1 {
   text-align: right;
 }
 
-.voice-selector {
+.voice-selector,
+.reply-delay-selector {
   display: grid;
   gap: 7px;
   margin: 0 0 16px;
@@ -341,7 +342,8 @@ h1 {
   font-weight: 900;
 }
 
-.voice-selector select {
+.voice-selector select,
+.reply-delay-selector select {
   width: 100%;
   min-height: 40px;
   padding: 0 10px;
@@ -352,10 +354,26 @@ h1 {
   font: inherit;
 }
 
+.reply-delay-selector small {
+  color: #617089;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .voice-selector select:disabled {
   color: #7b8492;
   background: #eef1f5;
   cursor: not-allowed;
+}
+
+.input-row[aria-busy="true"] {
+  opacity: 0.72;
+}
+
+.input-row[aria-busy="true"] textarea,
+.input-row[aria-busy="true"] button {
+  cursor: wait;
 }
 
 .audio-manager-link {

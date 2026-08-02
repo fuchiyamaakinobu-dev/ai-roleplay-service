@@ -13,6 +13,7 @@ let lastAcknowledgedText = "";
 let activeCustomerAudio = null;
 let customerPlaybackGeneration = 0;
 let speechInputStartTimer = null;
+let customerReplyTimer = null;
 
 const state = {
   started: false,
@@ -42,7 +43,8 @@ const state = {
   scriptedPartialReplies: {},
   inspectionAvailabilityFollowUpPending: false,
   usedVariants: {},
-  questionRepeats: {}
+  questionRepeats: {},
+  customerReplyPending: false
 };
 
 const els = {
@@ -62,9 +64,11 @@ const els = {
   employeeCode: document.querySelector("#employeeCode"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceCredit: document.querySelector("#voiceCredit"),
+  replyDelaySelect: document.querySelector("#replyDelaySelect"),
   replyForm: document.querySelector("#replyForm"),
   staffInput: document.querySelector("#staffInput"),
   micButton: document.querySelector("#micButton"),
+  sendButton: document.querySelector("#sendButton"),
   speechNote: document.querySelector("#speechNote"),
   scenarioNote: document.querySelector("#scenarioNote"),
   conversation: document.querySelector("#conversation"),
@@ -209,6 +213,7 @@ function selectScenario(scenarioId) {
   if (!selected || selected.id === scenario.id) return;
   stopSpeechInput();
   stopCustomerPlayback();
+  cancelPendingCustomerReply();
   scenario = selected;
   state.started = false;
   state.ended = false;
@@ -416,7 +421,29 @@ function updateVoiceSelection() {
   }
 }
 
-function addMessage(role, text, options = {}) {
+function customerReplyDelayMs() {
+  const selected = Number(els.replyDelaySelect?.value);
+  return [0, 500, 1000, 1500, 2000, 3000].includes(selected) ? selected : 1000;
+}
+
+function setCustomerReplyPending(pending) {
+  state.customerReplyPending = pending;
+  els.replyForm?.setAttribute("aria-busy", String(pending));
+  const shouldDisable = pending || state.ended;
+  if (els.staffInput) els.staffInput.disabled = shouldDisable;
+  if (els.micButton) els.micButton.disabled = shouldDisable;
+  if (els.sendButton) els.sendButton.disabled = shouldDisable;
+}
+
+function cancelPendingCustomerReply() {
+  if (customerReplyTimer) {
+    window.clearTimeout(customerReplyTimer);
+    customerReplyTimer = null;
+  }
+  setCustomerReplyPending(false);
+}
+
+function commitMessage(role, text, options = {}) {
   const message = {
     role,
     text,
@@ -437,6 +464,29 @@ function addMessage(role, text, options = {}) {
   } else if (role !== "staff" && message.audioSrc && els.audioEnabled.checked) {
     playAudio(message.audioSrc, message.text, false);
   }
+  if (typeof options.onCommitted === "function") options.onCommitted();
+}
+
+function addMessage(role, text, options = {}) {
+  const previousMessage = state.transcript[state.transcript.length - 1];
+  const delay = role === "customer"
+    && previousMessage?.role === "staff"
+    && options.immediate !== true
+      ? customerReplyDelayMs()
+      : 0;
+
+  if (delay <= 0) {
+    commitMessage(role, text, options);
+    return;
+  }
+
+  cancelPendingCustomerReply();
+  setCustomerReplyPending(true);
+  customerReplyTimer = window.setTimeout(() => {
+    customerReplyTimer = null;
+    commitMessage(role, text, options);
+    setCustomerReplyPending(false);
+  }, delay);
 }
 
 function renderConversation() {
@@ -645,6 +695,7 @@ function acknowledgeAndContinue(text) {
 function startRoleplay() {
   stopSpeechInput();
   stopCustomerPlayback();
+  cancelPendingCustomerReply();
   const hasEmployeeCodeField = typeof els.employeeCode?.setCustomValidity === "function";
   const employeeCode = hasEmployeeCodeField
     ? normalizeEmployeeCode(els.employeeCode.value)
@@ -691,6 +742,7 @@ function startRoleplay() {
   state.employeeCode = employeeCode;
   state.startedAt = new Date().toISOString();
   state.resultSaved = false;
+  setCustomerReplyPending(false);
   if (els.employeeCode) els.employeeCode.disabled = true;
   resetResults();
   if (isValidEmployeeCode(employeeCode)) {
@@ -1838,15 +1890,17 @@ function handleScriptedStaffReply(text) {
   addMessage("customer", useAdvanceRetry ? step.retryResponse : responseStep.customerResponse, {
     audioId: useAdvanceRetry
       ? `inspection_${step.key}_retry`
-      : `inspection_${responseStep.key}_customer`
+      : `inspection_${responseStep.key}_customer`,
+    onCommitted: finished
+      ? () => finishRoleplay({ keepCustomerPlayback: true })
+      : null
   });
   renderProgress();
-  if (finished) finishRoleplay({ keepCustomerPlayback: true });
 }
 
 function handleReply(event) {
   event.preventDefault();
-  if (!state.started || state.ended) return;
+  if (!state.started || state.ended || state.customerReplyPending) return;
   const text = els.staffInput.value.trim();
   if (!text) return;
 
@@ -1871,10 +1925,15 @@ function handleReply(event) {
   }
 
   const customer = nextCustomerMessage(analysis);
-  addMessage("customer", customer.text, { audioId: customer.audioId });
+  const finished = state.ended;
+  addMessage("customer", customer.text, {
+    audioId: customer.audioId,
+    onCommitted: finished
+      ? () => finishRoleplay({ keepCustomerPlayback: true })
+      : null
+  });
 
   renderProgress();
-  if (state.ended) finishRoleplay({ keepCustomerPlayback: true });
 }
 
 function finishRoleplay(options = {}) {
@@ -1882,6 +1941,7 @@ function finishRoleplay(options = {}) {
   if (!options.keepCustomerPlayback) stopCustomerPlayback();
   if (!state.started) return;
   state.ended = true;
+  cancelPendingCustomerReply();
   const result = scoreRoleplay();
   renderResults(result);
   renderProgress();
@@ -2250,6 +2310,9 @@ els.progressEnabled?.addEventListener("change", () => {
   renderProgress();
 });
 els.voiceSelect?.addEventListener("change", updateVoiceSelection);
+els.replyDelaySelect?.addEventListener("change", () => {
+  localStorage.setItem("roleplayCustomerReplyDelayMs", String(customerReplyDelayMs()));
+});
 els.replyForm.addEventListener("submit", handleReply);
 els.scenarioList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-scenario-id]");
@@ -2296,6 +2359,13 @@ els.conversation.addEventListener("click", (event) => {
 const savedVoice = localStorage.getItem("roleplayVoice");
 if (savedVoice && audioDb.voices?.[savedVoice] && els.voiceSelect) {
   els.voiceSelect.value = savedVoice;
+}
+const savedCustomerReplyDelay = localStorage.getItem("roleplayCustomerReplyDelayMs");
+if (
+  els.replyDelaySelect
+  && ["0", "500", "1000", "1500", "2000", "3000"].includes(savedCustomerReplyDelay)
+) {
+  els.replyDelaySelect.value = savedCustomerReplyDelay;
 }
 window.addEventListener?.("roleplay-history-status", (event) => {
   if (!els.resultSaveStatus) return;
