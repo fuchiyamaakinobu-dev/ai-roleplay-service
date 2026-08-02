@@ -129,9 +129,21 @@ state.analyses = [{ introduced_self: true }, { confirmed_identity: true }];
 scenario.mode = "staff-led-scripted";
 scenario.steps = [
   { state: "PHONE_OPENING", key: "confirmed_identity" },
-  { state: "PHONE_OPENING", key: "introduced_self" }
+  { state: "PHONE_OPENING", key: "introduced_self" },
+  { state: "PHONE_OPENING", key: "thanked_customer", advanceOnFailure: true }
 ];
 assert.equal(context.scriptedProgressStatus({ state: "PHONE_OPENING" }), "done");
+
+state.analyses = [
+  { confirmed_identity: true },
+  { introduced_self: true },
+  { thanked_customer: false }
+];
+assert.equal(
+  context.scriptedProgressStatus({ state: "PHONE_OPENING" }),
+  "done",
+  "お礼が未達でも、本人確認と名乗りが済めば表示は確認済みになります"
+);
 
 state.analyses = [{ confirmed_identity: true }];
 assert.equal(context.scriptedProgressStatus({ state: "PHONE_OPENING" }), "");
