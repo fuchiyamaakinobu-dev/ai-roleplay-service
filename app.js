@@ -1465,6 +1465,24 @@ function combinedScriptedReply(text, step) {
 function scriptedRetryForMissingDetails(text, step) {
   const normalized = normalizeScriptedText(text);
 
+  if (step.key === "explained_available_period") {
+    return {
+      text: "車検はいつまでですか？",
+      audioId: "inspection_explained_available_period_retry",
+      missingDetail: null,
+      alternatives: [
+        {
+          text: "車検はいつまでですか？",
+          audioId: "inspection_explained_available_period_retry"
+        },
+        {
+          text: "いつまでに受けなきゃダメですか？",
+          audioId: "inspection_expiry_deadline_retry"
+        }
+      ]
+    };
+  }
+
   if (step.key === "explained_duration_and_wait") {
     const hasDuration = hasSupportedInspectionDuration(normalized);
     const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
@@ -1668,7 +1686,7 @@ function handleScriptedStaffReply(text) {
     };
     const retryQuestion = customerQuestionTurn(
       `inspection-retry:${step.key}:${retry.missingDetail || "general"}`,
-      [
+      retry.alternatives || [
         { text: retry.text, audioId: retry.audioId },
         {
           text: "必要な内容がまだ確認できていません。もう少し具体的にお願いします。",
