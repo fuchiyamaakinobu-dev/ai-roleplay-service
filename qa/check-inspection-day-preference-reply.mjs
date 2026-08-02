@@ -81,8 +81,13 @@ assert.match(
 );
 assert.match(
   audioDbSource,
-  /inspection_day_preference_answer",\s*"満了日案内済み・曜日希望回答",\s*"土日がいいです。",\s*"pending"/,
-  "満了日案内済みの曜日回答音声が準備中として登録されていません"
+  /inspection_day_preference_answer",\s*"満了日案内済み・曜日希望回答",\s*"土日がいいです。"\s*\]/,
+  "満了日案内済みの曜日回答音声が再生可能として登録されていません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_day_preference_answer.mp3", import.meta.url)),
+  true,
+  "満了日案内済みの曜日回答MP3がありません"
 );
 assert.match(
   appSource,
