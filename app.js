@@ -1655,8 +1655,8 @@ function scriptedRetryForMissingDetails(text, step) {
             audioId: "inspection_day_preference_and_expiry_question"
           },
           {
-            text: "週末を希望します。それと、車検はいつまでに受ければよいですか？",
-            audioId: ""
+            text: "週末の方が都合がいいです。それと、車検はいつまでに受ければよいですか？",
+            audioId: "inspection_weekend_preference_and_expiry_question"
           },
           {
             text: "土日が希望です。車検の期限も教えてください。",

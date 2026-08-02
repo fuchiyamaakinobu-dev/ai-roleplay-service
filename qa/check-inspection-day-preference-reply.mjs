@@ -46,6 +46,16 @@ assert.match(
   "曜日希望へ答えながら車検期限を確認する分岐がありません"
 );
 assert.match(
+  appSource,
+  /週末の方が都合がいいです。それと、車検はいつまでに受ければよいですか？[\s\S]*?inspection_weekend_preference_and_expiry_question/,
+  "自然な週末希望の言い換え候補がありません"
+);
+assert.match(
+  audioDbSource,
+  /inspection_weekend_preference_and_expiry_question",\s*"週末希望回答・車検期限確認",\s*"週末の方が都合がいいです。それと、車検はいつまでに受ければよいですか？",\s*"pending"/,
+  "週末希望の言い換え音声が準備中として登録されていません"
+);
+assert.match(
   audioDbSource,
   /inspection_day_preference_and_expiry_question",\s*"曜日希望回答・車検期限確認",\s*"土日がいいです。ちなみに、車検はいつまでですか？"\]/,
   "曜日希望回答・車検期限確認の音声が再生可能として登録されていません"
