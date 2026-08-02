@@ -42,6 +42,7 @@ const state = {
   analyses: [],
   scriptedPartialReplies: {},
   inspectionAvailabilityFollowUpPending: false,
+  inspectionWaitingRequested: false,
   usedVariants: {},
   questionRepeats: {},
   customerReplyPending: false
@@ -234,6 +235,7 @@ function selectScenario(scenarioId) {
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.inspectionAvailabilityFollowUpPending = false;
+  state.inspectionWaitingRequested = false;
   state.usedVariants = {};
   state.questionRepeats = {};
   state.startedAt = null;
@@ -336,7 +338,12 @@ function serviceProgressStatus(item, merged) {
 
 function scriptedProgressStatus(item) {
   const steps = scenario.steps.filter((step) => step.state === item.state);
-  const requiredSteps = steps.filter((step) => step.advanceOnFailure !== true);
+  const requiredSteps = steps.filter((step) =>
+    step.advanceOnFailure !== true
+    && !state.analyses.some((analysis) =>
+      analysis.stepKey === step.key && analysis.notApplicable === true
+    )
+  );
   const achieved = requiredSteps.length > 0
     && requiredSteps.every((step) =>
       state.analyses.some((analysis) => analysis[step.key] === true)
@@ -776,6 +783,7 @@ function startRoleplay() {
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.inspectionAvailabilityFollowUpPending = false;
+  state.inspectionWaitingRequested = false;
   state.usedVariants = {};
   state.questionRepeats = {};
   state.employeeCode = employeeCode;
@@ -1513,6 +1521,26 @@ function analyzeScriptedStaff(text, step) {
   return analysis;
 }
 
+function markScriptedStepNotApplicable(step, reason) {
+  if (!step || state.analyses.some((analysis) =>
+    analysis.stepKey === step.key && analysis.notApplicable === true
+  )) return;
+
+  const analysis = {
+    scripted: true,
+    stepKey: step.key,
+    expected: step.expected,
+    passed: false,
+    canAdvance: true,
+    blocked: false,
+    notApplicable: true,
+    confidence: 1,
+    evidence: [reason]
+  };
+  analysis[step.key] = false;
+  state.analyses.push(analysis);
+}
+
 function scriptedStepMatches(text, step) {
   const normalized = normalizeScriptedText(text);
   const matchedGroups = step.requiredGroups.map((group) =>
@@ -1840,6 +1868,9 @@ function handleScriptedStaffReply(text) {
 
   if (!analysis.canAdvance) {
     const retry = scriptedRetryForMissingDetails(combinedText, step);
+    if (retry.missingDetail === "waiting") {
+      state.inspectionWaitingRequested = true;
+    }
     state.scriptedPartialReplies[step.key] = {
       text: combinedText,
       missingDetail: retry.missingDetail
@@ -1898,6 +1929,19 @@ function handleScriptedStaffReply(text) {
       item.stepKey === scenario.steps[state.scriptStep].key && item.passed
     )
   ) {
+    state.scriptStep += 1;
+  }
+
+  // お客様が店内待ちの可否を尋ね、スタッフが可能と回答した場合は、
+  // 同じ入庫で通常は不要な代車確認を対象外にして予約手続きへ進む。
+  const waitingBranchLoanerStep = scenario.steps[state.scriptStep];
+  if (
+    state.inspectionWaitingRequested
+    && waitingBranchLoanerStep?.key === "explained_loaner"
+    && !scriptedStepMatches(combinedText, waitingBranchLoanerStep)
+  ) {
+    markScriptedStepNotApplicable(waitingBranchLoanerStep, "お客様が店内待ちを希望");
+    responseStep = waitingBranchLoanerStep;
     state.scriptStep += 1;
   }
 
@@ -2105,21 +2149,31 @@ function scoreRoleplay() {
 }
 
 function scoreScriptedRoleplay() {
+  const notApplicableKeys = new Set(
+    state.analyses
+      .filter((analysis) => analysis.scripted && analysis.notApplicable === true)
+      .map((analysis) => analysis.stepKey)
+  );
+  const applicableScoring = scenario.scoring.filter((metric) => !notApplicableKeys.has(metric.key));
   const achieved = {};
   scenario.scoring.forEach((metric) => {
     achieved[metric.key] = state.analyses.some((analysis) => analysis[metric.key] === true);
   });
 
   const retryCount = state.analyses.filter((analysis) => analysis.scripted && analysis.blocked).length;
-  const baseScore = scenario.scoring.reduce(
+  const earnedPoints = applicableScoring.reduce(
     (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
     0
   );
+  const applicablePoints = applicableScoring.reduce((sum, metric) => sum + metric.points, 0);
+  const baseScore = applicablePoints > 0
+    ? Math.round((earnedPoints / applicablePoints) * 100)
+    : 0;
   const score = Math.max(0, Math.min(100, baseScore - Math.min(20, retryCount * 2)));
-  const good = scenario.scoring
+  const good = applicableScoring
     .filter((metric) => achieved[metric.key])
     .map((metric) => `${metric.action}ことができています`);
-  const improve = scenario.scoring
+  const improve = applicableScoring
     .filter((metric) => !achieved[metric.key])
     .map((metric) => `${metric.action}ことを意識すると、より良い応対になります`);
   if (retryCount > 0) {
@@ -2127,8 +2181,12 @@ function scoreScriptedRoleplay() {
   }
 
   const judgements = scenario.scoring.map((metric) => {
-    const attempts = state.analyses.filter((analysis) => analysis.stepKey === metric.key);
-    const status = achieved[metric.key] ? "○" : "要改善";
+    const attempts = state.analyses.filter((analysis) =>
+      analysis.stepKey === metric.key && analysis.notApplicable !== true
+    );
+    const status = notApplicableKeys.has(metric.key)
+      ? "対象外（店内待ち希望）"
+      : achieved[metric.key] ? "○" : "要改善";
     return `${metric.label}: ${status}${attempts.length > 1 ? `（${attempts.length}回発話）` : ""}`;
   });
 
