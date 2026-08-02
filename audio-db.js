@@ -363,8 +363,9 @@ const vehicleInspectionAudioLines = [
   ["inspection_explained_inspection_notice_retry", "車検案内・聞き返し", "はい？ ご用件は何ですか？"],
   ["inspection_asked_availability_customer", "都合確認・お客様回答", "お願いしたいんですけど、いつできますか？"],
   ["inspection_asked_availability_retry", "都合確認・聞き返し", "それで、どうしたらいいですか？"],
-  ["inspection_explained_available_period_customer", "入庫可能日・お客様回答", "どれくらい時間がかかるのですか？"],
-  ["inspection_explained_available_period_retry", "入庫可能日・聞き返し", "いつから車検を受けられるのですか？"],
+  ["inspection_explained_available_period_customer", "車検満了日案内後・お客様回答", "どれくらい時間がかかるのですか？"],
+  ["inspection_available_from_optional_question", "入庫可能日・任意質問", "いつから車検を受けられるんですか？"],
+  ["inspection_explained_available_period_retry", "車検満了日・聞き返し", "車検の満了日はいつですか？", "pending"],
   ["inspection_explained_duration_and_wait_customer", "作業時間・お客様回答", "代車は貸してもらえますか？"],
   ["inspection_explained_duration_and_wait_retry", "作業時間・聞き返し", "どれくらい時間がかかるのですか？"],
   ["inspection_duration_wait_missing_retry", "店内待ち案内不足・聞き返し", "お店で待つことはできますか？"],
@@ -392,10 +393,10 @@ const vehicleInspectionAudioLines = [
   ["inspection_missing_appointment_angry", "入庫日時未確定・少し怒り気味", "いつ行けばいいんですか？"]
 ];
 
-window.ROLEPLAY_AUDIO_DB.items.push(...vehicleInspectionAudioLines.map(([id, label, text]) => ({
+window.ROLEPLAY_AUDIO_DB.items.push(...vehicleInspectionAudioLines.map(([id, label, text, status = "ready"]) => ({
   id,
   label,
   text,
   file: `${id}.mp3`,
-  status: "ready"
+  status
 })));
