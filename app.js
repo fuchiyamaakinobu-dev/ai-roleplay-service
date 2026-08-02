@@ -40,6 +40,7 @@ const state = {
   transcript: [],
   analyses: [],
   scriptedPartialReplies: {},
+  inspectionAvailabilityFollowUpPending: false,
   usedVariants: {},
   questionRepeats: {}
 };
@@ -224,6 +225,7 @@ function selectScenario(scenarioId) {
   state.transcript = [];
   state.analyses = [];
   state.scriptedPartialReplies = {};
+  state.inspectionAvailabilityFollowUpPending = false;
   state.usedVariants = {};
   state.questionRepeats = {};
   state.startedAt = null;
@@ -663,6 +665,7 @@ function startRoleplay() {
   state.transcript = [];
   state.analyses = [];
   state.scriptedPartialReplies = {};
+  state.inspectionAvailabilityFollowUpPending = false;
   state.usedVariants = {};
   state.questionRepeats = {};
   state.employeeCode = employeeCode;
@@ -1288,8 +1291,51 @@ function selectContextualCustomerResponse(analysis) {
   return null;
 }
 
+function normalizeScriptedText(text) {
+  return String(text || "")
+    .replace(/[０-９]/g, (character) =>
+      String.fromCharCode(character.charCodeAt(0) - 0xFEE0)
+    )
+    .replace(/\s+/g, "");
+}
+
+function hasSupportedInspectionDuration(text) {
+  const normalized = normalizeScriptedText(text);
+  return /(?:60|75|90)分/.test(normalized)
+    || /(?:六十|七十五|九十)分/.test(normalized)
+    || /(?:1|一)時間(?:15|十五|30|三十)分/.test(normalized)
+    || /(?:1|一)時間半/.test(normalized)
+    || /(?:1|一)時間(?![0-9一二三四五六七八九十]*分)/.test(normalized);
+}
+
+function hasInspectionAvailableFromInformation(text) {
+  const normalized = normalizeScriptedText(text);
+  const availableFrom = normalizeScriptedText(scenario.availableFrom || "");
+  return Boolean(availableFrom)
+    && normalized.includes(availableFrom)
+    && /(?:作業|車検|入庫|受け|可能|以降)/.test(normalized);
+}
+
+function hasLockNutToolExpression(text) {
+  const normalized = normalizeScriptedText(text);
+  if (normalized.includes("アダプター")) return true;
+  const hasToolWord = /(?:キー|工具|道具)/.test(normalized);
+  const hasLockNutContext = /(?:ロック|ナット|ホイール|外す|外し|取り外|専用)/.test(normalized);
+  return hasToolWord && hasLockNutContext;
+}
+
+function hasBookingContinuationConfirmation(text) {
+  const normalized = normalizeScriptedText(text);
+  if (!isScriptedQuestion(normalized)) return false;
+  const asksPermission = /(?:よろしい|大丈夫|ありますか|ございます|いただけ|構いません|構わない)/.test(normalized);
+  if (!asksPermission) return false;
+  const hasTimeContext = /(?:10分|十分|もう少し|少し|お時間|時間)/.test(normalized);
+  const hasBookingContext = /(?:予約|手続き|このまま|進め|続け)/.test(normalized);
+  return hasTimeContext || hasBookingContext;
+}
+
 function analyzeScriptedStaff(text, step) {
-  const normalized = text.replace(/\s+/g, "");
+  const normalized = normalizeScriptedText(text);
   const matchedGroups = step.requiredGroups.map((group) => group.filter((word) => normalized.includes(word)));
   let passed = matchedGroups.every((matches) => matches.length > 0)
     && scriptedStepSpecificMatches(normalized, step);
@@ -1333,7 +1379,7 @@ function analyzeScriptedStaff(text, step) {
 }
 
 function scriptedStepMatches(text, step) {
-  const normalized = text.replace(/\s+/g, "");
+  const normalized = normalizeScriptedText(text);
   return step.requiredGroups.every((group) =>
     group.some((word) => normalized.includes(word))
   ) && scriptedStepSpecificMatches(normalized, step);
@@ -1360,10 +1406,19 @@ function scriptedStepSpecificMatches(normalized, step) {
     return isScriptedQuestion(normalized);
   }
 
+  if (step.key === "confirmed_booking_time") {
+    return hasBookingContinuationConfirmation(normalized);
+  }
+
   if (step.key === "explained_available_period") {
-    const concreteDates = normalized.match(/\d{1,2}月\d{1,2}日/g) || [];
-    return new Set(concreteDates).size >= 2
-      && /(?:作業|車検|入庫|可能)/.test(normalized);
+    const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+    return Boolean(expiryDate)
+      && normalized.includes(expiryDate)
+      && /(?:満了|車検)/.test(normalized);
+  }
+
+  if (step.key === "explained_duration_and_wait") {
+    return hasSupportedInspectionDuration(normalized);
   }
 
   if (step.key === "confirmed_waiting") {
@@ -1372,6 +1427,10 @@ function scriptedStepSpecificMatches(normalized, step) {
 
   if (step.key === "asked_vehicle_concerns") {
     return isScriptedQuestion(normalized);
+  }
+
+  if (step.key === "explained_lock_and_arrival") {
+    return hasLockNutToolExpression(normalized);
   }
 
   return true;
@@ -1404,10 +1463,10 @@ function combinedScriptedReply(text, step) {
 }
 
 function scriptedRetryForMissingDetails(text, step) {
-  const normalized = text.replace(/\s+/g, "");
+  const normalized = normalizeScriptedText(text);
 
   if (step.key === "explained_duration_and_wait") {
-    const hasDuration = ["1時間", "一時間", "60分"].some((word) => normalized.includes(word));
+    const hasDuration = hasSupportedInspectionDuration(normalized);
     const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
     if (hasDuration && !hasWaiting) {
       return {
@@ -1464,7 +1523,8 @@ function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
   scenario.steps.slice(startIndex, closingIndex).forEach((step) => {
     if (!step.optionalAfterAppointment) return;
     const matchedGroups = step.requiredGroups.map((group) => group.filter((word) => normalized.includes(word)));
-    let passed = matchedGroups.every((matches) => matches.length > 0);
+    let passed = matchedGroups.every((matches) => matches.length > 0)
+      && scriptedStepSpecificMatches(normalized, step);
 
     if (step.key === "recapped_appointment") {
       passed = Boolean(
@@ -1497,6 +1557,21 @@ function handleScriptedStaffReply(text) {
   if (!step) {
     finishRoleplay();
     return;
+  }
+
+  // 車検満了日だけを案内した後の「いつから受けられるか」は任意質問。
+  // 回答を省略して作業時間を案内しても、減点せず通常進行へ戻す。
+  if (state.inspectionAvailabilityFollowUpPending) {
+    state.inspectionAvailabilityFollowUpPending = false;
+    if (!hasSupportedInspectionDuration(text)) {
+      state.turn += 1;
+      addMessage("customer", "どれくらい時間がかかるのですか？", {
+        audioId: "inspection_explained_available_period_customer"
+      });
+      els.speechNote.textContent = "入庫可能日は任意案内です。続けて、作業時間と店内で待てるかをご案内ください。";
+      renderProgress();
+      return;
+    }
   }
 
   if (step.key === "confirmed_identity" && isPhoneGreetingOnly(text)) {
@@ -1609,6 +1684,24 @@ function handleScriptedStaffReply(text) {
       audioId: retryQuestion.audioId
     });
     els.speechNote.textContent = `不足している案内があります。現在の課題: ${step.expected}`;
+    renderProgress();
+    return;
+  }
+
+  const nextStep = scenario.steps[state.scriptStep + 1];
+  const shouldAskAvailableFrom = step.key === "explained_available_period"
+    && !hasInspectionAvailableFromInformation(combinedText)
+    && !(nextStep && scriptedStepMatches(text, nextStep));
+
+  if (shouldAskAvailableFrom) {
+    delete state.scriptedPartialReplies[step.key];
+    state.scriptStep += 1;
+    state.currentState = scenario.steps[state.scriptStep].state;
+    state.inspectionAvailabilityFollowUpPending = true;
+    addMessage("customer", "いつから車検を受けられるんですか？", {
+      audioId: "inspection_available_from_optional_question"
+    });
+    els.speechNote.textContent = "入庫可能日の追加質問です。回答を省略して作業時間を案内しても減点されません。";
     renderProgress();
     return;
   }

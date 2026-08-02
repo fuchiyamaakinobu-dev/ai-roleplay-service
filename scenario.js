@@ -175,15 +175,15 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     { key: "thanked_customer", label: "日頃の利用へのお礼", action: "日頃のご利用への感謝を伝える", points: 4 },
     { key: "explained_inspection_notice", label: "車種・車検時期", action: "車種と車検時期を説明する", points: 8 },
     { key: "asked_availability", label: "都合確認", action: "お客様のご都合を確認する", points: 5 },
-    { key: "explained_available_period", label: "満了日・入庫可能日", action: "満了日と作業可能日を案内する", points: 7 },
+    { key: "explained_available_period", label: "車検満了日", action: "車検満了日を案内する", points: 7 },
     { key: "explained_duration_and_wait", label: "作業時間・店内待ち", action: "基本作業時間と店内で待てることを説明する", points: 7 },
     { key: "explained_loaner", label: "代車予約", action: "早期予約で代車を用意できることを説明する", points: 6 },
-    { key: "confirmed_booking_time", label: "予約手続き時間", action: "予約手続きに必要な時間の了承を得る", points: 5 },
+    { key: "confirmed_booking_time", label: "予約手続き確認", action: "予約手続きを続ける時間があるか了承を得る", points: 5 },
     { key: "proposed_appointment", label: "具体的な日時", action: "具体的な予約日時を提案する", points: 8 },
     { key: "confirmed_waiting", label: "待ち方確認", action: "店内で待つか確認する", points: 4 },
     { key: "asked_vehicle_concerns", label: "気になる症状", action: "車の気になる点を確認する", points: 6 },
     { key: "explained_documents", label: "荷物・必要書類", action: "荷物の積み下ろしと必要書類を案内する", points: 8 },
-    { key: "explained_lock_and_arrival", label: "ロックナット・早着", action: "ロックナットアダプターと15分前来店を案内する", points: 7 },
+    { key: "explained_lock_and_arrival", label: "ロックナット・早着", action: "ロックナット用具と15分前来店を案内する", points: 7 },
     { key: "confirmed_reminder_contact", label: "3日前確認連絡", action: "3日前の確認連絡と連絡先を確認する", points: 6 },
     { key: "recapped_appointment", label: "予約復唱", action: "お客様名と予約日時を復唱する", points: 5 },
     { key: "closed_politely", label: "終話あいさつ", action: "感謝を伝えて丁寧に終話する", points: 4 }
@@ -233,16 +233,16 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     {
       state: "INSPECTION_GUIDANCE",
       key: "explained_available_period",
-      expected: "満了日と作業可能日を案内する",
-      requiredGroups: [["9月30日"], ["8月1日"], ["作業", "車検", "入庫"]],
+      expected: "車検満了日を案内する",
+      requiredGroups: [["9月30日"], ["満了", "車検"]],
       customerResponse: "どれくらい時間がかかるのですか？",
-      retryResponse: "いつから車検を受けられるのですか？"
+      retryResponse: "車検の満了日はいつですか？"
     },
     {
       state: "SERVICE_EXPLANATION",
       key: "explained_duration_and_wait",
-      expected: "基本作業は1時間程度で、店内待ちも可能と伝える",
-      requiredGroups: [["1時間", "一時間", "60分"], ["待", "店内"]],
+      expected: "作業時間（60分・75分・90分のいずれか）と、店内待ちも可能と伝える",
+      requiredGroups: [["1時間", "一時間", "60分", "六十分", "75分", "七十五分", "90分", "九十分"], ["待", "店内"]],
       customerResponse: "代車は貸してもらえますか？",
       retryResponse: "どれくらい時間がかかるのですか？"
     },
@@ -257,8 +257,8 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     {
       state: "SERVICE_EXPLANATION",
       key: "confirmed_booking_time",
-      expected: "予約手続きに10分程度かかることを伝え、了承を得る",
-      requiredGroups: [["10分", "十分"], ["時間", "お時間"], ["よろしい", "大丈夫"]],
+      expected: "予約手続きに必要な時間、またはこのまま手続きを続けられるか確認する",
+      requiredGroups: [["10分", "十分", "もう少し", "少し", "時間", "お時間", "予約", "手続き", "このまま", "進め", "続け"]],
       customerResponse: "大丈夫ですよ。",
       retryResponse: "今、このまま予約できますか？"
     },
@@ -300,8 +300,8 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     {
       state: "VEHICLE_CHECK",
       key: "explained_lock_and_arrival",
-      expected: "ロックナットアダプターと15分前来店を案内する",
-      requiredGroups: [["ロック", "ホイールナット"], ["アダプター"], ["15分", "十五分"], ["早め", "前に"]],
+      expected: "ロックナットキー、アダプター、外す工具などと15分前来店を案内する",
+      requiredGroups: [["ロックナットキー", "ロックキー", "アダプター", "キー", "工具", "道具"], ["15分", "十五分"], ["早め", "前に"]],
       optionalAfterAppointment: true,
       customerResponse: "分かりました。",
       retryResponse: "ほかに持って行く物や、到着時間の注意はありますか？"
@@ -334,7 +334,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     }
   ],
   recommendedTalk:
-    "本人確認、店舗名と担当者名、車種と車検時期を伝え、具体的な入庫日時を確定することが最低限の条件です。日時確定後は終話へ進めます。高得点を目指す場合は、お礼、満了日と入庫可能日、所要時間、代車、待ち方、車の気になる点、必要書類、ロックナット、15分前来店、3日前確認連絡、予約日時の復唱まで案内してください。"
+    "本人確認、店舗名と担当者名、車種と車検時期を伝え、具体的な入庫日時を確定することが最低限の条件です。日時確定後は終話へ進めます。高得点を目指す場合は、お礼、車検満了日、所要時間、代車、待ち方、車の気になる点、必要書類、ロックナット、15分前来店、3日前確認連絡、予約日時の復唱まで案内してください。"
 };
 
 window.ROLEPLAY_SCENARIOS = [
