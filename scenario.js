@@ -218,7 +218,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       state: "INSPECTION_GUIDANCE",
       key: "explained_inspection_notice",
       expected: "車種と車検時期を説明する",
-      requiredGroups: [["ヤリス"], ["車検"], ["近", "時期"]],
+      requiredGroups: [["ヤリス"], ["車検"], ["近", "時期", "9月30日"]],
       customerResponse: "案内のはがきが来ていましたよ。",
       retryResponse: "はい？ ご用件は何ですか？"
     },

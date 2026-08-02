@@ -1334,10 +1334,25 @@ function hasBookingContinuationConfirmation(text) {
   return hasTimeContext || hasBookingContext;
 }
 
+function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
+  if (matchedGroups.every((matches) => matches.length > 0)) return true;
+  if (step.key !== "explained_inspection_notice") return false;
+
+  const vehicleName = normalizeScriptedText(scenario.vehicleName || "");
+  const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+  return Boolean(
+    vehicleName
+    && expiryDate
+    && normalized.includes(vehicleName)
+    && normalized.includes("車検")
+    && normalized.includes(expiryDate)
+  );
+}
+
 function analyzeScriptedStaff(text, step) {
   const normalized = normalizeScriptedText(text);
   const matchedGroups = step.requiredGroups.map((group) => group.filter((word) => normalized.includes(word)));
-  let passed = matchedGroups.every((matches) => matches.length > 0)
+  let passed = scriptedRequiredGroupsMatch(normalized, step, matchedGroups)
     && scriptedStepSpecificMatches(normalized, step);
 
   if (step.key === "proposed_appointment") {
@@ -1380,9 +1395,11 @@ function analyzeScriptedStaff(text, step) {
 
 function scriptedStepMatches(text, step) {
   const normalized = normalizeScriptedText(text);
-  return step.requiredGroups.every((group) =>
-    group.some((word) => normalized.includes(word))
-  ) && scriptedStepSpecificMatches(normalized, step);
+  const matchedGroups = step.requiredGroups.map((group) =>
+    group.filter((word) => normalized.includes(word))
+  );
+  return scriptedRequiredGroupsMatch(normalized, step, matchedGroups)
+    && scriptedStepSpecificMatches(normalized, step);
 }
 
 function isScriptedQuestion(normalized) {
