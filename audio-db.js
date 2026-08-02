@@ -369,6 +369,7 @@ const vehicleInspectionAudioLines = [
   ["inspection_explained_available_period_retry", "車検期限・聞き返し", "車検はいつまでですか？"],
   ["inspection_expiry_deadline_retry", "車検期限・聞き返し（言い換え）", "いつまでに受けなきゃダメですか？"],
   ["inspection_day_preference_and_expiry_question", "曜日希望回答・車検期限確認", "土日がいいです。ちなみに、車検はいつまでですか？"],
+  ["inspection_day_preference_answer", "満了日案内済み・曜日希望回答", "土日がいいです。", "pending"],
   ["inspection_weekend_preference_and_expiry_question", "週末希望回答・車検期限確認", "週末のほうが都合がいいです。それと、車検はいつまでに受ければよいですか？"],
   ["inspection_explained_duration_and_wait_customer", "作業時間・お客様回答", "代車は貸してもらえますか？"],
   ["inspection_explained_duration_and_wait_retry", "作業時間・聞き返し", "どれくらい時間がかかるのですか？"],
