@@ -32,6 +32,7 @@ const expiryStep = {
 };
 
 const combinedTalk = "お使いでいらっしゃいますヤリスでございますが、車検が9月30日までとなっておりますので、ご案内のお電話でございました。ご都合の方はいかがかと思いまして、お電話してみたんですが、いかがでしょうか？";
+const spokenDateTalk = "お使いでいらっしゃいますヤリスでございますが、車検が9月の30日までとなっておりますので、そのご連絡でございました。ご都合の方はいかがでしょうか？";
 const earlyTalk = "お使いでいらっしゃいますヤリスでございますが、9月30日までとなりました。ご都合の方はいかがかと思いまして、お電話をしてみました。";
 const followUpTalk = "車検のご予定はお決まりでしたでしょうか？";
 const carriedTalk = `${earlyTalk} ${followUpTalk}`;
@@ -50,6 +51,26 @@ assert.equal(
   context.scriptedStepMatches(combinedTalk, expiryStep),
   true,
   "同じ発話の満了日案内を認識できません"
+);
+assert.equal(
+  context.normalizeScriptedText("車検が9月の30日までです"),
+  "車検が9月30日までです",
+  "月日の間に入った助詞を正規化できません"
+);
+assert.equal(
+  context.scriptedStepMatches(spokenDateTalk, noticeStep),
+  true,
+  "『9月の30日』を具体的な車検時期として認識できません"
+);
+assert.equal(
+  context.scriptedStepMatches(spokenDateTalk, availabilityStep),
+  true,
+  "『9月の30日』と同じ発話の都合確認を認識できません"
+);
+assert.equal(
+  context.scriptedStepMatches(spokenDateTalk, expiryStep),
+  true,
+  "『9月の30日』を登録済み満了日として認識できません"
 );
 assert.equal(
   context.scriptedStepMatches("ヤリスの車検のご案内です。", noticeStep),

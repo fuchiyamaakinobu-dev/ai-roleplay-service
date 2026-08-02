@@ -1296,6 +1296,7 @@ function normalizeScriptedText(text) {
     .replace(/[０-９]/g, (character) =>
       String.fromCharCode(character.charCodeAt(0) - 0xFEE0)
     )
+    .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1")
     .replace(/\s+/g, "");
 }
 
