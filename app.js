@@ -42,6 +42,7 @@ const state = {
   analyses: [],
   scriptedPartialReplies: {},
   inspectionAvailabilityFollowUpPending: false,
+  inspectionWaitingRequested: false,
   usedVariants: {},
   questionRepeats: {},
   customerReplyPending: false
@@ -234,6 +235,7 @@ function selectScenario(scenarioId) {
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.inspectionAvailabilityFollowUpPending = false;
+  state.inspectionWaitingRequested = false;
   state.usedVariants = {};
   state.questionRepeats = {};
   state.startedAt = null;
@@ -336,7 +338,12 @@ function serviceProgressStatus(item, merged) {
 
 function scriptedProgressStatus(item) {
   const steps = scenario.steps.filter((step) => step.state === item.state);
-  const requiredSteps = steps.filter((step) => step.advanceOnFailure !== true);
+  const requiredSteps = steps.filter((step) =>
+    step.advanceOnFailure !== true
+    && !state.analyses.some((analysis) =>
+      analysis.stepKey === step.key && analysis.notApplicable === true
+    )
+  );
   const achieved = requiredSteps.length > 0
     && requiredSteps.every((step) =>
       state.analyses.some((analysis) => analysis[step.key] === true)
@@ -776,6 +783,7 @@ function startRoleplay() {
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.inspectionAvailabilityFollowUpPending = false;
+  state.inspectionWaitingRequested = false;
   state.usedVariants = {};
   state.questionRepeats = {};
   state.employeeCode = employeeCode;
@@ -1420,6 +1428,13 @@ function hasSupportedInspectionDuration(text) {
     || /(?:1|一)時間(?![0-9一二三四五六七八九十]*分)/.test(normalized);
 }
 
+function hasInspectionWaitingChoiceOffer(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasWaitingContext = /(?:待|店内)/.test(normalized);
+  const offersWaitingChoice = /(?:いかが(?:でしょうか|ですか)|お待ちになりますか|待たれますか|待っていただけますか)/.test(normalized);
+  return hasWaitingContext && offersWaitingChoice;
+}
+
 function hasInspectionAvailableFromInformation(text) {
   const normalized = normalizeScriptedText(text);
   const availableFrom = normalizeScriptedText(scenario.availableFrom || "");
@@ -1511,6 +1526,26 @@ function analyzeScriptedStaff(text, step) {
   analysis[step.key] = passed;
   state.analyses.push(analysis);
   return analysis;
+}
+
+function markScriptedStepNotApplicable(step, reason) {
+  if (!step || state.analyses.some((analysis) =>
+    analysis.stepKey === step.key && analysis.notApplicable === true
+  )) return;
+
+  const analysis = {
+    scripted: true,
+    stepKey: step.key,
+    expected: step.expected,
+    passed: false,
+    canAdvance: true,
+    blocked: false,
+    notApplicable: true,
+    confidence: 1,
+    evidence: [reason]
+  };
+  analysis[step.key] = false;
+  state.analyses.push(analysis);
 }
 
 function scriptedStepMatches(text, step) {
@@ -1840,6 +1875,9 @@ function handleScriptedStaffReply(text) {
 
   if (!analysis.canAdvance) {
     const retry = scriptedRetryForMissingDetails(combinedText, step);
+    if (retry.missingDetail === "waiting") {
+      state.inspectionWaitingRequested = true;
+    }
     state.scriptedPartialReplies[step.key] = {
       text: combinedText,
       missingDetail: retry.missingDetail
@@ -1877,6 +1915,7 @@ function handleScriptedStaffReply(text) {
   delete state.scriptedPartialReplies[step.key];
 
   let responseStep = step;
+  let customerResponseOverride = null;
   const followingStep = scenario.steps[state.scriptStep + 1];
   if (
     !analysis.passed
@@ -1899,6 +1938,26 @@ function handleScriptedStaffReply(text) {
     )
   ) {
     state.scriptStep += 1;
+  }
+
+  // スタッフが店内待ちを選択肢として積極的に提案した場合は、
+  // 代車を対象外にして予約手続きへ進む。
+  // お客様から店内待ちを確認した場合は、外出に備えた代車希望へ進める。
+  const waitingBranchLoanerStep = scenario.steps[state.scriptStep];
+  if (
+    waitingBranchLoanerStep?.key === "explained_loaner"
+    && !scriptedStepMatches(combinedText, waitingBranchLoanerStep)
+  ) {
+    if (!state.inspectionWaitingRequested && hasInspectionWaitingChoiceOffer(combinedText)) {
+      markScriptedStepNotApplicable(waitingBranchLoanerStep, "スタッフが店内待ちを提案");
+      responseStep = waitingBranchLoanerStep;
+      state.scriptStep += 1;
+    } else if (state.inspectionWaitingRequested) {
+      customerResponseOverride = {
+        text: "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？",
+        audioId: "inspection_waiting_followup_loaner_request"
+      };
+    }
   }
 
   // スタッフが複数項目を一度に話した場合や、直前の発話を補足した場合は、
@@ -1926,10 +1985,12 @@ function handleScriptedStaffReply(text) {
     && !analysis.passed
     && step.advanceOnFailure === true
     && !hasCourtesyExpression(text);
-  addMessage("customer", useAdvanceRetry ? step.retryResponse : responseStep.customerResponse, {
-    audioId: useAdvanceRetry
-      ? `inspection_${step.key}_retry`
-      : `inspection_${responseStep.key}_customer`,
+  addMessage("customer", customerResponseOverride?.text
+    || (useAdvanceRetry ? step.retryResponse : responseStep.customerResponse), {
+    audioId: customerResponseOverride?.audioId
+      || (useAdvanceRetry
+        ? `inspection_${step.key}_retry`
+        : `inspection_${responseStep.key}_customer`),
     onCommitted: finished
       ? () => finishRoleplay({ keepCustomerPlayback: true })
       : null
@@ -2105,21 +2166,31 @@ function scoreRoleplay() {
 }
 
 function scoreScriptedRoleplay() {
+  const notApplicableKeys = new Set(
+    state.analyses
+      .filter((analysis) => analysis.scripted && analysis.notApplicable === true)
+      .map((analysis) => analysis.stepKey)
+  );
+  const applicableScoring = scenario.scoring.filter((metric) => !notApplicableKeys.has(metric.key));
   const achieved = {};
   scenario.scoring.forEach((metric) => {
     achieved[metric.key] = state.analyses.some((analysis) => analysis[metric.key] === true);
   });
 
   const retryCount = state.analyses.filter((analysis) => analysis.scripted && analysis.blocked).length;
-  const baseScore = scenario.scoring.reduce(
+  const earnedPoints = applicableScoring.reduce(
     (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
     0
   );
+  const applicablePoints = applicableScoring.reduce((sum, metric) => sum + metric.points, 0);
+  const baseScore = applicablePoints > 0
+    ? Math.round((earnedPoints / applicablePoints) * 100)
+    : 0;
   const score = Math.max(0, Math.min(100, baseScore - Math.min(20, retryCount * 2)));
-  const good = scenario.scoring
+  const good = applicableScoring
     .filter((metric) => achieved[metric.key])
     .map((metric) => `${metric.action}ことができています`);
-  const improve = scenario.scoring
+  const improve = applicableScoring
     .filter((metric) => !achieved[metric.key])
     .map((metric) => `${metric.action}ことを意識すると、より良い応対になります`);
   if (retryCount > 0) {
@@ -2127,8 +2198,12 @@ function scoreScriptedRoleplay() {
   }
 
   const judgements = scenario.scoring.map((metric) => {
-    const attempts = state.analyses.filter((analysis) => analysis.stepKey === metric.key);
-    const status = achieved[metric.key] ? "○" : "要改善";
+    const attempts = state.analyses.filter((analysis) =>
+      analysis.stepKey === metric.key && analysis.notApplicable !== true
+    );
+    const status = notApplicableKeys.has(metric.key)
+      ? "対象外（店内待ち提案済み）"
+      : achieved[metric.key] ? "○" : "要改善";
     return `${metric.label}: ${status}${attempts.length > 1 ? `（${attempts.length}回発話）` : ""}`;
   });
 
