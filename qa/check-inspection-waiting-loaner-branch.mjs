@@ -28,8 +28,13 @@ assert.match(
 );
 assert.match(
   audioDbSource,
-  /inspection_waiting_followup_loaner_request",\s*"店内待ち確認後・代車希望",\s*"出かける可能性があるので、一応代車を用意してほしいんですが、できますか？",\s*"pending"/,
-  "店内待ち確認後の代車希望が、音声準備中として登録されていません"
+  /inspection_waiting_followup_loaner_request",\s*"店内待ち確認後・代車希望",\s*"出かける可能性があるので、一応代車を用意してほしいんですが、できますか？"\s*\]/,
+  "店内待ち確認後の代車希望が、再生可能な音声として登録されていません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_waiting_followup_loaner_request.mp3", import.meta.url)),
+  true,
+  "店内待ち確認後の代車希望MP3が見つかりません"
 );
 
 const markerStart = appSource.indexOf("function markScriptedStepNotApplicable");
