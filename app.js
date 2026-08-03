@@ -1891,6 +1891,30 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // 気になる所の確認が予定より早く行われた場合は、その質問へ先に回答する。
+  // 現在工程の説明は保持し、車両状態確認は後工程で繰り返さない。
+  const concernStepIndex = scenario.steps.findIndex((item) => item.key === "asked_vehicle_concerns");
+  const concernStep = scenario.steps[concernStepIndex];
+  const askedConcernsEarly = concernStep
+    && state.scriptStep < concernStepIndex
+    && scriptedStepMatches(text, concernStep);
+  if (askedConcernsEarly) {
+    if (!state.analyses.some((item) => item.stepKey === concernStep.key && item.passed)) {
+      analyzeScriptedStaff(text, concernStep);
+    }
+    state.scriptedPartialReplies[step.key] = {
+      text: combinedScriptedReply(text, step),
+      missingDetail: "earlyVehicleConcernAnswered"
+    };
+    state.turn += 1;
+    addMessage("customer", "オイル交換もお願いしたいです。", {
+      audioId: "inspection_asked_vehicle_concerns_customer"
+    });
+    els.speechNote.textContent = "車両の気になる所を確認済みです。オイル交換希望を受け付け、現在の案内を続けてください。";
+    renderProgress();
+    return;
+  }
+
   if (step.key === "confirmed_identity" && isPhoneGreetingOnly(text)) {
     state.turn += 1;
     addMessage("customer", "はい、もしもし。", {
@@ -2102,6 +2126,12 @@ function handleScriptedStaffReply(text) {
         audioId: "inspection_booking_invitation_intent_customer"
       }
     ]);
+  }
+  if (!customerResponseOverride && responseStep.key === "asked_vehicle_concerns") {
+    customerResponseOverride = {
+      text: "オイル交換もお願いしたいです。",
+      audioId: "inspection_asked_vehicle_concerns_customer"
+    };
   }
   addMessage("customer", customerResponseOverride?.text
     || (skippedIdentity

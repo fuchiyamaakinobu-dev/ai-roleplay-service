@@ -291,7 +291,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       expected: "車を使用していて気になる点がないか確認する",
       requiredGroups: [["気になる", "不具合", "調子", "具合"]],
       optionalAfterAppointment: true,
-      customerResponse: "別にないです。",
+      customerResponse: "オイル交換もお願いしたいです。",
       retryResponse: "ほかに確認することはありますか？"
     },
     {
