@@ -159,6 +159,8 @@ window.VEHICLE_INSPECTION_SCENARIO = {
   vehicleName: "ヤリス",
   expiryDate: "9月30日",
   availableFrom: "8月1日",
+  inspectionCycle: "初回車検",
+  assumedMileageKm: 30000,
   appointmentDate: "8月20日10時",
   ringbackAudioId: "inspection_call_ringback",
   openingCustomerMessage: "はい、もしもし。",
@@ -179,7 +181,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     { key: "explained_inspection_notice", label: "車種・車検時期", action: "車種と車検時期を説明する", points: 8 },
     { key: "asked_availability", label: "都合確認", action: "お客様のご都合を確認する", points: 5 },
     { key: "explained_available_period", label: "車検満了日", action: "車検満了日を案内する", points: 7 },
-    { key: "explained_duration_and_wait", label: "作業時間・店内待ち", action: "基本作業時間と店内で待てることを説明する", points: 7 },
+    { key: "explained_duration_and_wait", label: "走行距離・時間・店内待ち", action: "走行距離を確認し、基本作業時間と店内で待てることを説明する", points: 7 },
     { key: "explained_loaner", label: "代車予約", action: "早期予約で代車を用意できることを説明する", points: 6 },
     { key: "confirmed_booking_time", label: "予約手続き確認", action: "予約手続きを続ける時間があるか了承を得る", points: 5 },
     { key: "proposed_appointment", label: "具体的な日時", action: "具体的な予約日時を提案する", points: 8 },
@@ -244,7 +246,8 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     {
       state: "SERVICE_EXPLANATION",
       key: "explained_duration_and_wait",
-      expected: "作業時間（60分・75分・90分のいずれか）と、店内待ちも可能と伝える",
+      expected: "現在の走行距離を質問し、作業時間（60分・75分・90分のいずれか）と、店内待ちも可能と伝える",
+      requiresMileageConfirmation: true,
       requiredGroups: [["1時間", "一時間", "60分", "六十分", "75分", "七十五分", "90分", "九十分"], ["待", "店内"]],
       customerResponse: "代車は貸してもらえますか？",
       retryResponse: "どれくらい時間がかかるのですか？"

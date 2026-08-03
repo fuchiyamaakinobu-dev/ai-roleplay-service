@@ -11,7 +11,7 @@ const helperEnd = appSource.indexOf("function analyzeScriptedStaff", helperStart
 assert.notEqual(helperStart, -1, "車検誘致用の数字正規化関数が見つかりません");
 assert.notEqual(helperEnd, -1, "作業時間判定関数の終端が見つかりません");
 
-const context = {};
+const context = { state: { inspectionMileageAsked: true } };
 vm.createContext(context);
 vm.runInContext(appSource.slice(helperStart, helperEnd), context);
 
@@ -89,7 +89,7 @@ assert.match(
 );
 assert.match(
   appSource,
-  /step\.key === "explained_duration_and_wait"[\s\S]*?hasSupportedInspectionDuration\(normalized\) && hasWaiting/,
+  /step\.key === "explained_duration_and_wait"[\s\S]*?state\.inspectionMileageAsked[\s\S]*?hasSupportedInspectionDuration\(normalized\)[\s\S]*?hasWaiting/,
   "Firestore公開データより確定済み作業時間判定を優先できません"
 );
 assert.match(
