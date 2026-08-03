@@ -76,14 +76,29 @@ vm.runInContext(
 
 const durationStep = {
   key: "explained_duration_and_wait",
+  expected: "走行距離・作業時間・店内待ち",
+  requiredGroups: [["90分"], ["店内"]],
   retryResponse: "どれくらい時間がかかるのですか？"
 };
+context.state.inspectionMileageAsked = false;
+context.state.analyses = [];
+context.scriptedStepSpecificMatches = () => true;
+context.scriptedStepCanAdvanceOnFailure = () => false;
+vm.runInContext(
+  sourceBetween("function analyzeScriptedStaff", "function scriptedStepCanAdvanceOnFailure"),
+  context
+);
+const mileageOmittedAnalysis = context.analyzeScriptedStaff(completeDurationTalk, durationStep);
+assert.equal(mileageOmittedAnalysis.passed, false, "走行距離未確認を採点達成にしています");
+assert.equal(mileageOmittedAnalysis.canAdvance, true, "走行距離未確認だけで会話を停止しています");
+assert.equal(mileageOmittedAnalysis.blocked, false, "走行距離未確認でお客様の聞き返しを発生させています");
+
 let retry = context.scriptedRetryForMissingDetails(
   "作業時間は90分で、店内で待つこともできます。",
   durationStep
 );
-assert.equal(retry.missingDetail, "mileage", "走行距離未確認で先へ進めています");
-assert.equal(retry.text, "走行距離は確認しなくて大丈夫ですか？");
+assert.equal(retry.missingDetail, null, "走行距離未確認をお客様の聞き返し対象にしています");
+assert.equal(retry.text, "どれくらい時間がかかるのですか？");
 
 context.state.inspectionMileageAsked = true;
 retry = context.scriptedRetryForMissingDetails("作業時間は90分です。", durationStep);
@@ -110,6 +125,11 @@ assert.match(
   /return state\.inspectionMileageAsked[\s\S]*?hasSupportedInspectionDuration\(normalized\)[\s\S]*?hasWaiting/,
   "走行距離・作業時間・店内待ちの3条件を完了判定に使用していません"
 );
+assert.match(
+  appSource,
+  /const mileageOnlyMissing = step\.key === "explained_duration_and_wait"[\s\S]*?const canAdvance = passed \|\| mileageOnlyMissing/,
+  "走行距離だけが未確認の場合に、未達のまま会話を進められません"
+);
 assert.match(scenarioSource, /inspectionCycle:\s*"初回車検"/);
 assert.match(scenarioSource, /assumedMileageKm:\s*30000/);
 assert.match(
@@ -122,10 +142,10 @@ assert.match(
   /inspection_current_mileage_customer",\s*"走行距離確認・お客様回答",\s*"今、3万キロくらいです。",\s*"pending"/,
   "走行距離回答の音声登録文が一致していません"
 );
-assert.match(
-  audioDbSource,
-  /inspection_mileage_missing_retry",\s*"走行距離確認不足・聞き返し",\s*"走行距離は確認しなくて大丈夫ですか？",\s*"pending"/,
-  "走行距離不足時の音声登録文が一致していません"
+assert.doesNotMatch(
+  appSource + audioDbSource,
+  /走行距離は確認しなくて大丈夫ですか？|inspection_mileage_missing_retry/,
+  "不要な走行距離確認促進のお客様発話が残っています"
 );
 
 console.log("inspection mileage confirmation checks passed");

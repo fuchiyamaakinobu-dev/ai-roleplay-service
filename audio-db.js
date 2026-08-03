@@ -374,7 +374,6 @@ const vehicleInspectionAudioLines = [
   ["inspection_explained_duration_and_wait_customer", "作業時間・お客様回答", "代車は貸してもらえますか？"],
   ["inspection_explained_duration_and_wait_retry", "作業時間・聞き返し", "どれくらい時間がかかるのですか？"],
   ["inspection_current_mileage_customer", "走行距離確認・お客様回答", "今、3万キロくらいです。", "pending"],
-  ["inspection_mileage_missing_retry", "走行距離確認不足・聞き返し", "走行距離は確認しなくて大丈夫ですか？", "pending"],
   ["inspection_duration_wait_missing_retry", "店内待ち案内不足・聞き返し", "お店で待つことはできますか？"],
   ["inspection_waiting_followup_loaner_request", "店内待ち確認後・代車希望", "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？"],
   ["inspection_explained_loaner_customer", "代車案内・お客様回答", "予約しようかな。"],

@@ -1549,7 +1549,11 @@ function analyzeScriptedStaff(text, step) {
       && normalized.includes(`${appointment.hour}時`)
     );
   }
-  const canAdvance = passed || scriptedStepCanAdvanceOnFailure(step);
+  const mileageOnlyMissing = step.key === "explained_duration_and_wait"
+    && !state.inspectionMileageAsked
+    && hasSupportedInspectionDuration(normalized)
+    && ["待", "店内"].some((word) => normalized.includes(word));
+  const canAdvance = passed || mileageOnlyMissing || scriptedStepCanAdvanceOnFailure(step);
   const analysis = {
     scripted: true,
     stepKey: step.key,
@@ -1735,13 +1739,6 @@ function scriptedRetryForMissingDetails(text, step) {
   if (step.key === "explained_duration_and_wait") {
     const hasDuration = hasSupportedInspectionDuration(normalized);
     const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
-    if (!state.inspectionMileageAsked) {
-      return {
-        text: "走行距離は確認しなくて大丈夫ですか？",
-        audioId: "inspection_mileage_missing_retry",
-        missingDetail: "mileage"
-      };
-    }
     if (hasDuration && !hasWaiting) {
       return {
         text: "お店で待つことはできますか？",
