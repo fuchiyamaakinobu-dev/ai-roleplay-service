@@ -1446,6 +1446,15 @@ function hasInspectionWaitingChoiceOffer(text) {
   return hasWaitingContext && offersWaitingChoice;
 }
 
+function hasInspectionLoanerConfirmation(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasLoaner = normalized.includes("代車");
+  const hasArrangement = /(?:用意|準備|手配)/.test(normalized);
+  const hasNegative = /(?:できません|できない|難しい|空きがない|空いていない|用意がない|用意はない)/.test(normalized);
+  const hasCommitment = /(?:できます|可能です|いたします|します|させていただ|しておきます|しておきましょう|なります)/.test(normalized);
+  return hasLoaner && hasArrangement && hasCommitment && !hasNegative;
+}
+
 function hasInspectionAvailableFromInformation(text) {
   const normalized = normalizeScriptedText(text);
   const availableFrom = normalizeScriptedText(scenario.availableFrom || "");
@@ -1500,6 +1509,16 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
     return state.inspectionMileageAsked
       && hasSupportedInspectionDuration(normalized)
       && hasWaiting;
+  }
+
+  // お客様がすでに代車を希望した分岐では、スタッフが手配を明確に承諾すれば完了とする。
+  // スタッフ側から先に代車を案内する通常分岐では、従来の「早め・予約・用意」を維持する。
+  if (
+    step.key === "explained_loaner"
+    && state.inspectionWaitingRequested
+    && hasInspectionLoanerConfirmation(normalized)
+  ) {
+    return true;
   }
 
   if (matchedGroups.every((matches) => matches.length > 0)) return true;
