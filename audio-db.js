@@ -384,7 +384,7 @@ const vehicleInspectionAudioLines = [
   ["inspection_proposed_appointment_retry", "予約日時提案・聞き返し", "具体的な日時を教えてください。"],
   ["inspection_confirmed_waiting_customer", "待ち方確認・お客様回答", "待っています。"],
   ["inspection_confirmed_waiting_retry", "待ち方確認・聞き返し", "代車を借りるのと、待つのと、どちらですか？"],
-  ["inspection_asked_vehicle_concerns_customer", "車両状態確認・お客様回答", "別にないです。"],
+  ["inspection_asked_vehicle_concerns_customer", "車両状態確認・オイル交換希望", "オイル交換もお願いしたいです。"],
   ["inspection_asked_vehicle_concerns_retry", "車両状態確認・聞き返し", "ほかに確認することはありますか？"],
   ["inspection_explained_documents_customer", "持参品案内・お客様回答", "はい。"],
   ["inspection_explained_documents_retry", "持参品案内・聞き返し", "当日に必要な物を教えてください。"],
