@@ -43,6 +43,7 @@ const state = {
   scriptedPartialReplies: {},
   inspectionExpiryEvidence: "",
   inspectionAvailabilityFollowUpPending: false,
+  inspectionMileageAsked: false,
   inspectionWaitingRequested: false,
   usedVariants: {},
   questionRepeats: {},
@@ -237,6 +238,7 @@ function selectScenario(scenarioId) {
   state.scriptedPartialReplies = {};
   state.inspectionExpiryEvidence = "";
   state.inspectionAvailabilityFollowUpPending = false;
+  state.inspectionMileageAsked = false;
   state.inspectionWaitingRequested = false;
   state.usedVariants = {};
   state.questionRepeats = {};
@@ -786,6 +788,7 @@ function startRoleplay() {
   state.scriptedPartialReplies = {};
   state.inspectionExpiryEvidence = "";
   state.inspectionAvailabilityFollowUpPending = false;
+  state.inspectionMileageAsked = false;
   state.inspectionWaitingRequested = false;
   state.usedVariants = {};
   state.questionRepeats = {};
@@ -1459,6 +1462,12 @@ function hasLockNutToolExpression(text) {
   return hasToolWord && hasLockNutContext;
 }
 
+function asksCurrentMileage(text) {
+  const normalized = normalizeScriptedText(text).toLowerCase();
+  if (!isScriptedQuestion(normalized)) return false;
+  return /(?:走行距離|距離数|何(?:キロ|km))/.test(normalized);
+}
+
 function hasBookingContinuationConfirmation(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
@@ -1484,14 +1493,16 @@ function advancedPastScriptedStep(startingIndex, currentIndex, steps, stepKey) {
 }
 
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
-  if (matchedGroups.every((matches) => matches.length > 0)) return true;
-
   // Firestoreの公開シナリオに旧キーワードが残っていても、
-  // 確定済みの作業時間（60・75・90分）と店内待ちの判定を維持する。
+  // 走行距離確認と、確定済みの作業時間（60・75・90分）・店内待ちを必須にする。
   if (step.key === "explained_duration_and_wait") {
     const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
-    return hasSupportedInspectionDuration(normalized) && hasWaiting;
+    return state.inspectionMileageAsked
+      && hasSupportedInspectionDuration(normalized)
+      && hasWaiting;
   }
+
+  if (matchedGroups.every((matches) => matches.length > 0)) return true;
 
   if (step.key === "asked_availability") {
     return hasInspectionBookingInvitation(normalized);
@@ -1724,6 +1735,13 @@ function scriptedRetryForMissingDetails(text, step) {
   if (step.key === "explained_duration_and_wait") {
     const hasDuration = hasSupportedInspectionDuration(normalized);
     const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
+    if (!state.inspectionMileageAsked) {
+      return {
+        text: "走行距離は確認しなくて大丈夫ですか？",
+        audioId: "inspection_mileage_missing_retry",
+        missingDetail: "mileage"
+      };
+    }
     if (hasDuration && !hasWaiting) {
       return {
         text: "お店で待つことはできますか？",
@@ -1857,6 +1875,23 @@ function handleScriptedStaffReply(text) {
       renderProgress();
       return;
     }
+  }
+
+  // 初回車検の作業時間を判断するため、現在の走行距離を先に確認する。
+  // 同じ発話ですでに時間を説明していた場合も、その内容は次の判定まで保持する。
+  if (step.key === "explained_duration_and_wait" && asksCurrentMileage(text)) {
+    state.inspectionMileageAsked = true;
+    state.scriptedPartialReplies[step.key] = {
+      text: combinedScriptedReply(text, step),
+      missingDetail: "mileageAnswered"
+    };
+    state.turn += 1;
+    addMessage("customer", "今、3万キロくらいです。", {
+      audioId: "inspection_current_mileage_customer"
+    });
+    els.speechNote.textContent = "走行距離は約3万kmです。続けて、作業時間と店内で待てるかをご案内ください。";
+    renderProgress();
+    return;
   }
 
   if (step.key === "confirmed_identity" && isPhoneGreetingOnly(text)) {
