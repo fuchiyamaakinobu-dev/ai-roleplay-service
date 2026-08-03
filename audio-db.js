@@ -353,9 +353,7 @@ window.ROLEPLAY_AUDIO_DB = {
 const vehicleInspectionAudioLines = [
   ["inspection_call_ringback", "電話冒頭・呼び出し音", "（呼び出し音）"],
   ["inspection_phone_greeting_customer", "電話冒頭・お客様挨拶", "はい、もしもし。"],
-  ["inspection_identity_missing_after_introduction", "名乗り済み・本人確認不足", "はい。どちらにおかけですか？"],
   ["inspection_confirmed_identity_customer", "本人確認・お客様回答", "そうです。"],
-  ["inspection_confirmed_identity_retry", "本人確認・聞き返し", "どちらにお掛けですか？"],
   ["inspection_introduced_self_customer", "名乗り・お客様回答", "お世話になっております。"],
   ["inspection_introduced_self_retry", "名乗り・聞き返し", "どちら様でしょうか？"],
   ["inspection_thanked_customer_customer", "利用へのお礼・お客様回答", "こちらこそ。"],
@@ -363,6 +361,8 @@ const vehicleInspectionAudioLines = [
   ["inspection_explained_inspection_notice_customer", "車検案内・お客様回答", "案内のはがきが来ていましたよ。"],
   ["inspection_explained_inspection_notice_retry", "車検案内・聞き返し", "はい？ ご用件は何ですか？"],
   ["inspection_asked_availability_customer", "都合確認・お客様回答", "お願いしたいんですけど、いつできますか？"],
+  ["inspection_booking_invitation_accept_customer", "電話予約提案・承諾", "お願いします。"],
+  ["inspection_booking_invitation_intent_customer", "電話予約提案・承諾（予定済み）", "お願いしようと思っていました。"],
   ["inspection_asked_availability_retry", "都合確認・聞き返し", "それで、どうしたらいいですか？"],
   ["inspection_explained_available_period_customer", "車検満了日案内後・お客様回答", "どれくらい時間がかかるのですか？"],
   ["inspection_available_from_optional_question", "入庫可能日・任意質問", "いつから車検を受けられるんですか？"],

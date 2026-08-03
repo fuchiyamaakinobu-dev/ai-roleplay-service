@@ -198,7 +198,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       expected: "お客様名を呼び、本人か確認する",
       requiredGroups: [["佐藤", "斉藤"], ["でしょうか", "ですか"]],
       customerResponse: "そうです。",
-      retryResponse: "どちらにお掛けですか？"
+      retryResponse: "どちら様でしょうか？"
     },
     {
       state: "PHONE_OPENING",
@@ -229,7 +229,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       state: "INSPECTION_GUIDANCE",
       key: "asked_availability",
       expected: "車検の都合を確認する",
-      requiredGroups: [["ご都合", "予定", "日程"]],
+      requiredGroups: [["ご都合", "予定", "日程", "予約"]],
       customerResponse: "お願いしたいんですけど、いつできますか？",
       retryResponse: "それで、どうしたらいいですか？"
     },

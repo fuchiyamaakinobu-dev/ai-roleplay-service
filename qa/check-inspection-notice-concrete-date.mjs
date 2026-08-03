@@ -109,7 +109,7 @@ assert.equal(
 );
 assert.match(
   source,
-  /step\.advanceOnFailure === true[\s\S]*?state\.scriptedPartialReplies\[followingStep\.key\]/,
+  /scriptedStepCanAdvanceOnFailure\(step\)[\s\S]*?state\.scriptedPartialReplies\[followingStep\.key\]/,
   "お礼を省略して進んだ発話が次の項目へ引き継がれません"
 );
 assert.match(
