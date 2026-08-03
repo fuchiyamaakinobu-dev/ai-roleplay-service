@@ -361,6 +361,8 @@ const vehicleInspectionAudioLines = [
   ["inspection_explained_inspection_notice_customer", "車検案内・お客様回答", "案内のはがきが来ていましたよ。"],
   ["inspection_explained_inspection_notice_retry", "車検案内・聞き返し", "はい？ ご用件は何ですか？"],
   ["inspection_asked_availability_customer", "都合確認・お客様回答", "お願いしたいんですけど、いつできますか？"],
+  ["inspection_booking_invitation_accept_customer", "電話予約提案・承諾", "お願いします。"],
+  ["inspection_booking_invitation_intent_customer", "電話予約提案・承諾（予定済み）", "お願いしようと思っていました。"],
   ["inspection_asked_availability_retry", "都合確認・聞き返し", "それで、どうしたらいいですか？"],
   ["inspection_explained_available_period_customer", "車検満了日案内後・お客様回答", "どれくらい時間がかかるのですか？"],
   ["inspection_available_from_optional_question", "入庫可能日・任意質問", "いつから車検を受けられるんですか？"],

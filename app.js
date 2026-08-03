@@ -1469,6 +1469,20 @@ function hasBookingContinuationConfirmation(text) {
   return hasTimeContext || hasBookingContext;
 }
 
+function hasInspectionBookingInvitation(text) {
+  const normalized = normalizeScriptedText(text);
+  if (!normalized.includes("予約") || !isScriptedQuestion(normalized)) return false;
+  if (/(?:代車.{0,10}予約|予約.{0,10}代車)/.test(normalized)) return false;
+  return /(?:この電話|お電話).{0,16}(?:ご)?予約/.test(normalized)
+    || /(?:ご)?予約(?:を)?(?:承|お取り|取れ|でき|進め|しま)/.test(normalized)
+    || /(?:ご)?予約.{0,12}いかが/.test(normalized);
+}
+
+function advancedPastScriptedStep(startingIndex, currentIndex, steps, stepKey) {
+  const targetIndex = steps.findIndex((item) => item.key === stepKey);
+  return targetIndex >= 0 && startingIndex <= targetIndex && currentIndex > targetIndex;
+}
+
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   if (matchedGroups.every((matches) => matches.length > 0)) return true;
 
@@ -1477,6 +1491,10 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   if (step.key === "explained_duration_and_wait") {
     const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
     return hasSupportedInspectionDuration(normalized) && hasWaiting;
+  }
+
+  if (step.key === "asked_availability") {
+    return hasInspectionBookingInvitation(normalized);
   }
 
   if (step.key !== "explained_inspection_notice") return false;
@@ -1814,6 +1832,7 @@ function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
 }
 
 function handleScriptedStaffReply(text) {
+  const startingScriptStep = state.scriptStep;
   const step = scenario.steps[state.scriptStep];
   if (!step) {
     finishRoleplay();
@@ -2031,6 +2050,27 @@ function handleScriptedStaffReply(text) {
     && scriptedStepCanAdvanceOnFailure(step)
     && !hasCourtesyExpression(text);
   const skippedIdentity = useAdvanceRetry && step.key === "confirmed_identity";
+  if (
+    !customerResponseOverride
+    && hasInspectionBookingInvitation(combinedText)
+    && advancedPastScriptedStep(
+      startingScriptStep,
+      state.scriptStep,
+      scenario.steps,
+      "asked_availability"
+    )
+  ) {
+    customerResponseOverride = nextQuestionVariant("inspection-booking-invitation-accept", [
+      {
+        text: "お願いします。",
+        audioId: "inspection_booking_invitation_accept_customer"
+      },
+      {
+        text: "お願いしようと思っていました。",
+        audioId: "inspection_booking_invitation_intent_customer"
+      }
+    ]);
+  }
   addMessage("customer", customerResponseOverride?.text
     || (skippedIdentity
       ? "どちら様でしょうか？"
