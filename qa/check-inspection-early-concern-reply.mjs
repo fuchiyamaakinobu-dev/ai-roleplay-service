@@ -62,8 +62,13 @@ assert.match(
 );
 assert.match(
   audioDbSource,
-  /inspection_asked_vehicle_concerns_customer",\s*"車両状態確認・オイル交換希望",\s*"オイル交換もお願いしたいです。",\s*"pending"/,
+  /inspection_asked_vehicle_concerns_customer",\s*"車両状態確認・オイル交換希望",\s*"オイル交換もお願いしたいです。"\]/,
   "表示文と音声登録文が一致していません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_asked_vehicle_concerns_customer.mp3", import.meta.url)),
+  true,
+  "オイル交換希望の男性音声ファイルがありません"
 );
 assert.doesNotMatch(
   scenarioSource + audioDbSource,
