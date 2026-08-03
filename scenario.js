@@ -198,7 +198,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       expected: "お客様名を呼び、本人か確認する",
       requiredGroups: [["佐藤", "斉藤"], ["でしょうか", "ですか"]],
       customerResponse: "そうです。",
-      retryResponse: "どちらにお掛けですか？"
+      retryResponse: "どちら様でしょうか？"
     },
     {
       state: "PHONE_OPENING",

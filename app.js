@@ -1520,7 +1520,7 @@ function analyzeScriptedStaff(text, step) {
       && normalized.includes(`${appointment.hour}時`)
     );
   }
-  const canAdvance = passed || step.advanceOnFailure === true;
+  const canAdvance = passed || scriptedStepCanAdvanceOnFailure(step);
   const analysis = {
     scripted: true,
     stepKey: step.key,
@@ -1534,6 +1534,10 @@ function analyzeScriptedStaff(text, step) {
   analysis[step.key] = passed;
   state.analyses.push(analysis);
   return analysis;
+}
+
+function scriptedStepCanAdvanceOnFailure(step) {
+  return step?.advanceOnFailure === true || step?.key === "confirmed_identity";
 }
 
 function markScriptedStepNotApplicable(step, reason) {
@@ -1846,21 +1850,6 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
-  if (step.key === "confirmed_identity" && !scriptedStepMatches(text, step)) {
-    const introductionStep = scenario.steps.find((item) => item.key === "introduced_self");
-    if (introductionStep && scriptedStepMatches(text, introductionStep)) {
-      analyzeScriptedStaff(text, step);
-      analyzeScriptedStaff(text, introductionStep);
-      state.turn += 1;
-      addMessage("customer", "はい。どちらにおかけですか？", {
-        audioId: "inspection_identity_missing_after_introduction"
-      });
-      els.speechNote.textContent = "店舗名と担当者名は確認できました。続けて、お客様のお名前を確認してください。";
-      renderProgress();
-      return;
-    }
-  }
-
   const closingIntent = hasScriptedClosingIntent(text);
   const closingIndex = scenario.steps.findIndex((item) => item.key === "closed_politely");
 
@@ -1975,7 +1964,7 @@ function handleScriptedStaffReply(text) {
   const followingStep = scenario.steps[state.scriptStep + 1];
   if (
     !analysis.passed
-    && step.advanceOnFailure === true
+    && scriptedStepCanAdvanceOnFailure(step)
     && followingStep
     && !scriptedStepMatches(combinedText, followingStep)
   ) {
@@ -2039,12 +2028,17 @@ function handleScriptedStaffReply(text) {
   }
   const useAdvanceRetry = responseStep === step
     && !analysis.passed
-    && step.advanceOnFailure === true
+    && scriptedStepCanAdvanceOnFailure(step)
     && !hasCourtesyExpression(text);
+  const skippedIdentity = useAdvanceRetry && step.key === "confirmed_identity";
   addMessage("customer", customerResponseOverride?.text
-    || (useAdvanceRetry ? step.retryResponse : responseStep.customerResponse), {
+    || (skippedIdentity
+      ? "どちら様でしょうか？"
+      : useAdvanceRetry ? step.retryResponse : responseStep.customerResponse), {
     audioId: customerResponseOverride?.audioId
-      || (useAdvanceRetry
+      || (skippedIdentity
+        ? "inspection_introduced_self_retry"
+        : useAdvanceRetry
         ? `inspection_${step.key}_retry`
         : `inspection_${responseStep.key}_customer`),
     onCommitted: finished
