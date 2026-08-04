@@ -139,8 +139,13 @@ assert.match(
 );
 assert.match(
   audioDbSource,
-  /inspection_current_mileage_customer",\s*"走行距離確認・お客様回答",\s*"今、3万キロくらいです。",\s*"pending"/,
+  /inspection_current_mileage_customer",\s*"走行距離確認・お客様回答",\s*"今、3万キロくらいです。"/,
   "走行距離回答の音声登録文が一致していません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_current_mileage_customer.mp3", import.meta.url)),
+  true,
+  "走行距離回答のMP3が見つかりません"
 );
 assert.doesNotMatch(
   appSource + audioDbSource,

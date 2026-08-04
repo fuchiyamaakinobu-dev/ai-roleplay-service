@@ -478,6 +478,7 @@ h1 {
 
 .sticky-context[hidden],
 .customer-info-panel[hidden],
+.customer-speech-panel[hidden],
 .progress-panel[hidden] {
   display: none;
 }
@@ -503,6 +504,99 @@ h1 {
   font-size: 13px;
   font-weight: 800;
   line-height: 1.45;
+}
+
+.customer-speech-panel {
+  display: grid;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid rgba(16, 95, 194, 0.28);
+  border-radius: 8px;
+  color: var(--navy);
+  background: #f7faff;
+}
+
+.customer-speech-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+}
+
+.customer-speech-head strong {
+  font-size: 12px;
+}
+
+.customer-speech-head span {
+  color: #526176;
+  font-weight: 800;
+}
+
+.customer-speech-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.customer-speech-group {
+  min-width: 0;
+}
+
+.customer-speech-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #526176;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.customer-speech-list {
+  display: grid;
+  gap: 4px;
+  max-height: 92px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.customer-speech-item {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
+  gap: 7px;
+  align-items: baseline;
+  padding: 5px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.customer-speech-item span {
+  color: #617089;
+  font-weight: 800;
+}
+
+.customer-speech-item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.customer-speech-item.is-required {
+  border: 1px solid #d7e2f3;
+  background: #fff;
+}
+
+.customer-speech-item.is-confirmed {
+  border: 1px solid rgba(8, 120, 74, 0.25);
+  color: #07583a;
+  background: #effaf4;
+}
+
+.customer-speech-empty {
+  margin: 0;
+  padding: 7px;
+  color: #7b8492;
+  background: #fff;
+  font-size: 10px;
 }
 
 .progress-panel {
@@ -889,6 +983,10 @@ textarea:focus {
     align-items: flex-start;
     flex-direction: column;
     gap: 3px;
+  }
+
+  .customer-speech-columns {
+    grid-template-columns: 1fr;
   }
 
   .input-row {

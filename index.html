@@ -85,6 +85,23 @@
             <p id="customerInfoText"></p>
           </section>
 
+          <section class="customer-speech-panel" id="customerSpeechPanel" aria-label="お客様発話チェック" hidden>
+            <div class="customer-speech-head">
+              <strong>お客様発話チェック</strong>
+              <span id="customerSpeechSummary">開始前</span>
+            </div>
+            <div class="customer-speech-columns">
+              <div class="customer-speech-group">
+                <span class="customer-speech-label">必要な発話（今後の基本発話）</span>
+                <div class="customer-speech-list" id="requiredCustomerSpeech"></div>
+              </div>
+              <div class="customer-speech-group">
+                <span class="customer-speech-label">確認できた発話（実際の発話）</span>
+                <div class="customer-speech-list" id="confirmedCustomerSpeech"></div>
+              </div>
+            </div>
+          </section>
+
           <div class="progress-panel" id="progressPanel">
             <div class="progress-strip" id="progressStrip" aria-label="進行状況"></div>
             <div class="progress-legend" aria-label="進行チェックの色の説明">

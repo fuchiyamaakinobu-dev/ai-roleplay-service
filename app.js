@@ -45,6 +45,8 @@ const state = {
   inspectionAvailabilityFollowUpPending: false,
   inspectionMileageAsked: false,
   inspectionWaitingRequested: false,
+  inspectionLoanerRequested: false,
+  inspectionLoanerConfirmed: false,
   usedVariants: {},
   questionRepeats: {},
   customerReplyPending: false
@@ -63,6 +65,10 @@ const els = {
   stickyContext: document.querySelector("#stickyContext"),
   customerInfoPanel: document.querySelector("#customerInfoPanel"),
   customerInfoText: document.querySelector("#customerInfoText"),
+  customerSpeechPanel: document.querySelector("#customerSpeechPanel"),
+  customerSpeechSummary: document.querySelector("#customerSpeechSummary"),
+  requiredCustomerSpeech: document.querySelector("#requiredCustomerSpeech"),
+  confirmedCustomerSpeech: document.querySelector("#confirmedCustomerSpeech"),
   progressPanel: document.querySelector("#progressPanel"),
   employeeCode: document.querySelector("#employeeCode"),
   voiceSelect: document.querySelector("#voiceSelect"),
@@ -240,6 +246,8 @@ function selectScenario(scenarioId) {
   state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionMileageAsked = false;
   state.inspectionWaitingRequested = false;
+  state.inspectionLoanerRequested = false;
+  state.inspectionLoanerConfirmed = false;
   state.usedVariants = {};
   state.questionRepeats = {};
   state.startedAt = null;
@@ -377,6 +385,47 @@ function renderCustomerInfo() {
   return visible;
 }
 
+function renderCustomerSpeechIndicator(progressVisible) {
+  const visible = progressVisible && scenario.id === "vehicle-inspection-phone-followup";
+  if (els.customerSpeechPanel) els.customerSpeechPanel.hidden = !visible;
+  if (!visible) return;
+
+  const scoringByKey = new Map((scenario.scoring || []).map((item) => [item.key, item]));
+  const completedStepKeys = new Set(
+    (state.analyses || [])
+      .filter((analysis) => analysis.passed || analysis.notApplicable)
+      .map((analysis) => analysis.stepKey),
+  );
+  const remainingSteps = (scenario.steps || [])
+    .slice(Math.min(state.scriptStep, scenario.steps.length))
+    .filter((step) => !completedStepKeys.has(step.key));
+  const confirmedMessages = state.transcript.filter((message) => message.role === "customer");
+
+  if (els.customerSpeechSummary) {
+    els.customerSpeechSummary.textContent = `必要 ${remainingSteps.length}件／確認済み ${confirmedMessages.length}件`;
+  }
+  if (els.requiredCustomerSpeech) {
+    els.requiredCustomerSpeech.innerHTML = remainingSteps.length
+      ? remainingSteps.map((step) => {
+          const label = scoringByKey.get(step.key)?.label || step.expected || step.key;
+          return `<div class="customer-speech-item is-required">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(step.customerResponse || step.retryResponse || "確認待ち")}</strong>
+          </div>`;
+        }).join("")
+      : '<p class="customer-speech-empty">必要な基本発話はありません。</p>';
+  }
+  if (els.confirmedCustomerSpeech) {
+    els.confirmedCustomerSpeech.innerHTML = confirmedMessages.length
+      ? confirmedMessages.map((message, index) => `<div class="customer-speech-item is-confirmed">
+          <span>発話 ${index + 1}</span>
+          <strong>${escapeHtml(message.text)}</strong>
+        </div>`).join("")
+      : '<p class="customer-speech-empty">まだお客様発話はありません。</p>';
+    els.confirmedCustomerSpeech.scrollTop = els.confirmedCustomerSpeech.scrollHeight;
+  }
+}
+
 function renderProgress() {
   const visible = els.progressEnabled?.checked !== false;
   const customerVisible = renderCustomerInfo();
@@ -384,6 +433,7 @@ function renderProgress() {
   if (els.progressPanel) els.progressPanel.hidden = !visible;
   if (els.stateLabel) els.stateLabel.hidden = !visible;
   if (els.progressToggleState) els.progressToggleState.textContent = visible ? "ON" : "OFF";
+  renderCustomerSpeechIndicator(visible);
   if (!visible) return;
 
   const merged = mergedProgressAchievements();
@@ -466,7 +516,15 @@ function commitMessage(role, text, options = {}) {
     audioSrc: audioPath(options.audioId)
   };
   state.transcript.push(message);
+  if (
+    role === "customer"
+    && scenario.id === "vehicle-inspection-phone-followup"
+    && /代車.*(?:貸して|用意して|借りたい|お願い|ほしい)/.test(normalizeScriptedText(text))
+  ) {
+    state.inspectionLoanerRequested = true;
+  }
   renderConversation();
+  renderProgress();
   if (role === "customer") {
     if (els.audioEnabled.checked && message.audioSrc) {
       playAudio(message.audioSrc, message.text, false, startSpeechInputAfterCustomer);
@@ -790,6 +848,8 @@ function startRoleplay() {
   state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionMileageAsked = false;
   state.inspectionWaitingRequested = false;
+  state.inspectionLoanerRequested = false;
+  state.inspectionLoanerConfirmed = false;
   state.usedVariants = {};
   state.questionRepeats = {};
   state.employeeCode = employeeCode;
@@ -1496,6 +1556,31 @@ function hasInspectionBookingInvitation(text) {
     || /(?:ご)?予約.{0,12}いかが/.test(normalized);
 }
 
+function hasInspectionAppointmentProposalEvidence(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasConcreteDateOrTime = /\d{1,2}月\d{1,2}日/.test(normalized)
+    || /\d{1,2}時/.test(normalized);
+  const hasProposalContext = /(?:いかが|どうでしょう|空いて|空き|予約|予定)/.test(normalized);
+  return hasConcreteDateOrTime && hasProposalContext && isScriptedQuestion(normalized);
+}
+
+function hasInspectionScheduleQuestionIntent(normalized) {
+  return isScriptedQuestion(normalized)
+    || /(?:ご)?都合.{0,12}(?:よろしい|良い|いい)(?:でしょう)?/.test(normalized);
+}
+
+function hasInspectionAppointmentCoordinationEvidence(text) {
+  if (hasInspectionAppointmentProposalEvidence(text)) return true;
+  const normalized = normalizeScriptedText(text);
+  const hasDayPreference = /(?:平日|土日|週末|(?:月|火|水|木|金|土|日)(?:曜|曜日))/.test(normalized);
+  const hasTimePreference = /(?:何時|午前|午後|時間帯)/.test(normalized);
+  const hasSchedulingContext = /(?:予約|予定|空いて|空き|都合|いかが|よろしい)/.test(normalized);
+  return hasDayPreference
+    && hasTimePreference
+    && hasSchedulingContext
+    && hasInspectionScheduleQuestionIntent(normalized);
+}
+
 function advancedPastScriptedStep(startingIndex, currentIndex, steps, stepKey) {
   const targetIndex = steps.findIndex((item) => item.key === stepKey);
   return targetIndex >= 0 && startingIndex <= targetIndex && currentIndex > targetIndex;
@@ -1515,7 +1600,7 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // スタッフ側から先に代車を案内する通常分岐では、従来の「早め・予約・用意」を維持する。
   if (
     step.key === "explained_loaner"
-    && state.inspectionWaitingRequested
+    && state.inspectionLoanerRequested
     && hasInspectionLoanerConfirmation(normalized)
   ) {
     return true;
@@ -1585,6 +1670,9 @@ function analyzeScriptedStaff(text, step) {
   };
   analysis[step.key] = passed;
   state.analyses.push(analysis);
+  if (step.key === "explained_loaner" && passed && state.inspectionLoanerRequested) {
+    state.inspectionLoanerConfirmed = true;
+  }
   return analysis;
 }
 
@@ -1609,6 +1697,25 @@ function markScriptedStepNotApplicable(step, reason) {
     evidence: [reason]
   };
   analysis[step.key] = false;
+  state.analyses.push(analysis);
+}
+
+function markScriptedStepPassed(step, evidence) {
+  if (!step || state.analyses.some((analysis) =>
+    analysis.stepKey === step.key && analysis.passed === true
+  )) return;
+
+  const analysis = {
+    scripted: true,
+    stepKey: step.key,
+    expected: step.expected,
+    passed: true,
+    canAdvance: true,
+    blocked: false,
+    confidence: 1,
+    evidence: [evidence]
+  };
+  analysis[step.key] = true;
   state.analyses.push(analysis);
 }
 
@@ -1715,6 +1822,40 @@ function shouldAnswerDayPreferenceFromStoredExpiry(text, step) {
 
 function scriptedRetryForMissingDetails(text, step) {
   const normalized = normalizeScriptedText(text);
+
+  if (step.key === "proposed_appointment") {
+    const hasDate = /\d{1,2}月\d{1,2}日/.test(normalized);
+    const hasTime = /\d{1,2}時/.test(normalized);
+    const hasWeekday = /(?:月|火|水|木|金|土|日)(?:曜|曜日)/.test(normalized);
+    const asksTimePreference = /(?:何時|午前|午後|時間帯)/.test(normalized);
+    if (
+      !hasDate
+      && !hasTime
+      && hasWeekday
+      && asksTimePreference
+      && hasInspectionScheduleQuestionIntent(normalized)
+    ) {
+      return {
+        text: "午前中でお願いします。何日の予定ですか？",
+        audioId: "inspection_appointment_morning_need_date",
+        missingDetail: "appointmentDate"
+      };
+    }
+    if (hasDate && !hasTime) {
+      return {
+        text: "何時が空いていますか？",
+        audioId: "inspection_appointment_time_missing_retry",
+        missingDetail: "appointmentTime"
+      };
+    }
+    if (hasTime && !hasDate) {
+      return {
+        text: "何日の予定ですか？",
+        audioId: "inspection_appointment_date_missing_retry",
+        missingDetail: "appointmentDate"
+      };
+    }
+  }
 
   if (step.key === "explained_available_period") {
     if (asksInspectionDayPreference(normalized)) {
@@ -1944,6 +2085,22 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // 予約手続き時間の了承確認を省略して、具体的な日付・時刻の提案へ進んだ場合は、
+  // 省略項目を未達として残しつつ、過去の手続き確認へ戻らず日時調整を続ける。
+  if (
+    step.key === "confirmed_booking_time"
+    && hasInspectionAppointmentCoordinationEvidence(text)
+  ) {
+    const skippedAnalysis = analyzeScriptedStaff(combinedScriptedReply(text, step), step);
+    skippedAnalysis.canAdvance = true;
+    skippedAnalysis.blocked = false;
+    delete state.scriptedPartialReplies[step.key];
+    state.scriptStep += 1;
+    state.currentState = scenario.steps[state.scriptStep].state;
+    handleScriptedStaffReply(text);
+    return;
+  }
+
   const closingIntent = hasScriptedClosingIntent(text);
   const closingIndex = scenario.steps.findIndex((item) => item.key === "closed_politely");
 
@@ -2111,6 +2268,14 @@ function handleScriptedStaffReply(text) {
     const nextAnalysis = analyzeScriptedStaff(combinedText, nextStep);
     if (!nextAnalysis.canAdvance) break;
     responseStep = nextStep;
+    state.scriptStep += 1;
+  }
+
+  // お客様が代車を希望し、スタッフが手配を承諾済みなら待ち方は確定済み。
+  // 後工程で「店内で待つ」と回答して代車希望と矛盾しないよう、待ち方確認を通過する。
+  const resolvedWaitingStep = scenario.steps[state.scriptStep];
+  if (resolvedWaitingStep?.key === "confirmed_waiting" && state.inspectionLoanerConfirmed) {
+    markScriptedStepPassed(resolvedWaitingStep, "お客様の代車希望とスタッフの手配承諾で待ち方を確認済み");
     state.scriptStep += 1;
   }
 
