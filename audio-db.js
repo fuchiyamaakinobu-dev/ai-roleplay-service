@@ -1,5 +1,5 @@
 window.ROLEPLAY_AUDIO_DB = {
-  version: "2026-08-01.1",
+  version: "2026-08-04.1",
   defaultVoice: "makoto_customer_support",
   voices: {
     makoto_customer_support: {
@@ -373,7 +373,7 @@ const vehicleInspectionAudioLines = [
   ["inspection_weekend_preference_and_expiry_question", "週末希望回答・車検期限確認", "週末のほうが都合がいいです。それと、車検はいつまでに受ければよいですか？"],
   ["inspection_explained_duration_and_wait_customer", "作業時間・お客様回答", "代車は貸してもらえますか？"],
   ["inspection_explained_duration_and_wait_retry", "作業時間・聞き返し", "どれくらい時間がかかるのですか？"],
-  ["inspection_current_mileage_customer", "走行距離確認・お客様回答", "今、3万キロくらいです。", "pending"],
+  ["inspection_current_mileage_customer", "走行距離確認・お客様回答", "今、3万キロくらいです。"],
   ["inspection_duration_wait_missing_retry", "店内待ち案内不足・聞き返し", "お店で待つことはできますか？"],
   ["inspection_waiting_followup_loaner_request", "店内待ち確認後・代車希望", "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？"],
   ["inspection_explained_loaner_customer", "代車案内・お客様回答", "予約しようかな。"],
@@ -382,6 +382,9 @@ const vehicleInspectionAudioLines = [
   ["inspection_confirmed_booking_time_retry", "予約時間確認・聞き返し", "今、このまま予約できますか？"],
   ["inspection_proposed_appointment_customer", "予約日時提案・お客様回答", "では、その日でお願いします。"],
   ["inspection_proposed_appointment_retry", "予約日時提案・聞き返し", "具体的な日時を教えてください。"],
+  ["inspection_appointment_morning_need_date", "曜日・時間帯質問後の日付確認", "午前中でお願いします。何日の予定ですか？"],
+  ["inspection_appointment_time_missing_retry", "予約日時提案・時刻不足", "何時が空いていますか？"],
+  ["inspection_appointment_date_missing_retry", "予約日時提案・日付不足", "何日の予定ですか？"],
   ["inspection_confirmed_waiting_customer", "待ち方確認・お客様回答", "待っています。"],
   ["inspection_confirmed_waiting_retry", "待ち方確認・聞き返し", "代車を借りるのと、待つのと、どちらですか？"],
   ["inspection_asked_vehicle_concerns_customer", "車両状態確認・オイル交換希望", "オイル交換もお願いしたいです。"],
