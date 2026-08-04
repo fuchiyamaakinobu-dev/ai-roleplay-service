@@ -42,6 +42,16 @@ assert.equal(
   false,
   "単なる曜日の言及を日時調整として誤認識しています"
 );
+assert.equal(
+  proposalContext.hasInspectionAppointmentCoordinationEvidence("ご都合なんですが、いつぐらいとかご希望ありますでしょうか？"),
+  true,
+  "具体値のない希望日時質問を日時調整の開始として認識できません"
+);
+assert.equal(
+  proposalContext.hasInspectionAppointmentCoordinationEvidence("いつもありがとうございます。ほかにご希望はありますか？"),
+  false,
+  "日程と無関係な希望確認を日時調整として誤認識しています"
+);
 
 const retryStart = appSource.indexOf("function scriptedRetryForMissingDetails");
 const retryEnd = appSource.indexOf("function naturalScriptedRetryVariants", retryStart);
@@ -82,6 +92,16 @@ assert.equal(
   weekdayTimePreferenceRetry.audioId,
   "inspection_appointment_morning_need_date",
   "曜日・時間帯質問後の音声IDが一致していません"
+);
+
+const openPreferenceRetry = retryContext.scriptedRetryForMissingDetails(
+  "ご都合なんですが、いつぐらいとかご希望ありますでしょうか？",
+  { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }
+);
+assert.equal(
+  openPreferenceRetry.text,
+  "具体的な日時を教えてください。",
+  "希望日時を質問された後に既存の具体日時確認へ進みません"
 );
 
 assert.match(

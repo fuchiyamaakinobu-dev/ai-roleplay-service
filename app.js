@@ -1574,9 +1574,10 @@ function hasInspectionAppointmentCoordinationEvidence(text) {
   const normalized = normalizeScriptedText(text);
   const hasDayPreference = /(?:平日|土日|週末|(?:月|火|水|木|金|土|日)(?:曜|曜日))/.test(normalized);
   const hasTimePreference = /(?:何時|午前|午後|時間帯)/.test(normalized);
+  const openTimingQuestion = /(?:いつ(?:ぐらい|頃|ごろ|なら|が|に|から|まで)|何日|何時)/;
+  const asksOpenPreference = new RegExp(`(?:都合|希望).{0,24}${openTimingQuestion.source}|${openTimingQuestion.source}.{0,24}(?:都合|希望)`).test(normalized);
   const hasSchedulingContext = /(?:予約|予定|空いて|空き|都合|いかが|よろしい)/.test(normalized);
-  return hasDayPreference
-    && hasTimePreference
+  return (hasDayPreference && hasTimePreference || asksOpenPreference)
     && hasSchedulingContext
     && hasInspectionScheduleQuestionIntent(normalized);
 }
