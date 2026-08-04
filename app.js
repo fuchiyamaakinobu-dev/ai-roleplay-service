@@ -1496,6 +1496,14 @@ function hasInspectionBookingInvitation(text) {
     || /(?:ご)?予約.{0,12}いかが/.test(normalized);
 }
 
+function hasInspectionAppointmentProposalEvidence(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasConcreteDateOrTime = /\d{1,2}月\d{1,2}日/.test(normalized)
+    || /\d{1,2}時/.test(normalized);
+  const hasProposalContext = /(?:いかが|どうでしょう|空いて|空き|予約|予定)/.test(normalized);
+  return hasConcreteDateOrTime && hasProposalContext && isScriptedQuestion(normalized);
+}
+
 function advancedPastScriptedStep(startingIndex, currentIndex, steps, stepKey) {
   const targetIndex = steps.findIndex((item) => item.key === stepKey);
   return targetIndex >= 0 && startingIndex <= targetIndex && currentIndex > targetIndex;
@@ -1715,6 +1723,25 @@ function shouldAnswerDayPreferenceFromStoredExpiry(text, step) {
 
 function scriptedRetryForMissingDetails(text, step) {
   const normalized = normalizeScriptedText(text);
+
+  if (step.key === "proposed_appointment") {
+    const hasDate = /\d{1,2}月\d{1,2}日/.test(normalized);
+    const hasTime = /\d{1,2}時/.test(normalized);
+    if (hasDate && !hasTime) {
+      return {
+        text: "何時が空いていますか？",
+        audioId: "",
+        missingDetail: "appointmentTime"
+      };
+    }
+    if (hasTime && !hasDate) {
+      return {
+        text: "何日の予定ですか？",
+        audioId: "",
+        missingDetail: "appointmentDate"
+      };
+    }
+  }
 
   if (step.key === "explained_available_period") {
     if (asksInspectionDayPreference(normalized)) {
@@ -1941,6 +1968,22 @@ function handleScriptedStaffReply(text) {
     });
     els.speechNote.textContent = "電話の挨拶を受けました。続けて、お客様のお名前を確認してください。";
     renderProgress();
+    return;
+  }
+
+  // 予約手続き時間の了承確認を省略して、具体的な日付・時刻の提案へ進んだ場合は、
+  // 省略項目を未達として残しつつ、過去の手続き確認へ戻らず日時調整を続ける。
+  if (
+    step.key === "confirmed_booking_time"
+    && hasInspectionAppointmentProposalEvidence(text)
+  ) {
+    const skippedAnalysis = analyzeScriptedStaff(combinedScriptedReply(text, step), step);
+    skippedAnalysis.canAdvance = true;
+    skippedAnalysis.blocked = false;
+    delete state.scriptedPartialReplies[step.key];
+    state.scriptStep += 1;
+    state.currentState = scenario.steps[state.scriptStep].state;
+    handleScriptedStaffReply(text);
     return;
   }
 
