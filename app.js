@@ -1487,6 +1487,7 @@ function normalizeScriptedText(text) {
     )
     .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1")
     .replace(/台車/g, "代車")
+    .replace(/(?:やりす|ヤリす)/g, "ヤリス")
     .replace(/\s+/g, "");
 }
 
@@ -1547,9 +1548,17 @@ function hasBookingContinuationConfirmation(text) {
   return hasTimeContext || hasBookingContext;
 }
 
+function hasExplicitBookingContinuationConfirmation(text) {
+  const normalized = normalizeScriptedText(text);
+  return hasBookingContinuationConfirmation(normalized)
+    && /(?:予約|手続き)/.test(normalized);
+}
+
 function hasInspectionBookingInvitation(text) {
   const normalized = normalizeScriptedText(text);
-  if (!normalized.includes("予約") || !isScriptedQuestion(normalized)) return false;
+  if (!isScriptedQuestion(normalized)) return false;
+  if (/(?:車検).{0,16}(?:お?決まり|決めて|決められ)/.test(normalized)) return true;
+  if (!normalized.includes("予約")) return false;
   if (/(?:代車.{0,10}予約|予約.{0,10}代車)/.test(normalized)) return false;
   return /(?:この電話|お電話).{0,16}(?:ご)?予約/.test(normalized)
     || /(?:ご)?予約(?:を)?(?:承|お取り|取れ|でき|進め|しま)/.test(normalized)
@@ -2029,10 +2038,10 @@ function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
   });
 }
 
-function recordSkippedStepsBeforeAppointment(text, startIndex, appointmentIndex) {
+function recordSkippedScriptedSteps(text, startIndex, targetIndex, reason) {
   const normalized = normalizeScriptedText(text);
 
-  scenario.steps.slice(startIndex, appointmentIndex).forEach((step) => {
+  scenario.steps.slice(startIndex, targetIndex).forEach((step) => {
     delete state.scriptedPartialReplies[step.key];
     if (state.analyses.some((analysis) => analysis.stepKey === step.key && analysis.passed)) return;
 
@@ -2052,11 +2061,15 @@ function recordSkippedStepsBeforeAppointment(text, startIndex, appointmentIndex)
       blocked: false,
       skippedForAppointment: !passed,
       confidence: passed ? 0.95 : 1,
-      evidence: passed ? matchedGroups.flat().slice(0, 8) : ["入庫日時調整を優先"]
+      evidence: passed ? matchedGroups.flat().slice(0, 8) : [reason]
     };
     analysis[step.key] = passed;
     state.analyses.push(analysis);
   });
+}
+
+function recordSkippedStepsBeforeAppointment(text, startIndex, appointmentIndex) {
+  recordSkippedScriptedSteps(text, startIndex, appointmentIndex, "入庫日時調整を優先");
 }
 
 function handleScriptedStaffReply(text) {
@@ -2082,6 +2095,20 @@ function handleScriptedStaffReply(text) {
     recordSkippedStepsBeforeAppointment(text, state.scriptStep, appointmentIndex);
     state.scriptStep = appointmentIndex;
     state.currentState = scenario.steps[appointmentIndex].state;
+    handleScriptedStaffReply(text);
+    return;
+  }
+
+  // 未確認の前工程があっても、スタッフが予約手続きの所要時間を明確に確認した場合は、
+  // 実際に聞かれた質問へ回答し、前工程は未達のまま日時調整へ進める。
+  const bookingTimeIndex = scenario.steps.findIndex((item) => item.key === "confirmed_booking_time");
+  if (
+    bookingTimeIndex > state.scriptStep
+    && hasExplicitBookingContinuationConfirmation(text)
+  ) {
+    recordSkippedScriptedSteps(text, state.scriptStep, bookingTimeIndex, "予約手続き確認を優先");
+    state.scriptStep = bookingTimeIndex;
+    state.currentState = scenario.steps[bookingTimeIndex].state;
     handleScriptedStaffReply(text);
     return;
   }

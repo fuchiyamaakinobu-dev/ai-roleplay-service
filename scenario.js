@@ -231,7 +231,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       state: "INSPECTION_GUIDANCE",
       key: "asked_availability",
       expected: "車検の都合を確認する",
-      requiredGroups: [["ご都合", "予定", "日程", "予約"]],
+      requiredGroups: [["ご都合", "予定", "日程", "予約", "決まり", "決め"]],
       customerResponse: "お願いしたいんですけど、いつできますか？",
       retryResponse: "それで、どうしたらいいですか？"
     },
