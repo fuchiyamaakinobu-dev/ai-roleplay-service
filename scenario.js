@@ -188,7 +188,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     { key: "confirmed_waiting", label: "待ち方確認", action: "店内で待つか確認する", points: 4 },
     { key: "asked_vehicle_concerns", label: "気になる症状", action: "車の気になる点を確認する", points: 6 },
     { key: "explained_documents", label: "荷物・必要書類", action: "荷物の積み下ろしと必要書類を案内する", points: 8 },
-    { key: "explained_lock_and_arrival", label: "ロックナット・早着", action: "ロックナット用具と15分前来店を案内する", points: 7 },
+    { key: "explained_lock_and_arrival", label: "ロックナット・早着", action: "ロックナット用具と10分または15分前来店を案内する", points: 7 },
     { key: "confirmed_reminder_contact", label: "3日前確認連絡", action: "3日前の確認連絡と連絡先を確認する", points: 6 },
     { key: "recapped_appointment", label: "予約復唱", action: "お客様名と予約日時を復唱する", points: 5 },
     { key: "closed_politely", label: "終話あいさつ", action: "感謝を伝えて丁寧に終話する", points: 4 }
@@ -306,8 +306,8 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     {
       state: "VEHICLE_CHECK",
       key: "explained_lock_and_arrival",
-      expected: "ロックナットキー、アダプター、外す工具などと15分前来店を案内する",
-      requiredGroups: [["ロックナットキー", "ロックキー", "アダプター", "キー", "工具", "道具"], ["15分", "十五分"], ["早め", "前に"]],
+      expected: "ロックナットキー、アダプター、外す工具などと10分または15分前来店を案内する",
+      requiredGroups: [["ロックナットキー", "ロックキー", "アダプター", "キー", "工具", "道具"], ["10分", "十分", "15分", "十五分"], ["早め", "前"]],
       optionalAfterAppointment: true,
       customerResponse: "分かりました。",
       retryResponse: "ほかに持って行く物や、到着時間の注意はありますか？"
@@ -340,7 +340,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     }
   ],
   recommendedTalk:
-    "本人確認、店舗名と担当者名、車種と車検時期を伝え、具体的な入庫日時を確定することが最低限の条件です。日時確定後は終話へ進めます。高得点を目指す場合は、お礼、車検満了日、所要時間、代車、待ち方、車の気になる点、必要書類、ロックナット、15分前来店、3日前確認連絡、予約日時の復唱まで案内してください。"
+    "会話を終了する最低限の条件は、具体的な入庫日と時刻の確定です。その他の未確認項目へ後戻りせず終話できますが、省略項目は得点になりません。高得点を目指す場合は、本人確認、店舗名と担当者名、日頃のお礼、車種と車検時期、満了日、走行距離、所要時間、追加作業、代車、待ち方、必要書類、ロックナット、10分または15分前来店、3日前確認連絡、予約日時の復唱まで案内してください。"
 };
 
 window.ROLEPLAY_SCENARIOS = [

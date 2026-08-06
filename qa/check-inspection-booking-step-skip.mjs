@@ -12,7 +12,10 @@ assert.notEqual(proposalEnd, -1, "予約日時の先行提案判定の終端が�
 
 const proposalContext = {
   normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
-  isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text)
+  isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text),
+  asksInspectionDayPreference: (text) => /(?:平日|土日|週末|曜日)/.test(text)
+    && /(?:どちら|希望|都合|よろしい|良い)/.test(text)
+    && /(?:でしょうか|ますか|ですか|[?？])/.test(text)
 };
 vm.createContext(proposalContext);
 vm.runInContext(appSource.slice(proposalStart, proposalEnd), proposalContext);
@@ -52,6 +55,11 @@ assert.equal(
   false,
   "日程と無関係な希望確認を日時調整として誤認識しています"
 );
+assert.equal(
+  proposalContext.hasInspectionAppointmentCoordinationEvidence("平日と土日では、どちらがよろしいでしょうか？"),
+  true,
+  "曜日だけの選択質問を日時調整の開始として認識できません"
+);
 
 const retryStart = appSource.indexOf("function scriptedRetryForMissingDetails");
 const retryEnd = appSource.indexOf("function naturalScriptedRetryVariants", retryStart);
@@ -61,7 +69,10 @@ assert.notEqual(retryEnd, -1, "不足項目の聞き返し関数の終端が見�
 const retryContext = {
   normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
   hasSupportedInspectionDuration: () => false,
-  hasInspectionScheduleQuestionIntent: (text) => /(?:でしょうか|ますか|ですか|[?？]|(?:ご)?都合.{0,12}(?:よろしい|良い|いい)(?:でしょう)?)/.test(text)
+  hasInspectionScheduleQuestionIntent: (text) => /(?:でしょうか|ますか|ですか|[?？]|(?:ご)?都合.{0,12}(?:よろしい|良い|いい)(?:でしょう)?)/.test(text),
+  asksInspectionDayPreference: (text) => /(?:平日|土日|週末|曜日)/.test(text)
+    && /(?:どちら|希望|都合|よろしい|良い)/.test(text)
+    && /(?:でしょうか|ますか|ですか|[?？])/.test(text)
 };
 vm.createContext(retryContext);
 vm.runInContext(appSource.slice(retryStart, retryEnd), retryContext);
@@ -102,6 +113,17 @@ assert.equal(
   openPreferenceRetry.text,
   "具体的な日時を教えてください。",
   "希望日時を質問された後に既存の具体日時確認へ進みません"
+);
+
+const dayChoiceRetry = retryContext.scriptedRetryForMissingDetails(
+  "ありがとうございます。平日と土日では、どちらがよろしいでしょうか？",
+  { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }
+);
+assert.equal(dayChoiceRetry.text, "土日がいいです。", "曜日選択質問へ希望曜日を回答できません");
+assert.equal(
+  dayChoiceRetry.audioId,
+  "inspection_day_preference_answer",
+  "曜日選択質問後の既存音声IDが一致していません"
 );
 
 assert.match(
