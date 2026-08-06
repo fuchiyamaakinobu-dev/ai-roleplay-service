@@ -58,6 +58,16 @@ assert.equal(
   "月日の間に入った助詞を正規化できません"
 );
 assert.equal(
+  context.normalizeScriptedText("やりすの車検時期が近くなりました"),
+  "ヤリスの車検時期が近くなりました",
+  "ひらがなの車種名をヤリスへ補正できません"
+);
+assert.equal(
+  context.scriptedStepMatches("やりすでございますが、車検時期が近くなりました。", noticeStep),
+  true,
+  "ひらがなの車種名を含む車検時期案内を認識できません"
+);
+assert.equal(
   context.scriptedStepMatches(spokenDateTalk, noticeStep),
   true,
   "『9月の30日』を具体的な車検時期として認識できません"

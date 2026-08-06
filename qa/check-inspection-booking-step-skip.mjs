@@ -5,6 +5,34 @@ import vm from "node:vm";
 const appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const audioDbSource = fs.readFileSync(new URL("../audio-db.js", import.meta.url), "utf8");
 
+const bookingConfirmationStart = appSource.indexOf("function hasBookingContinuationConfirmation");
+const bookingConfirmationEnd = appSource.indexOf("function hasInspectionBookingInvitation", bookingConfirmationStart);
+assert.notEqual(bookingConfirmationStart, -1, "予約手続き時間の判定が見つかりません");
+assert.notEqual(bookingConfirmationEnd, -1, "予約手続き時間の判定終端が見つかりません");
+
+const bookingConfirmationContext = {
+  normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
+  isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text)
+};
+vm.createContext(bookingConfirmationContext);
+vm.runInContext(
+  appSource.slice(bookingConfirmationStart, bookingConfirmationEnd),
+  bookingConfirmationContext
+);
+
+assert.equal(
+  bookingConfirmationContext.hasExplicitBookingContinuationConfirmation(
+    "予約のお電話に15分程度お時間がかかりますが、よろしいでしょうか？"
+  ),
+  true,
+  "予約文脈を含む15分の了承確認を認識できません"
+);
+assert.equal(
+  bookingConfirmationContext.hasExplicitBookingContinuationConfirmation("もう少しお時間ありますか？"),
+  false,
+  "一般的な時間確認だけで予約手続きへ大幅に工程を飛ばしています"
+);
+
 const proposalStart = appSource.indexOf("function hasInspectionAppointmentProposalEvidence");
 const proposalEnd = appSource.indexOf("function advancedPastScriptedStep", proposalStart);
 assert.notEqual(proposalStart, -1, "予約日時の先行提案判定が見つかりません");
@@ -130,6 +158,12 @@ assert.match(
   appSource,
   /step\.key === "confirmed_booking_time"[\s\S]*?hasInspectionAppointmentCoordinationEvidence\(text\)[\s\S]*?skippedAnalysis\.canAdvance = true[\s\S]*?skippedAnalysis\.blocked = false[\s\S]*?handleScriptedStaffReply\(text\)/,
   "予約手続き確認を未達として残し、日時調整へ進む処理が見つかりません"
+);
+
+assert.match(
+  appSource,
+  /bookingTimeIndex > state\.scriptStep[\s\S]*?hasExplicitBookingContinuationConfirmation\(text\)[\s\S]*?recordSkippedScriptedSteps[\s\S]*?state\.scriptStep = bookingTimeIndex[\s\S]*?handleScriptedStaffReply\(text\)/,
+  "明確な予約時間確認へ回答し、前工程へ戻らない処理が見つかりません"
 );
 
 assert.match(

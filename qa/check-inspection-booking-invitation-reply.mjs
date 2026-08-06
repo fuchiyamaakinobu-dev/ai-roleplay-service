@@ -28,6 +28,21 @@ assert.equal(
   "短い予約提案を都合確認として認識できません"
 );
 assert.equal(
+  context.hasInspectionBookingInvitation("車検の方はお決まりでしたでしょうか？"),
+  true,
+  "『お決まり』を車検の予約意思確認として認識できません"
+);
+assert.equal(
+  context.hasInspectionBookingInvitation("車検はもう決められましたか？"),
+  true,
+  "『決められましたか』を車検の予約意思確認として認識できません"
+);
+assert.equal(
+  context.hasInspectionBookingInvitation("車検は決まりました"),
+  false,
+  "質問ではない決定の言及を都合確認として誤認識しています"
+);
+assert.equal(
   context.hasInspectionBookingInvitation("この電話で予約できます"),
   false,
   "質問ではない予約説明を都合確認として誤認識しています"
@@ -61,7 +76,7 @@ assert.equal(
   "都合確認を終えた後の発話を予約提案分岐として誤認識しています"
 );
 
-assert.match(scenarioSource, /requiredGroups:\s*\[\["ご都合",\s*"予定",\s*"日程",\s*"予約"\]\]/);
+assert.match(scenarioSource, /requiredGroups:\s*\[\["ご都合",\s*"予定",\s*"日程",\s*"予約",\s*"決まり",\s*"決め"\]\]/);
 assert.match(appSource, /text:\s*"お願いします。"[\s\S]*?audioId:\s*"inspection_booking_invitation_accept_customer"/);
 assert.match(appSource, /text:\s*"お願いしようと思っていました。"[\s\S]*?audioId:\s*"inspection_booking_invitation_intent_customer"/);
 assert.match(
