@@ -31,8 +31,32 @@ for (const phrase of ["工具を持ってきてください", "道具を用意�
 
 assert.match(
   scenarioSource,
-  /requiredGroups:\s*\[\["ロックナットキー",\s*"ロックキー",\s*"アダプター",\s*"キー",\s*"工具",\s*"道具"\],\s*\["15分",\s*"十五分"\]/,
-  "ロックナット用具の言い換えと15分前来店が別条件になっていません"
+  /requiredGroups:\s*\[\["ロックナットキー",\s*"ロックキー",\s*"アダプター",\s*"キー",\s*"工具",\s*"道具"\],\s*\["10分",\s*"十分",\s*"15分",\s*"十五分"\],\s*\["早め",\s*"前"\]/,
+  "ロックナット用具と10分・15分前来店が別条件になっていません"
+);
+assert.match(scenarioSource, /10分または15分前来店/, "10分前と15分前の両方が案内例へ反映されていません");
+
+const arrivalStep = { key: "explained_lock_and_arrival" };
+for (const phrase of [
+  "ロックナットキーをお持ちいただき、10分前にお越しください",
+  "アダプターをお持ちいただき、十分前にお越しください",
+  "専用工具をお持ちいただき、15分前にお越しください",
+  "ロックキーをお持ちいただき、十五分前にお越しください"
+]) {
+  assert.equal(
+    context.scriptedRequiredGroupsMatch(context.normalizeScriptedText(phrase), arrivalStep, []),
+    true,
+    `${phrase}をロックナット・早着項目として達成できません`
+  );
+}
+assert.equal(
+  context.scriptedRequiredGroupsMatch(
+    context.normalizeScriptedText("ロックナットキーをお持ちください"),
+    arrivalStep,
+    []
+  ),
+  false,
+  "来店前時間の案内なしで項目を達成しています"
 );
 
 console.log("ロックナット用具の言い換え判定テスト: OK");

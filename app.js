@@ -199,7 +199,7 @@ function isActivePickupRequest() {
 function renderScenarioList() {
   els.scenarioCount.textContent = `${scenarios.length}件`;
   els.scenarioNote.textContent = scenario.mode === "staff-led-scripted"
-    ? "入庫日時が確定すれば終話へ進めます。必須確認が不足すると、AIお客様が聞き返します。"
+    ? "具体的な入庫日と時刻が確定すれば終話できます。その他の未確認項目は採点に反映されますが、AIお客様は聞き直しません。"
     : scenario.scoring.some((metric) => metric.key === "asked_additional_service")
       ? "点検以外のご用命と、その他気になる点を確認しない場合は減点されますが、会話は進みます。"
       : "AIお客様の質問・引取依頼・断り理由は、毎回ランダムに変わります。";
@@ -1564,6 +1564,13 @@ function hasInspectionAppointmentProposalEvidence(text) {
   return hasConcreteDateOrTime && hasProposalContext && isScriptedQuestion(normalized);
 }
 
+function hasCompleteInspectionAppointmentProposal(text) {
+  const normalized = normalizeScriptedText(text);
+  return hasInspectionAppointmentProposalEvidence(normalized)
+    && /\d{1,2}月\d{1,2}日/.test(normalized)
+    && /\d{1,2}時/.test(normalized);
+}
+
 function hasInspectionScheduleQuestionIntent(normalized) {
   return isScriptedQuestion(normalized)
     || /(?:ご)?都合.{0,12}(?:よろしい|良い|いい)(?:でしょう)?/.test(normalized);
@@ -1577,7 +1584,8 @@ function hasInspectionAppointmentCoordinationEvidence(text) {
   const openTimingQuestion = /(?:いつ(?:ぐらい|頃|ごろ|なら|が|に|から|まで)|何日|何時)/;
   const asksOpenPreference = new RegExp(`(?:都合|希望).{0,24}${openTimingQuestion.source}|${openTimingQuestion.source}.{0,24}(?:都合|希望)`).test(normalized);
   const hasSchedulingContext = /(?:予約|予定|空いて|空き|都合|いかが|よろしい)/.test(normalized);
-  return (hasDayPreference && hasTimePreference || asksOpenPreference)
+  const asksDayPreference = asksInspectionDayPreference(normalized);
+  return (hasDayPreference && hasTimePreference || asksOpenPreference || asksDayPreference)
     && hasSchedulingContext
     && hasInspectionScheduleQuestionIntent(normalized);
 }
@@ -1605,6 +1613,13 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
     && hasInspectionLoanerConfirmation(normalized)
   ) {
     return true;
+  }
+
+  // Firestoreに15分前のみの旧条件が残っていても、10分前・15分前の両方を有効にする。
+  if (step.key === "explained_lock_and_arrival") {
+    const hasArrivalLeadTime = /(?:10分|十分|15分|十五分)/.test(normalized)
+      && /(?:早め|前)/.test(normalized);
+    return hasLockNutToolExpression(normalized) && hasArrivalLeadTime;
   }
 
   if (matchedGroups.every((matches) => matches.length > 0)) return true;
@@ -1842,6 +1857,13 @@ function scriptedRetryForMissingDetails(text, step) {
         missingDetail: "appointmentDate"
       };
     }
+    if (!hasDate && !hasTime && asksInspectionDayPreference(normalized)) {
+      return {
+        text: "土日がいいです。",
+        audioId: "inspection_day_preference_answer",
+        missingDetail: "appointmentDate"
+      };
+    }
     if (hasDate && !hasTime) {
       return {
         text: "何時が空いていますか？",
@@ -2007,6 +2029,36 @@ function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
   });
 }
 
+function recordSkippedStepsBeforeAppointment(text, startIndex, appointmentIndex) {
+  const normalized = normalizeScriptedText(text);
+
+  scenario.steps.slice(startIndex, appointmentIndex).forEach((step) => {
+    delete state.scriptedPartialReplies[step.key];
+    if (state.analyses.some((analysis) => analysis.stepKey === step.key && analysis.passed)) return;
+
+    const matchedGroups = step.requiredGroups.map((group) =>
+      group.filter((word) => normalized.includes(word))
+    );
+    const passed = scriptedStepMatches(normalized, step)
+      || (step.key === "thanked_customer" && hasCourtesyExpression(normalized));
+    if (!passed && state.analyses.some((analysis) => analysis.stepKey === step.key)) return;
+
+    const analysis = {
+      scripted: true,
+      stepKey: step.key,
+      expected: step.expected,
+      passed,
+      canAdvance: true,
+      blocked: false,
+      skippedForAppointment: !passed,
+      confidence: passed ? 0.95 : 1,
+      evidence: passed ? matchedGroups.flat().slice(0, 8) : ["入庫日時調整を優先"]
+    };
+    analysis[step.key] = passed;
+    state.analyses.push(analysis);
+  });
+}
+
 function handleScriptedStaffReply(text) {
   const startingScriptStep = state.scriptStep;
   const step = scenario.steps[state.scriptStep];
@@ -2018,6 +2070,20 @@ function handleScriptedStaffReply(text) {
   const expiryStep = scenario.steps.find((item) => item.key === "explained_available_period");
   if (expiryStep && scriptedStepMatches(text, expiryStep)) {
     state.inspectionExpiryEvidence = text;
+  }
+
+  // 具体的な入庫日と時刻が提示された場合は、未確認の過去工程へ戻らず日時調整を優先する。
+  // 省略した項目は未達のまま採点し、同じ内容をAIお客様から聞き直さない。
+  const appointmentIndex = scenario.steps.findIndex((item) => item.key === "proposed_appointment");
+  if (
+    appointmentIndex > state.scriptStep
+    && hasCompleteInspectionAppointmentProposal(text)
+  ) {
+    recordSkippedStepsBeforeAppointment(text, state.scriptStep, appointmentIndex);
+    state.scriptStep = appointmentIndex;
+    state.currentState = scenario.steps[appointmentIndex].state;
+    handleScriptedStaffReply(text);
+    return;
   }
 
   // 車検満了日だけを案内した後の「いつから受けられるか」は任意質問。
@@ -2149,8 +2215,21 @@ function handleScriptedStaffReply(text) {
   ) {
     recordOptionalShortcutEvidence(text, state.scriptStep, closingIndex);
     state.turn += 1;
+    const closingStep = scenario.steps[closingIndex];
+    if (scriptedStepMatches(text, closingStep)) {
+      markScriptedStepPassed(closingStep, text);
+      state.scriptStep = scenario.steps.length;
+      state.ended = true;
+      addMessage("customer", closingStep.customerResponse, {
+        audioId: `inspection_${closingStep.key}_customer`,
+        onCommitted: () => finishRoleplay({ keepCustomerPlayback: true })
+      });
+      els.speechNote.textContent = "入庫日時が確定しているため、未確認項目へ戻らず終話しました。省略項目は採点結果の改善点に表示されます。";
+      renderProgress();
+      return;
+    }
     state.scriptStep = closingIndex;
-    state.currentState = scenario.steps[closingIndex].state;
+    state.currentState = closingStep.state;
     addMessage("customer", "お願いします。", {
       audioId: "inspection_recapped_appointment_customer"
     });
