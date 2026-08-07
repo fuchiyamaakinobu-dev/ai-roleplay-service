@@ -36,11 +36,9 @@ const durationVariants = context.naturalScriptedRetryVariants(
   },
   { key: "explained_duration_and_wait" }
 );
-assert.equal(durationVariants.length, 3, "聞き返し候補が3種類ありません");
-assert.equal(new Set(durationVariants.map((item) => item.text)).size, 3, "聞き返しが重複しています");
+assert.equal(durationVariants.length, 1, "未登録の自動生成音声が候補へ残っています");
 assert.equal(durationVariants[0].text, "どれくらい時間がかかるのですか？");
-assert.match(durationVariants[1].text, /どれくらい時間がかかるのですか？/);
-assert.match(durationVariants[2].text, /どれくらい時間がかかるのですか？/);
+assert.equal(durationVariants[0].audioId, "inspection_explained_duration_and_wait_retry");
 
 const expiryVariants = context.naturalScriptedRetryVariants(
   {
@@ -53,7 +51,20 @@ const expiryVariants = context.naturalScriptedRetryVariants(
   },
   { key: "explained_available_period" }
 );
-assert.equal(expiryVariants.length, 3, "満了日の聞き返し候補が3種類ありません");
-assert.equal(new Set(expiryVariants.map((item) => item.text)).size, 3, "満了日の聞き返しが重複しています");
+assert.equal(expiryVariants.length, 2, "登録済みの満了日音声以外が候補へ混入しています");
+assert.equal(expiryVariants.every((item) => Boolean(item.audioId)), true, "音声IDのない聞き返し候補があります");
 
-console.log("車検誘致・自然な聞き返し表現テスト: OK");
+const bookingRetryVariants = context.naturalScriptedRetryVariants(
+  {
+    text: "今、このまま予約できますか？",
+    audioId: "inspection_confirmed_booking_time_retry"
+  },
+  { key: "confirmed_booking_time" }
+);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(bookingRetryVariants)),
+  [{ text: "今、このまま予約できますか？", audioId: "inspection_confirmed_booking_time_retry" }],
+  "予約確認の聞き返しにブラウザー標準音声の自動生成文が残っています"
+);
+
+console.log("車検誘致・登録済みまこと音声限定テスト: OK");
