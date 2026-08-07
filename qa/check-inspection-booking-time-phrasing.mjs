@@ -29,7 +29,8 @@ for (const phrase of [
   "もう少しお時間ございますでしょうか？",
   "お時間をいただいてもよろしいですか？",
   "このまま予約を進めてもよろしいですか？",
-  "予約のお手続きを続けても大丈夫ですか？"
+  "予約のお手続きを続けても大丈夫ですか？",
+  "よろしければご予約をいただければと思いますが、いかがでしょうか？"
 ]) {
   assert.equal(context.hasBookingContinuationConfirmation(phrase), true, `${phrase}を了承確認として認識できません`);
 }
@@ -47,6 +48,12 @@ assert.match(
   scenarioSource,
   /key:\s*"confirmed_booking_time"[\s\S]*?requiredGroups:\s*\[\["10分",\s*"十分",\s*"もう少し"/,
   "予約手続き確認の言い換えがシナリオ条件へ登録されていません"
+);
+
+assert.match(
+  appSource,
+  /step\.key === "confirmed_booking_time"[\s\S]*?return hasBookingContinuationConfirmation\(normalized\)/,
+  "Firestoreの旧必須語が残っていても予約続行確認を優先する処理が見つかりません"
 );
 
 console.log("予約手続き確認の言い換え判定テスト: OK");

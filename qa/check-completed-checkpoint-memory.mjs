@@ -30,10 +30,23 @@ const context = {
   },
   scenario: {
     scoring: [{ key: "asked_additional_service" }],
+    objections: {
+      distance: {
+        customer: [
+          "家から少し遠いので、持って行くのが大変なんです。",
+          "そちらまで行くのが少し面倒なんですよね。",
+          "遠いし運転に自信が無いのでお店には行けません。"
+        ]
+      }
+    },
     audio: {
       additionalServiceRequest: "additional-service-request",
       additionalServiceNone: "additional-service-none",
-      closings: ["closing"]
+      closings: ["closing"],
+      needsMoreContext: "needs-more-context",
+      objections: {
+        distance: ["distance-01", "distance-02", "distance-03"]
+      }
     }
   },
   appointmentFollowUpCount: 0,
@@ -42,6 +55,9 @@ const context = {
   },
   customerTurnFromAudio(audioId, fallbackText = "") {
     return { text: fallbackText, audioId };
+  },
+  pickRandomIndex() {
+    return 0;
   },
   selectContextualCustomerResponse(analysis) {
     return analysis.proposed_time
@@ -110,7 +126,37 @@ assert.equal(context.state.appointmentDateConfirmed, false);
 assert.equal(context.state.appointmentTimeConfirmed, false);
 assert.equal(context.state.appointmentTime, null);
 
+context.state.currentState = "PICKUP_REQUEST";
+context.rememberCompletedCheckpoints({
+  explained_service_time: false,
+  has_schedule_date: true,
+  has_schedule_time: true,
+  schedule_time_options: ["10"]
+});
+assert.equal(context.state.appointmentDateConfirmed, false);
+assert.equal(context.state.appointmentTimeConfirmed, false);
+assert.equal(context.state.appointmentTime, null);
+
 context.state.currentState = "VISIT_PROPOSAL";
+context.state.currentObjection = "distance";
+context.state.pickupReason = "drivingConfidence";
+const unresolvedDriving = context.nextCustomerMessage({
+  explained_service_time: false,
+  asked_additional_service: false,
+  asked_vehicle_concern: false,
+  has_schedule_date: false,
+  has_schedule_time: false,
+  schedule_time_options: [],
+  proposed_time: false
+});
+assert.equal(unresolvedDriving.text, "遠いし運転に自信が無いのでお店には行けません。");
+assert.equal(unresolvedDriving.audioId, "distance-03");
+assert.equal(context.state.currentState, "VISIT_PROPOSAL");
+assert.equal(context.state.ended, false);
+
+context.state.currentState = "VISIT_PROPOSAL";
+context.state.currentObjection = "work";
+context.state.pickupReason = "work";
 context.state.appointmentDateConfirmed = false;
 context.state.appointmentTimeConfirmed = false;
 context.state.appointmentTime = null;

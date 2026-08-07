@@ -1143,7 +1143,6 @@ function rememberCompletedCheckpoints(analysis) {
     state.serviceTimeNeedsReconfirmation = false;
   }
   if ([
-    "PICKUP_REQUEST",
     "VISIT_PROPOSAL",
     "ALTERNATIVE_PROPOSAL",
     "APPOINTMENT_CONFIRMATION"
@@ -1254,9 +1253,14 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "VISIT_PROPOSAL") {
-    state.currentState = "ALTERNATIVE_PROPOSAL";
     const contextualResponse = selectContextualCustomerResponse(analysis);
-    if (contextualResponse) return contextualResponse;
+    if (contextualResponse) {
+      state.currentState = "ALTERNATIVE_PROPOSAL";
+      return contextualResponse;
+    }
+    if (["distance", "drivingConfidence"].includes(state.pickupReason || state.currentObjection)) {
+      return unresolvedDistanceOrDrivingTurn();
+    }
     return customerTurnFromAudio(
       scenario.audio.needsMoreContext,
       "おっしゃっていることがよく分からないんですけど。"
@@ -1264,6 +1268,10 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "ALTERNATIVE_PROPOSAL") {
+    if (!state.resolutionType && ["distance", "drivingConfidence"].includes(state.pickupReason || state.currentObjection)) {
+      state.currentState = "VISIT_PROPOSAL";
+      return unresolvedDistanceOrDrivingTurn();
+    }
     const selectedTime = selectAppointmentTimeOption(analysis);
     if (selectedTime) return selectedTime;
     if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
@@ -1288,6 +1296,18 @@ function nextCustomerMessage(analysis) {
     "ありがとうございます。続けてお願いします。",
     scenario.audio?.continueGeneric || "continueGeneric"
   );
+}
+
+function unresolvedDistanceOrDrivingTurn() {
+  const objection = scenario.objections.distance;
+  const objectionTexts = objection.customer;
+  const objectionAudio = scenario.audio.objections.distance;
+  const reason = state.pickupReason || state.currentObjection;
+  const index = reason === "drivingConfidence"
+    ? objectionTexts.findIndex((text) => text.includes("運転に自信"))
+    : pickRandomIndex(objectionTexts, "objection-distance-unresolved");
+  const selectedIndex = index >= 0 ? index : 0;
+  return customerTurn(objectionTexts[selectedIndex], objectionAudio[selectedIndex]);
 }
 
 function selectAppointmentTimeOption(analysis) {
@@ -1605,6 +1625,14 @@ function advancedPastScriptedStep(startingIndex, currentIndex, steps, stepKey) {
 }
 
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
+  // Firestoreに予約手続き時間だけを必須とする旧条件が残っていても、
+  // 予約をこのまま進めてよいか確認する自然な言い回しを有効にする。
+  // 「よろしければご予約をいただければと思いますが、いかがでしょうか」も
+  // ここで完了扱いにし、同じ予約可否をお客様が聞き返さないようにする。
+  if (step.key === "confirmed_booking_time") {
+    return hasBookingContinuationConfirmation(normalized);
+  }
+
   // Firestoreの公開シナリオに旧キーワードが残っていても、
   // 走行距離確認と、確定済みの作業時間（60・75・90分）・店内待ちを必須にする。
   if (step.key === "explained_duration_and_wait") {
@@ -1964,23 +1992,14 @@ function naturalScriptedRetryVariants(retry, step) {
   const variants = retry.alternatives?.length
     ? retry.alternatives.map((item) => ({ ...item }))
     : [{ text: retry.text, audioId: retry.audioId }];
+  const registeredAudioVariants = variants.filter((item) => item.audioId);
 
-  const additionalTexts = step.key === "closed_politely"
-    ? [
-        "すみません、もう一度お願いします。",
-        "失礼ですが、もう一度お話しいただけますか？"
-      ]
-    : [
-        `すみません、${retry.text}`,
-        `確認のため、もう一度お伺いします。${retry.text}`
-      ];
-
-  additionalTexts.forEach((text) => {
-    if (!variants.some((item) => item.text === text)) {
-      variants.push({ text, audioId: "" });
-    }
-  });
-  return variants.slice(0, 3);
+  // 車検誘致は「まこと」の登録済みMP3だけを使用する。
+  // 「すみません、」などを自動追加するとMP3がなくブラウザー標準音声になるため、
+  // 音声IDのない自動生成文はお客様発話候補へ含めない。
+  return registeredAudioVariants.length
+    ? registeredAudioVariants.slice(0, 3)
+    : [{ text: retry.text, audioId: retry.audioId }];
 }
 
 function isPhoneGreetingOnly(text) {
