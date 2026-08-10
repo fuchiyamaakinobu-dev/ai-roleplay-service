@@ -32,6 +32,8 @@ const state = {
   appointmentTimeConfirmed: false,
   appointmentTime: null,
   pickupRequested: false,
+  serviceRequestAsked: false,
+  vehicleConcernAsked: false,
   additionalServiceAnswered: false,
   additionalServiceReconfirmed: false,
   additionalServiceResumeState: null,
@@ -126,9 +128,9 @@ function queueHistoryRecord(method, payload) {
 }
 
 const lexicon = {
-  thanks: ["ありがとう", "ありがとうございます", "ご連絡", "お電話"],
-  serviceTime: ["1時間", "一時間", "60分", "時間程度", "作業時間"],
-  reasonQuestion: ["なぜ", "理由", "どうして", "差し支え", "ご事情", "難しい", "どのような"],
+  thanks: ["ありがとう", "ありがとうございます"],
+  serviceTime: ["1時間", "一時間", "60分", "六十分"],
+  reasonQuestion: ["なぜ", "理由", "どうして", "差し支え", "ご事情", "どのような"],
   visitBenefit: ["直接", "説明", "お車を見ながら", "点検内容", "整備内容", "安心", "詳しく"],
   weekend: ["土日", "週末", "土曜", "日曜", "休日"],
   otherStore: ["他店舗", "別店舗", "市内", "帯広", "近くのお店", "近い店舗", "近くの店舗", "最寄りの店舗"],
@@ -136,7 +138,7 @@ const lexicon = {
   nextAction: ["いつ", "候補", "予約", "ご都合", "何日", "午前", "午後", "連絡", "確認"],
   additionalService: ["点検以外", "点検のほか", "点検の他", "ご用命", "追加整備", "オイル交換", "ほかに", "他に", "その他", "そのほか", "何か", "なにか"],
   vehicleConcern: ["気になる", "異音", "不具合", "症状", "調子", "違和感", "音"],
-  pressure: ["必ず来店", "来てください", "来店しか", "できません", "無理です"],
+  pressure: ["必ず来店", "絶対に来店", "来店しか", "来店してください"],
   confirmedPickup: [
     "取りに伺います", "お取りに伺います", "車を取りに伺います",
     "取りに行きます", "車を取りに行きます", "引取に伺います",
@@ -148,6 +150,65 @@ const lexicon = {
 
 function includesAny(text, words) {
   return words.some((word) => text.includes(word));
+}
+
+function hasNegativeOptionExpression(text) {
+  return /(?:できません|できない|出来ません|出来ない|ありません|ございません|していません|しておりません|難しい|不可|休み|休業|無理|空いていません|空いてない|埋まっています|いっぱい)/.test(text);
+}
+
+function hasAffirmativeOption(normalized, words, isQuestion, positiveWords = []) {
+  return words.some((word) => {
+    let searchFrom = 0;
+    while (searchFrom < normalized.length) {
+      const index = normalized.indexOf(word, searchFrom);
+      if (index < 0) return false;
+      const context = normalized.slice(index, index + 36);
+      const politeInvitation = isQuestion
+        && /(?:来店|予約|利用|お越し).{0,8}(?:できませんか|いただけませんか)/.test(context);
+      if (!hasNegativeOptionExpression(context) || politeInvitation) {
+        if (isQuestion || includesAny(context, positiveWords)) return true;
+      }
+      searchFrom = index + word.length;
+    }
+    return false;
+  });
+}
+
+function hasAffirmativeServiceTime(normalized) {
+  const matches = [...normalized.matchAll(/(?:(?:1|一)時間(?!半|15分|30分)|60分|六十分)/g)];
+  return matches.some((match) => {
+    const context = normalized.slice(match.index, match.index + match[0].length + 24);
+    return !/(?:ではありません|ではない|じゃありません|じゃない|かかりません|終わりません|未定|分かりません|わかりません|不明)/.test(context);
+  });
+}
+
+function hasAffirmativeVisitBenefit(normalized) {
+  const positiveWords = [
+    "できます", "出来ます", "いたします", "します", "させていただ",
+    "可能です", "安心いただ", "安心して", "詳しく"
+  ];
+  return lexicon.visitBenefit.some((word) => {
+    let searchFrom = 0;
+    while (searchFrom < normalized.length) {
+      const index = normalized.indexOf(word, searchFrom);
+      if (index < 0) return false;
+      const context = normalized.slice(Math.max(0, index - 12), index + word.length + 28);
+      if (!hasNegativeOptionExpression(context) && includesAny(context, positiveWords)) return true;
+      searchFrom = index + word.length;
+    }
+    return false;
+  });
+}
+
+function hasScheduleDateExpression(normalized) {
+  if (/(?:\d{1,2}月)\d{1,2}日/.test(normalized)) return true;
+  if (/(?:今月|来月|再来月)(?:の)?\d{1,2}日/.test(normalized)) return true;
+  if (/(?:今週|来週|再来週)?(?:月|火|水|木|金|土|日)曜日/.test(normalized)) return true;
+  return [...normalized.matchAll(/\d{1,2}日/g)].some((match) => {
+    const context = normalized.slice(Math.max(0, match.index - 8), match.index + match[0].length + 12);
+    return !/(?:作業|点検).{0,4}\d{1,2}日/.test(context)
+      && !/\d{1,2}日(?:間|程度|ほど|ぐらい|くらい|かか|必要|で終)/.test(context);
+  });
 }
 
 function confirmsUnchangedServiceTime(text) {
@@ -236,6 +297,8 @@ function selectScenario(scenarioId) {
   state.appointmentTimeConfirmed = false;
   state.appointmentTime = null;
   state.pickupRequested = false;
+  state.serviceRequestAsked = false;
+  state.vehicleConcernAsked = false;
   state.additionalServiceAnswered = false;
   state.additionalServiceReconfirmed = false;
   state.additionalServiceResumeState = null;
@@ -316,7 +379,7 @@ function serviceProgressStatus(item, merged) {
       achieved = Boolean(merged.acknowledged_request);
       break;
     case "ADDITIONAL_SERVICE_REQUEST":
-      achieved = Boolean(merged.asked_additional_service);
+      achieved = state.serviceRequestAsked && state.vehicleConcernAsked;
       break;
     case "ADDITIONAL_SERVICE_RECONFIRMATION":
       achieved = state.additionalServiceReconfirmed;
@@ -782,6 +845,7 @@ function looksLikeCompleteJapaneseSentence(text) {
     "わかりました", "分かりました", "承知しました", "かしこまりました", "行きます", "いきます"
   ];
   if (completeShortReplies.includes(normalized)) return true;
+  if (hasTrailingServiceInquiry(normalized)) return true;
   if (normalized.length < 5) return false;
   return /(?:です|ます|ました|ません|でしょう|ください|お願いします|と思います|できます|できません|出来ます|出来ません|伺います|行きます|します|ですか|ますか|でしょうか|[。！？!?])$/.test(normalized);
 }
@@ -862,6 +926,8 @@ function startRoleplay() {
   state.appointmentTimeConfirmed = false;
   state.appointmentTime = null;
   state.pickupRequested = false;
+  state.serviceRequestAsked = false;
+  state.vehicleConcernAsked = false;
   state.additionalServiceAnswered = false;
   state.additionalServiceReconfirmed = false;
   state.additionalServiceResumeState = null;
@@ -943,7 +1009,7 @@ function normalizeFullWidthDigits(text) {
 }
 
 function extractScheduleTimeOptions(normalized) {
-  const timeOptions = [...normalized.matchAll(/(\d{1,2})時/g)].map((match) => {
+  const timeOptions = [...normalized.matchAll(/(\d{1,2})時(?!間|点)/g)].map((match) => {
     let hour = Number.parseInt(match[1], 10);
     const context = normalized.slice(Math.max(0, match.index - 24), match.index);
     const lastMorningMarker = Math.max(
@@ -960,8 +1026,9 @@ function extractScheduleTimeOptions(normalized) {
     if (lastAfternoonMarker > lastMorningMarker && hour >= 1 && hour < 12) {
       hour += 12;
     }
+    if (hour < 0 || hour > 23) return null;
     return `${hour}時`;
-  });
+  }).filter(Boolean);
   return [...new Set(timeOptions)];
 }
 
@@ -975,9 +1042,15 @@ function isMorningTimeBandOffer(normalized, isQuestion) {
   return /(?:午前中?|午前の時間帯)(?:が|に|は)?(?:空いて(?:います|おります)|空きが(?:あります|ございます)|予約(?:可能|できます)|ご案内(?:可能|できます)|対応(?:可能|できます))/.test(normalized);
 }
 
+function hasTrailingServiceInquiry(normalized) {
+  return /(?:気になる(?:所|ところ|点)|調子の悪い(?:所|ところ)|オイル交換)(?:(?:など|とか))?(?:は|など|とか)[。.!！]?$/.test(normalized);
+}
+
 function analyzeStaff(text) {
   const normalized = normalizeFullWidthDigits(text.replace(/\s+/g, ""));
-  const isQuestion = /[？?]$/.test(text) || includesAny(normalized, ["でしょうか", "ですか", "ますか", "ませんか", "ないですか", "ございませんか", "でしょう"]);
+  const isQuestion = /[？?]$/.test(text)
+    || includesAny(normalized, ["でしょうか", "ですか", "ますか", "ませんか", "ないですか", "ございませんか", "でしょう"])
+    || hasTrailingServiceInquiry(normalized);
   const isQuote = /「.*伺.*」|'.*伺.*'|以前|言った|ということ/.test(text);
   const hasConfirmedPickupWords = includesAny(normalized, lexicon.confirmedPickup);
   const isPickupRequestTurn = isActivePickupRequest();
@@ -1008,19 +1081,46 @@ function analyzeStaff(text) {
   }
 
   const acceptedPickup = forcePickupAcceptance || (pickupStrength === "confirmed" && hasConcretePickup && !conditional);
-  const hasConcreteServiceTime = includesAny(normalized, lexicon.serviceTime);
+  const hasConcreteServiceTime = hasAffirmativeServiceTime(normalized);
   const confirmedServiceTimeUnchanged = confirmsUnchangedServiceTime(normalized);
-  const hasActionableProposal = includesAny(normalized, lexicon.weekend)
-    || includesAny(normalized, lexicon.otherStore)
-    || includesAny(normalized, ["時間帯", "午前", "午後", "代車", "ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
-  const proposedTime = includesAny(normalized, ["時間帯", "午前", "午後", "夕方", "仕事前", "仕事後"]);
+  const proposedWeekend = hasAffirmativeOption(
+    normalized,
+    lexicon.weekend,
+    isQuestion,
+    ["営業", "空い", "空き", "予約", "ご案内", "対応", "利用", "来店", "可能", "できます", "いかが", "よろしい", "どちら", "いい", "時"]
+  );
+  const proposedOtherStore = hasAffirmativeOption(
+    normalized,
+    lexicon.otherStore,
+    isQuestion,
+    ["ご案内", "案内", "紹介", "利用", "来店", "可能", "できます", "いかが", "選べ"]
+  );
+  const proposedTime = hasAffirmativeOption(
+    normalized,
+    ["時間帯", "午前", "午後", "夕方", "仕事前", "仕事後"],
+    isQuestion,
+    ["空い", "空き", "予約", "ご案内", "対応", "利用", "来店", "可能", "できます", "いかが", "よろしい", "どちら", "いい", "時"]
+  );
   const offeredTimeBandChoice = isQuestion
     && normalized.includes("午前")
     && normalized.includes("午後");
   const offeredMorningTimeBand = isMorningTimeBandOffer(normalized, isQuestion);
-  const proposedFamilyVisit = includesAny(normalized, ["ご主人", "ご家族", "家族と一緒", "一緒にご来店"]);
-  const hasScheduleDate = /(?:\d{1,2}月)?\d{1,2}日|(?:今週|来週|再来週)?(?:月|火|水|木|金|土|日)曜日/.test(normalized);
-  const scheduleTimeOptions = extractScheduleTimeOptions(normalized);
+  const proposedFamilyVisit = hasAffirmativeOption(
+    normalized,
+    ["ご主人", "ご家族", "家族と一緒", "一緒にご来店"],
+    isQuestion,
+    ["来店", "一緒", "可能", "できます", "いかが", "よろしい"]
+  );
+  const hasActionableProposal = proposedWeekend
+    || proposedOtherStore
+    || proposedTime
+    || proposedFamilyVisit;
+  const hasPositiveScheduleOffer = !hasNegativeOptionExpression(normalized)
+    || /(?:空いています|空いております|空きがあります|空きがございます|予約できます|ご案内できます|可能です|いかが(?:でしょうか|ですか)|よろしいでしょうか)/.test(normalized);
+  const hasScheduleDate = hasPositiveScheduleOffer && hasScheduleDateExpression(normalized);
+  const scheduleTimeOptions = hasPositiveScheduleOffer
+    ? extractScheduleTimeOptions(normalized)
+    : [];
   const hasScheduleTime = scheduleTimeOptions.length === 1;
   const hasMultipleScheduleTimes = scheduleTimeOptions.length > 1;
   const hasConcreteSchedule = hasScheduleDate && hasScheduleTime;
@@ -1043,6 +1143,16 @@ function analyzeStaff(text) {
     && includesAny(normalized, lexicon.additionalService);
   const askedVehicleConcern = isQuestion
     && includesAny(normalized, lexicon.vehicleConcern);
+  const askedReason = isQuestion
+    && (includesAny(normalized, lexicon.reasonQuestion) || normalized.includes("難しい"));
+  const explainedVisitBenefit = hasAffirmativeVisitBenefit(normalized);
+  const leftChoice = includesAny(normalized, [
+    "無理に", "選べ", "難しい場合", "ご都合に合わせ", "一緒に確認", "ご検討"
+  ]) || (isQuestion && includesAny(normalized, ["どちら", "いずれ", "ご希望", "いかが", "ご都合"]));
+  const nextActionConfirmed = hasConcreteSchedule
+    || (isQuestion
+      && includesAny(normalized, ["いつ", "何日", "何時", "曜日", "時間帯", "午前", "午後", "ご都合"])
+      && includesAny(normalized, ["予約", "来店", "入庫", "ご都合", "曜日", "時間帯", "連絡"]));
 
   const result = {
     acknowledged_request: includesAny(normalized, lexicon.thanks) || includesAny(normalized, ["承知", "かしこまり", "そうなのですね"]),
@@ -1051,12 +1161,12 @@ function analyzeStaff(text) {
     asked_additional_service: askedServiceRequest && askedVehicleConcern,
     accepted_pickup: acceptedPickup,
     pickup_acceptance_strength: pickupStrength,
-    asked_reason: includesAny(normalized, lexicon.reasonQuestion),
+    asked_reason: askedReason,
     explained_service_time: hasConcreteServiceTime,
     confirmed_service_time_unchanged: confirmedServiceTimeUnchanged,
-    explained_visit_benefit: includesAny(normalized, lexicon.visitBenefit),
-    proposed_weekend: includesAny(normalized, lexicon.weekend),
-    proposed_other_store: includesAny(normalized, lexicon.otherStore),
+    explained_visit_benefit: explainedVisitBenefit,
+    proposed_weekend: proposedWeekend,
+    proposed_other_store: proposedOtherStore,
     proposed_time: proposedTime,
     offered_time_band_choice: offeredTimeBandChoice,
     offered_morning_time_band: offeredMorningTimeBand,
@@ -1070,8 +1180,8 @@ function analyzeStaff(text) {
     proposed_alternative: hasActionableProposal,
     pressured_customer: includesAny(normalized, lexicon.pressure),
     refused_pickup: includesAny(normalized, ["引取できません", "取りに行けません", "対応できません"]),
-    left_choice: includesAny(normalized, lexicon.choice) || conditional,
-    next_action_confirmed: includesAny(normalized, lexicon.nextAction),
+    left_choice: leftChoice,
+    next_action_confirmed: nextActionConfirmed,
     ambiguous,
     evidence: collectEvidence(normalized)
   };
@@ -1123,6 +1233,24 @@ function pickupRequestTurn() {
   return customerTurn(scenario.pickupRequests[index], scenario.audio.pickupRequests[index]);
 }
 
+function repeatServiceTimeQuestionTurn() {
+  const lastCustomerText = [...state.transcript]
+    .reverse()
+    .find((message) => message.role === "customer")?.text;
+  const availableIndexes = scenario.serviceTimeQuestions
+    .map((text, index) => ({ text, index }))
+    .filter((item) => item.text !== lastCustomerText)
+    .map((item) => item.index);
+  const pool = availableIndexes.length > 0
+    ? availableIndexes
+    : scenario.serviceTimeQuestions.map((_, index) => index);
+  const selectedIndex = pool[randomIndex(pool.length)];
+  return customerTurn(
+    scenario.serviceTimeQuestions[selectedIndex],
+    scenario.audio.serviceTimeQuestions[selectedIndex]
+  );
+}
+
 function randomIndex(length) {
   if (length <= 1) return 0;
   if (window.crypto?.getRandomValues) {
@@ -1160,6 +1288,8 @@ function pickVariant(values, group = "default") {
 }
 
 function rememberCompletedCheckpoints(analysis) {
+  if (analysis.asked_service_request || analysis.asked_additional_service) state.serviceRequestAsked = true;
+  if (analysis.asked_vehicle_concern || analysis.asked_additional_service) state.vehicleConcernAsked = true;
   const serviceTimeReconfirmed = analysis.explained_service_time
     || (state.serviceTimeExplained && analysis.confirmed_service_time_unchanged);
   if (serviceTimeReconfirmed) {
@@ -1199,7 +1329,7 @@ function nextCustomerMessage(analysis) {
 
   if (
     scenario.scoring.some((metric) => metric.key === "asked_additional_service")
-    && (analysis.asked_additional_service || analysis.asked_vehicle_concern)
+    && (analysis.asked_service_request || analysis.asked_vehicle_concern || analysis.asked_additional_service)
     && !state.additionalServiceAnswered
   ) {
     if (state.serviceTimeExplained) state.serviceTimeNeedsReconfirmation = true;
@@ -1223,7 +1353,7 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "ADDITIONAL_SERVICE_REQUEST") {
-    if (analysis.asked_additional_service) {
+    if (analysis.asked_service_request || analysis.asked_vehicle_concern || analysis.asked_additional_service) {
       state.additionalServiceReconfirmed = true;
       state.currentState = "ADDITIONAL_SERVICE_RECONFIRMATION";
       return customerTurnFromAudio(
@@ -1245,6 +1375,9 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "SERVICE_TIME_QUESTION") {
+    if (!analysis.explained_service_time && !analysis.confirmed_service_time_unchanged) {
+      return repeatServiceTimeQuestionTurn();
+    }
     return pickupRequestTurn();
   }
 
@@ -2574,6 +2707,9 @@ function scoreRoleplay() {
     return true;
   });
   const metricAchieved = (metric) => {
+    if (metric.key === "asked_additional_service") {
+      return state.serviceRequestAsked && state.vehicleConcernAsked;
+    }
     if (metric.key === "explained_service_time") {
       return isServiceTimeRequirementSatisfied(
         merged.explained_service_time,
