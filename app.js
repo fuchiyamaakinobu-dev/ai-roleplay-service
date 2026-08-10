@@ -507,19 +507,40 @@ function cancelPendingCustomerReply() {
   setCustomerReplyPending(false);
 }
 
+function registered12MonthCustomerMessage(role, text, audioId) {
+  if (role !== "customer" || scenario.id !== "service-12month-visit-promotion") {
+    return { text, audioId };
+  }
+  const item = audioIndex.get(audioId);
+  if (item?.status === "ready" && audioPath(audioId)) {
+    return { text: item.text, audioId };
+  }
+  const fallbackAudioId = scenario.audio.needsMoreContext;
+  const fallbackItem = audioIndex.get(fallbackAudioId);
+  return {
+    text: fallbackItem?.text || "おっしゃっていることがよく分からないんですけど。",
+    audioId: fallbackAudioId
+  };
+}
+
 function commitMessage(role, text, options = {}) {
-  const message = {
+  const registeredCustomerMessage = registered12MonthCustomerMessage(
     role,
     text,
+    options.audioId || ""
+  );
+  const message = {
+    role,
+    text: registeredCustomerMessage.text,
     at: new Date().toISOString(),
-    audioId: options.audioId || "",
-    audioSrc: audioPath(options.audioId)
+    audioId: registeredCustomerMessage.audioId,
+    audioSrc: audioPath(registeredCustomerMessage.audioId)
   };
   state.transcript.push(message);
   if (
     role === "customer"
     && scenario.id === "vehicle-inspection-phone-followup"
-    && /代車.*(?:貸して|用意して|借りたい|お願い|ほしい)/.test(normalizeScriptedText(text))
+    && /代車.*(?:貸して|用意して|借りたい|お願い|ほしい)/.test(normalizeScriptedText(message.text))
   ) {
     state.inspectionLoanerRequested = true;
   }
@@ -528,7 +549,10 @@ function commitMessage(role, text, options = {}) {
   if (role === "customer") {
     if (els.audioEnabled.checked && message.audioSrc) {
       playAudio(message.audioSrc, message.text, false, startSpeechInputAfterCustomer);
-    } else if (els.audioEnabled.checked) {
+    } else if (
+      els.audioEnabled.checked
+      && scenario.id !== "service-12month-visit-promotion"
+    ) {
       speakCustomerText(message.text, startSpeechInputAfterCustomer);
     } else {
       startSpeechInputAfterCustomer();
@@ -1169,14 +1193,6 @@ function nextCustomerMessage(analysis) {
       {
         text: "おっしゃっていることがよく分からないんですけど。",
         audioId: scenario.audio.needsMoreContext
-      },
-      {
-        text: "すみません。もう一度、別の言い方でお願いします。",
-        audioId: "needsMoreContextRephrased"
-      },
-      {
-        text: "確認したい内容を、もう少し具体的に教えてください。",
-        audioId: "needsMoreContextSpecific"
       }
     ]);
   }
@@ -1402,7 +1418,7 @@ function appointmentFollowUpTurn(analysis = {}) {
         audioId: "appointmentMorningDateRepeat"
       },
       {
-        text: "今週の何日が空いていますか？",
+        text: "今週だと何日が空いていますか？",
         audioId: "appointmentMorningDateSpecific"
       }
     ]);
@@ -1418,7 +1434,7 @@ function appointmentFollowUpTurn(analysis = {}) {
         audioId: "appointmentTimeRepeat"
       },
       {
-        text: "10時や16時など、具体的な時刻を教えてください。",
+        text: "何時に行けばいいんですか？",
         audioId: "appointmentTimeSpecific"
       }
     ]);
