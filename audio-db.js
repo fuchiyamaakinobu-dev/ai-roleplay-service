@@ -1,5 +1,5 @@
 window.ROLEPLAY_AUDIO_DB = {
-  version: "2026-08-04.1",
+  version: "2026-08-10.5",
   defaultVoice: "makoto_customer_support",
   voices: {
     makoto_customer_support: {
@@ -317,6 +317,48 @@ window.ROLEPLAY_AUDIO_DB = {
       label: "午前希望・時刻確認",
       text: "では、午前中でお願いします。何時が空いていますか？",
       file: "customer_appointment_morning_need_time.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentMorningTimeRepeat",
+      label: "午前希望・時刻再確認",
+      text: "何時が空いていますか？",
+      file: "customer_appointment_time_repeat.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentMorningTimeSpecific",
+      label: "午前希望・具体的な時刻確認",
+      text: "午前中の何時が空いていますか？",
+      file: "customer_appointment_morning_time_specific.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentMorningDateRepeat",
+      label: "午前希望・日付再確認",
+      text: "午前中で空いている日はいつですか？",
+      file: "customer_appointment_morning_date_repeat.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentMorningDateSpecific",
+      label: "午前希望・具体的な日付確認",
+      text: "今週だと何日が空いていますか？",
+      file: "customer_appointment_morning_date_specific.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentTimeRepeat",
+      label: "入庫日確定後・時刻再確認",
+      text: "何時が空いていますか？",
+      file: "customer_appointment_time_repeat.mp3",
+      status: "ready"
+    },
+    {
+      id: "appointmentTimeSpecific",
+      label: "入庫日確定後・具体的な時刻確認",
+      text: "何時に行けばいいんですか？",
+      file: "customer_appointment_time_specific.mp3",
       status: "ready"
     },
     {

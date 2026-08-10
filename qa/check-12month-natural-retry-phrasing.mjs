@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+
+const appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+
+assert.match(appSource, /text: "おっしゃっていることがよく分からないんですけど。",\s*audioId: scenario\.audio\.needsMoreContext/);
+assert.doesNotMatch(appSource, /すみません。もう一度、別の言い方でお願いします。/);
+assert.doesNotMatch(appSource, /確認したい内容を、もう少し具体的に教えてください。/);
+assert.match(appSource, /text: "何時に行けばいいんですか？",\s*audioId: "appointmentTimeSpecific"/);
+assert.doesNotMatch(appSource, /10時や16時など、具体的な時刻を教えてください。/);
+
+console.log("12カ月点検・自然な再質問表現テスト: OK");
