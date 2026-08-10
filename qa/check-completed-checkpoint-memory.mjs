@@ -23,6 +23,8 @@ const context = {
     appointmentTimeConfirmed: false,
     appointmentTime: null,
     additionalServiceAnswered: false,
+    serviceRequestAsked: false,
+    vehicleConcernAsked: false,
     additionalServiceResumeState: null,
     currentObjection: "work",
     pickupReason: "work",
@@ -236,5 +238,40 @@ context.rememberCompletedCheckpoints({
 });
 assert.equal(context.state.serviceTimeExplained, true);
 assert.equal(context.state.serviceTimeNeedsReconfirmation, false);
+
+context.state.currentState = "INSPECTION_REQUEST_RECEIVED";
+context.state.serviceTimeExplained = false;
+context.state.serviceTimeNeedsReconfirmation = false;
+context.state.serviceRequestAsked = false;
+context.state.vehicleConcernAsked = false;
+context.state.additionalServiceAnswered = false;
+context.state.additionalServiceResumeState = null;
+const splitServiceRequest = context.nextCustomerMessage({
+  explained_service_time: false,
+  confirmed_service_time_unchanged: false,
+  asked_service_request: true,
+  asked_vehicle_concern: false,
+  asked_additional_service: false,
+  has_schedule_date: false,
+  has_schedule_time: false,
+  schedule_time_options: []
+});
+assert.equal(splitServiceRequest.text, "オイル交換もお願いします。");
+assert.equal(context.state.serviceRequestAsked, true);
+assert.equal(context.state.vehicleConcernAsked, false);
+
+const splitConcernRequest = context.nextCustomerMessage({
+  explained_service_time: false,
+  confirmed_service_time_unchanged: false,
+  asked_service_request: false,
+  asked_vehicle_concern: true,
+  asked_additional_service: false,
+  has_schedule_date: false,
+  has_schedule_time: false,
+  schedule_time_options: []
+});
+assert.equal(splitConcernRequest.text, "そのほかは大丈夫です。");
+assert.equal(context.state.serviceRequestAsked, true);
+assert.equal(context.state.vehicleConcernAsked, true);
 
 console.log("確認済み項目への逆戻り防止テスト: OK");

@@ -3,6 +3,8 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const precisionHelperStart = source.indexOf("function hasNegativeOptionExpression(");
+const precisionHelperEnd = source.indexOf("function confirmsUnchangedServiceTime(", precisionHelperStart);
 const serviceTimeHelperStart = source.indexOf("function confirmsUnchangedServiceTime(");
 const serviceTimeHelperEnd = source.indexOf("function isServiceTimeRequirementSatisfied(", serviceTimeHelperStart);
 const start = source.indexOf("function nextQuestionVariant(");
@@ -13,6 +15,8 @@ const followUpStart = source.indexOf("function appointmentFollowUpTurn(");
 const followUpEnd = source.indexOf("function selectContextualCustomerResponse(", followUpStart);
 
 assert.notEqual(start, -1, "午前中提案の判定関数が見つかりません");
+assert.notEqual(precisionHelperStart, -1, "肯定・否定判定ヘルパーが見つかりません");
+assert.notEqual(precisionHelperEnd, -1, "肯定・否定判定ヘルパーを読み込めません");
 assert.notEqual(serviceTimeHelperStart, -1, "作業時間変更なしの判定関数が見つかりません");
 assert.notEqual(serviceTimeHelperEnd, -1, "作業時間変更なしの判定関数を読み込めません");
 assert.notEqual(analysisEnd, -1, "スタッフ発話の解析関数を切り出せません");
@@ -58,6 +62,7 @@ const context = {
 };
 vm.createContext(context);
 vm.runInContext(`
+  ${source.slice(precisionHelperStart, precisionHelperEnd)}
   ${source.slice(serviceTimeHelperStart, serviceTimeHelperEnd)}
   ${source.slice(start, analysisEnd)}
   ${source.slice(timeSelectionStart, timeSelectionEnd)}
