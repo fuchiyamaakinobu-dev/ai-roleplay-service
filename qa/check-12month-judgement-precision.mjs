@@ -55,10 +55,21 @@ assert.equal(analyze("土日にご来店できませんか？").proposed_weekend
 assert.equal(analyze("土日は営業していません。").proposed_weekend, false);
 assert.equal(analyze("夕方4時はいかがでしょうか？").proposed_time, true);
 assert.equal(analyze("夕方は対応できません。").proposed_time, false);
+assert.equal(
+  analyze("お仕事がお休みの時に、ご来店いただくことは可能でしたでしょうか？").proposed_day_off_visit,
+  true
+);
+assert.equal(analyze("店舗は本日休みです。").proposed_day_off_visit, false);
+assert.equal(analyze("休みの日も来店は難しいです。").proposed_day_off_visit, false);
 assert.equal(analyze("近い店舗をご案内できます。").proposed_other_store, true);
 assert.equal(analyze("近い店舗はありません。").proposed_other_store, false);
 assert.equal(analyze("ご家族と一緒に来店できます。").proposed_family_visit, true);
 assert.equal(analyze("ご家族と一緒の来店は難しいです。").proposed_family_visit, false);
+assert.equal(analyze("必ずお店に来てください。").pressured_customer, true);
+assert.equal(analyze("来店か引取か、ご都合に合わせて選べます。").pressured_customer, false);
+assert.equal(analyze("車の引き取りはできません。").refused_pickup, true);
+assert.equal(analyze("車を取りに行けません。").refused_pickup, true);
+assert.equal(analyze("その時間帯は対応できません。").refused_pickup, false);
 assert.equal(
   analyze("ご来店いただければ、お車を見ながら点検内容を詳しくご説明できます。").explained_visit_benefit,
   true
