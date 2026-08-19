@@ -184,6 +184,18 @@ function hasPickupRefusal(normalized) {
   return /(?:引取|引き取り|引取り|車を取り|取りに行|取りに伺).{0,16}(?:できません|できない|出来ません|出来ない|けません|けない|えません|えない|対応できません|難しい|無理|していません|行っていません)/.test(normalized);
 }
 
+function acknowledgesPickupCircumstances(normalized) {
+  const acknowledgementEnding = /(?:ですね|のですね|んですね|なのですね|承知しました|分かりました|わかりました)/;
+  const patterns = [
+    /(?:畑|農作業|収穫).{0,16}(?:忙しい|お忙しい)/,
+    /(?:仕事|お仕事|通勤).{0,20}(?:忙しい|お忙しい|時間がない|時間が取れない|来店.{0,8}(?:難しい|大変|ご負担))/,
+    /(?:遠い|距離がある|距離があり|店まで遠い|お店まで遠い).{0,16}(?:のですね|んですね|大変|ご負担|難しい)/,
+    /運転.{0,16}(?:自信がない|ご不安|不安|心配|難しい)/
+  ];
+  return acknowledgementEnding.test(normalized)
+    && patterns.some((pattern) => pattern.test(normalized));
+}
+
 function hasAffirmativeServiceTime(normalized) {
   const matches = [...normalized.matchAll(/(?:(?:1|一)時間(?!半|15分|30分)|60分|六十分)/g)];
   return matches.some((match) => {
@@ -1168,8 +1180,9 @@ function analyzeStaff(text) {
     && includesAny(normalized, lexicon.additionalService);
   const askedVehicleConcern = isQuestion
     && includesAny(normalized, lexicon.vehicleConcern);
-  const askedReason = isQuestion
-    && (includesAny(normalized, lexicon.reasonQuestion) || normalized.includes("難しい"));
+  const askedReason = (isQuestion
+    && (includesAny(normalized, lexicon.reasonQuestion) || normalized.includes("難しい")))
+    || acknowledgesPickupCircumstances(normalized);
   const explainedVisitBenefit = hasAffirmativeVisitBenefit(normalized);
   const leftChoice = includesAny(normalized, [
     "無理に", "選べ", "難しい場合", "ご都合に合わせ", "一緒に確認", "ご検討"
@@ -1534,7 +1547,7 @@ function selectObjection(analysis) {
   }[state.pickupReason];
   if (linkedObjection) return linkedObjection;
 
-  // 家族相談は引取希望の理由ではないため、理由確認直後のランダム回答には使用しない。
+  // 家族相談は引取希望の事情ではないため、引取依頼後のランダム回答には使用しない。
   const candidates = ["work", "distance"];
   if (analysis.proposed_other_store) candidates.push("competitor");
   if (analysis.mentioned_previous_pickup) candidates.push("misunderstanding");
@@ -2870,6 +2883,14 @@ function buildImprovementTalk(missingMetricKeys, reason = "work", options = {}) 
   const otherStoreTalk = ["distance", "drivingConfidence"].includes(reason)
     ? "ご自宅から近い店舗のご案内や、ご家族と一緒にご来店いただく方法もございます。"
     : "ご都合に合わせて利用しやすい店舗や方法をご案内できます。";
+  const circumstanceTalk = {
+    work: "お仕事でご来店が難しいのですね。承知しました。",
+    distance: "ご自宅から距離があり、ご来店がご負担なのですね。",
+    drivingConfidence: "運転にご不安があり、ご来店が難しいのですね。",
+    competitor: "他店の引取サービスも比較されているのですね。",
+    misunderstanding: "以前のご案内と違って聞こえたのですね。",
+    family: "ご家族と相談されたいのですね。"
+  }[reason] || "ご来店が難しいのですね。承知しました。";
   const talks = {
     acknowledged_request: "ご連絡ありがとうございます。12カ月点検のご依頼ですね。",
     asked_additional_service:
@@ -2877,8 +2898,7 @@ function buildImprovementTalk(missingMetricKeys, reason = "work", options = {}) 
     explained_service_time: options.serviceTimeNeedsReconfirmation
       ? "オイル交換などの追加作業を含めた作業時間、または作業時間に変更がないことを改めてご案内します。"
       : "点検は、追加整備がなければ1時間程度です。",
-    asked_reason:
-      "差し支えなければ、引取をご希望される理由をもう少し詳しくお聞かせいただけますか。",
+    asked_reason: circumstanceTalk,
     explained_visit_benefit:
       "ご来店いただければ、お車を確認しながら点検内容を詳しくご説明できます。",
     proposed_weekend:
@@ -2917,7 +2937,7 @@ function renderResults(result) {
   els.scoreSummary.textContent = result.summary || (result.score >= 80
     ? "来店促進の流れがよくできています。"
     : result.score >= 60
-      ? "基本はできています。理由確認と次の約束を強めると安定します。"
+      ? "基本はできています。お客様事情の受け止めと次の約束を強めると安定します。"
       : "引取依頼への対応手順をもう一度練習しましょう。");
   els.goodList.innerHTML = listHtml(result.good);
   els.improveList.innerHTML = listHtml(result.improve);

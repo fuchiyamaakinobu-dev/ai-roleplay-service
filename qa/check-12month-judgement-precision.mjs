@@ -76,7 +76,12 @@ assert.equal(
 );
 
 assert.equal(analyze("引取をご希望される理由を教えていただけますか？").asked_reason, true);
+assert.equal(analyze("畑がお忙しいのですね。").asked_reason, true);
+assert.equal(analyze("お仕事で来店が難しいのですね。").asked_reason, true);
+assert.equal(analyze("ご自宅から距離があり、ご来店がご負担なのですね。").asked_reason, true);
+assert.equal(analyze("運転にご不安があり、ご来店が難しいのですね。").asked_reason, true);
 assert.equal(analyze("平日のご来店は難しいですね。").asked_reason, false);
+assert.equal(analyze("ご来店は可能です。").asked_reason, false);
 assert.equal(analyze("後ほどご連絡します。").acknowledged_request, false);
 assert.equal(analyze("ご連絡ありがとうございます。点検ですね。").acknowledged_request, true);
 assert.equal(analyze("ご連絡ありがとうございます。点検ですね。").next_action_confirmed, false);
