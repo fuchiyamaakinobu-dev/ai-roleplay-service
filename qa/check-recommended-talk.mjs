@@ -17,7 +17,8 @@ vm.runInContext(`
 `, context);
 
 const reasonOnly = context.buildImprovementTalk(["asked_reason"], "work");
-assert.match(reasonOnly, /引取をご希望される理由/);
+assert.match(reasonOnly, /お仕事でご来店が難しいのですね/);
+assert.doesNotMatch(reasonOnly, /理由|差し支え|詳しくお聞かせ/);
 assert.doesNotMatch(reasonOnly, /オイル交換|気になる点/);
 
 const additionalServiceOnly = context.buildImprovementTalk(
@@ -25,7 +26,7 @@ const additionalServiceOnly = context.buildImprovementTalk(
   "work"
 );
 assert.match(additionalServiceOnly, /オイル交換/);
-assert.doesNotMatch(additionalServiceOnly, /引取をご希望される理由/);
+assert.doesNotMatch(additionalServiceOnly, /お仕事でご来店が難しいのですね/);
 
 const achievedAll = context.buildImprovementTalk([], "work");
 assert.match(achievedAll, /必要な確認と提案ができています/);

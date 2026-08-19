@@ -17,6 +17,9 @@ const localScenario = {
   recommendedTalks: {
     distance: "近い店舗または家族との来店をご案内します。"
   },
+  scoring: [
+    { key: "asked_reason", label: "引取事情を受け止めた", action: "引取希望の事情を受け止める", points: 13 }
+  ],
   audio: {
     initial: "initial",
     serviceTimeQuestions: ["serviceTimeQuestion"],
@@ -41,6 +44,9 @@ const publishedScenario = {
   recommendedTalks: {
     distance: "お出かけの予定に合わせる方法をご案内します。"
   },
+  scoring: [
+    { key: "asked_reason", label: "引取希望の理由を確認した", action: "引取希望の理由を確認する", points: 13 }
+  ],
   audio: {
     initial: "initial",
     serviceTimeQuestions: ["serviceTimeQuestion"],
@@ -105,6 +111,8 @@ assert.deepEqual([...normalized.audio.objections.competitor], ["objectionCompeti
 assert.equal(normalized.audio.appointmentSingleTime, "appointmentSingleTime");
 assert.equal(normalized.objections.distance.expected, localScenario.objections.distance.expected);
 assert.equal(normalized.recommendedTalks.distance, localScenario.recommendedTalks.distance);
+assert.equal(normalized.scoring[0].label, "引取事情を受け止めた");
+assert.equal(normalized.scoring[0].action, "引取希望の事情を受け止める");
 assert.equal(appendedScripts.length, 1, "互換補正後にapp.jsが起動していません");
 
 console.log("Firestore旧公開データ互換テスト: OK");

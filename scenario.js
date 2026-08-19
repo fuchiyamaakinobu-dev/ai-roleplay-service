@@ -124,7 +124,7 @@ window.ROLEPLAY_SCENARIO = {
     { key: "acknowledged_request", label: "依頼を受け止めた", action: "依頼を受け止める", points: 8 },
     { key: "asked_additional_service", label: "その他ご用命・気になる点", action: "点検以外のご用命と気になる点を確認する", points: 15 },
     { key: "explained_service_time", label: "作業時間を説明した", action: "作業時間を説明する", points: 8 },
-    { key: "asked_reason", label: "引取希望の理由を確認した", action: "引取希望の理由を確認する", points: 13 },
+    { key: "asked_reason", label: "引取事情を受け止めた", action: "引取希望の事情を受け止める", points: 13 },
     { key: "explained_visit_benefit", label: "来店メリットを説明した", action: "来店メリットを説明する", points: 13 },
     { key: "proposed_weekend", label: "土日などを提案した", action: "土日などを提案する", points: 13 },
     { key: "proposed_other_store", label: "他店舗などを提案した", action: "他店舗などを提案する", points: 8 },

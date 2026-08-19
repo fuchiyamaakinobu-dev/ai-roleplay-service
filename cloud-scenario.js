@@ -68,6 +68,12 @@
     if (scenario.recommendedTalks?.distance?.includes("お出かけの予定に合わせる")) {
       scenario.recommendedTalks.distance = localScenario.recommendedTalks.distance;
     }
+    const localCircumstanceMetric = localScenario.scoring?.find((metric) => metric.key === "asked_reason");
+    const publishedCircumstanceMetric = scenario.scoring?.find((metric) => metric.key === "asked_reason");
+    if (localCircumstanceMetric && publishedCircumstanceMetric) {
+      publishedCircumstanceMetric.label = localCircumstanceMetric.label;
+      publishedCircumstanceMetric.action = localCircumstanceMetric.action;
+    }
     return scenario;
   }
 
