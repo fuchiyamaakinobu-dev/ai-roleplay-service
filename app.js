@@ -1401,7 +1401,7 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "SERVICE_TIME_QUESTION") {
-    if (!analysis.explained_service_time && !analysis.confirmed_service_time_unchanged) {
+    if (!state.serviceTimeExplained) {
       return repeatServiceTimeQuestionTurn();
     }
     return pickupRequestTurn();
