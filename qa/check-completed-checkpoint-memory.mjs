@@ -52,6 +52,8 @@ const context = {
     }
   },
   appointmentFollowUpCount: 0,
+  pickupRequestCount: 0,
+  repeatServiceTimeQuestionCount: 0,
   customerTurn(text, audioId = "") {
     return { text, audioId };
   },
@@ -72,6 +74,15 @@ const context = {
   appointmentFollowUpTurn() {
     context.appointmentFollowUpCount += 1;
     return { text: "では、いつなら空いていますか？", audioId: "follow-up" };
+  },
+  pickupRequestTurn() {
+    context.pickupRequestCount += 1;
+    context.state.currentState = "PICKUP_REQUEST";
+    return { text: "自宅に取りに来てほしいんですけど。", audioId: "pickup-request" };
+  },
+  repeatServiceTimeQuestionTurn() {
+    context.repeatServiceTimeQuestionCount += 1;
+    return { text: "点検ってどれぐらい時間がかかるんですか？", audioId: "service-time-question" };
   }
 };
 vm.createContext(context);
@@ -92,6 +103,42 @@ assert.equal(context.isServiceTimeRequirementSatisfied(true, false), true);
 assert.equal(context.isServiceTimeRequirementSatisfied(true, true), false);
 assert.equal(context.isServiceTimeRequirementSatisfied(false, false), false);
 
+const noNewServiceTimeExplanation = {
+  explained_service_time: false,
+  confirmed_service_time_unchanged: false,
+  asked_service_request: false,
+  asked_vehicle_concern: false,
+  asked_additional_service: false,
+  has_schedule_date: false,
+  has_schedule_time: false,
+  schedule_time_options: []
+};
+
+context.state.currentState = "SERVICE_TIME_QUESTION";
+context.state.serviceTimeExplained = true;
+context.state.serviceTimeNeedsReconfirmation = false;
+const rememberedServiceTime = context.nextCustomerMessage(noNewServiceTimeExplanation);
+assert.equal(rememberedServiceTime.audioId, "pickup-request");
+assert.equal(context.pickupRequestCount, 1);
+assert.equal(context.repeatServiceTimeQuestionCount, 0);
+
+context.state.currentState = "SERVICE_TIME_QUESTION";
+context.state.serviceTimeExplained = true;
+context.state.serviceTimeNeedsReconfirmation = true;
+const missingReconfirmation = context.nextCustomerMessage(noNewServiceTimeExplanation);
+assert.equal(missingReconfirmation.audioId, "pickup-request");
+assert.equal(context.state.serviceTimeNeedsReconfirmation, true);
+assert.equal(context.pickupRequestCount, 2);
+assert.equal(context.repeatServiceTimeQuestionCount, 0);
+
+context.state.currentState = "SERVICE_TIME_QUESTION";
+context.state.serviceTimeExplained = false;
+context.state.serviceTimeNeedsReconfirmation = false;
+const missingInitialServiceTime = context.nextCustomerMessage(noNewServiceTimeExplanation);
+assert.equal(missingInitialServiceTime.audioId, "service-time-question");
+assert.equal(context.repeatServiceTimeQuestionCount, 1);
+
+context.state.currentState = "VISIT_PROPOSAL";
 context.rememberCompletedCheckpoints({
   explained_service_time: false,
   has_schedule_date: true,

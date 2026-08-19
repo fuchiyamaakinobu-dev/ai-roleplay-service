@@ -14,7 +14,7 @@ assert.match(appSource, /function repeatServiceTimeQuestionTurn\(\)/);
 assert.match(appSource, /\.filter\(\(item\) => item\.text !== lastCustomerText\)/);
 assert.match(
   appSource,
-  /if \(!analysis\.explained_service_time && !analysis\.confirmed_service_time_unchanged\) \{\s*return repeatServiceTimeQuestionTurn\(\);/
+  /if \(!state\.serviceTimeExplained\) \{\s*return repeatServiceTimeQuestionTurn\(\);/
 );
 assert.match(appSource, /state\.resolutionType = state\.resolutionType \|\| "continuedWithMissingConfirmation";/);
 
