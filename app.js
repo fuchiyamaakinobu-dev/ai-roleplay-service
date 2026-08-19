@@ -174,6 +174,16 @@ function hasAffirmativeOption(normalized, words, isQuestion, positiveWords = [])
   });
 }
 
+function hasVisitPressure(normalized) {
+  return includesAny(normalized, lexicon.pressure)
+    || /(?:必ず|絶対|どうしても).{0,12}(?:来店|お越し|店に来)/.test(normalized)
+    || /(?:来店|お越し|店に来).{0,12}(?:しかありません|しかない|してもらいます|しなければなりません|必須です)/.test(normalized);
+}
+
+function hasPickupRefusal(normalized) {
+  return /(?:引取|引き取り|引取り|車を取り|取りに行|取りに伺).{0,16}(?:できません|できない|出来ません|出来ない|けません|けない|えません|えない|対応できません|難しい|無理|していません|行っていません)/.test(normalized);
+}
+
 function hasAffirmativeServiceTime(normalized) {
   const matches = [...normalized.matchAll(/(?:(?:1|一)時間(?!半|15分|30分)|60分|六十分)/g)];
   return matches.some((match) => {
@@ -578,10 +588,10 @@ function registered12MonthCustomerMessage(role, text, audioId) {
   if (item?.status === "ready" && audioPath(audioId)) {
     return { text: item.text, audioId };
   }
-  const fallbackAudioId = scenario.audio.needsMoreContext;
+  const fallbackAudioId = scenario.audio.continueGeneric;
   const fallbackItem = audioIndex.get(fallbackAudioId);
   return {
-    text: fallbackItem?.text || "おっしゃっていることがよく分からないんですけど。",
+    text: fallbackItem?.text || "ありがとうございます。続けてお願いします。",
     audioId: fallbackAudioId
   };
 }
@@ -1046,6 +1056,19 @@ function hasTrailingServiceInquiry(normalized) {
   return /(?:気になる(?:所|ところ|点)|調子の悪い(?:所|ところ)|オイル交換)(?:(?:など|とか))?(?:は|など|とか)[。.!！]?$/.test(normalized);
 }
 
+function isDayOffVisitQuestion(normalized, isQuestion) {
+  if (!isQuestion) return false;
+  const mentionsCustomerDayOff = includesAny(normalized, [
+    "仕事が休み", "仕事がお休み", "仕事の休み", "仕事のお休み",
+    "お仕事が休み", "お仕事がお休み", "お仕事の休み", "お仕事のお休み",
+    "休みの日", "お休みの日", "休みの時", "お休みの時", "休日"
+  ]);
+  const asksAboutVisit = includesAny(normalized, ["来店", "お越し", "店に行", "店まで行"]);
+  const rejectsVisit = /(?:来店|お越し|店に行|店まで行).{0,12}(?:難しい|無理|できません[。.!！]?|できない)/.test(normalized)
+    && !/(?:来店|お越し).{0,8}(?:できませんか|いただけませんか)/.test(normalized);
+  return mentionsCustomerDayOff && asksAboutVisit && !rejectsVisit;
+}
+
 function analyzeStaff(text) {
   const normalized = normalizeFullWidthDigits(text.replace(/\s+/g, ""));
   const isQuestion = /[？?]$/.test(text)
@@ -1111,10 +1134,12 @@ function analyzeStaff(text) {
     isQuestion,
     ["来店", "一緒", "可能", "できます", "いかが", "よろしい"]
   );
+  const proposedDayOffVisit = isDayOffVisitQuestion(normalized, isQuestion);
   const hasActionableProposal = proposedWeekend
     || proposedOtherStore
     || proposedTime
-    || proposedFamilyVisit;
+    || proposedFamilyVisit
+    || proposedDayOffVisit;
   const hasPositiveScheduleOffer = !hasNegativeOptionExpression(normalized)
     || /(?:空いています|空いております|空きがあります|空きがございます|予約できます|ご案内できます|可能です|いかが(?:でしょうか|ですか)|よろしいでしょうか)/.test(normalized);
   const hasScheduleDate = hasPositiveScheduleOffer && hasScheduleDateExpression(normalized);
@@ -1171,6 +1196,7 @@ function analyzeStaff(text) {
     offered_time_band_choice: offeredTimeBandChoice,
     offered_morning_time_band: offeredMorningTimeBand,
     proposed_family_visit: proposedFamilyVisit,
+    proposed_day_off_visit: proposedDayOffVisit,
     has_schedule_date: hasScheduleDate,
     has_schedule_time: hasScheduleTime,
     has_multiple_schedule_times: hasMultipleScheduleTimes,
@@ -1178,8 +1204,8 @@ function analyzeStaff(text) {
     has_concrete_schedule: hasConcreteSchedule,
     mentioned_previous_pickup: includesAny(normalized, ["以前", "前回", "前に", "取りに来ると", "取りに伺うと"]),
     proposed_alternative: hasActionableProposal,
-    pressured_customer: includesAny(normalized, lexicon.pressure),
-    refused_pickup: includesAny(normalized, ["引取できません", "取りに行けません", "対応できません"]),
+    pressured_customer: hasVisitPressure(normalized),
+    refused_pickup: hasPickupRefusal(normalized),
     left_choice: leftChoice,
     next_action_confirmed: nextActionConfirmed,
     ambiguous,
@@ -1201,7 +1227,7 @@ function collectEvidence(text) {
 }
 
 function decide(analysis) {
-  if (analysis.ambiguous) return "needs_more_context";
+  if (analysis.pressured_customer || analysis.refused_pickup) return "needs_more_context";
   if (analysis.accepted_pickup) return "pickup_accepted_immediately";
   if (analysis.explained_visit_benefit || analysis.proposed_alternative || analysis.asked_reason) {
     return "continue_visit_promotion";
@@ -1407,20 +1433,16 @@ function nextCustomerMessage(analysis) {
       state.currentState = "ALTERNATIVE_PROPOSAL";
       return contextualResponse;
     }
-    if (["distance", "drivingConfidence"].includes(state.pickupReason || state.currentObjection)) {
-      return unresolvedDistanceOrDrivingTurn();
+    state.resolutionType = state.resolutionType || "continuedWithMissingConfirmation";
+    state.currentState = "ALTERNATIVE_PROPOSAL";
+    if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
+      state.ended = true;
+      return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
     }
-    return customerTurnFromAudio(
-      scenario.audio.needsMoreContext,
-      "おっしゃっていることがよく分からないんですけど。"
-    );
+    return appointmentFollowUpTurn(analysis);
   }
 
   if (state.currentState === "ALTERNATIVE_PROPOSAL") {
-    if (!state.resolutionType && ["distance", "drivingConfidence"].includes(state.pickupReason || state.currentObjection)) {
-      state.currentState = "VISIT_PROPOSAL";
-      return unresolvedDistanceOrDrivingTurn();
-    }
     const selectedTime = selectAppointmentTimeOption(analysis);
     if (selectedTime) return selectedTime;
     if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
@@ -1620,6 +1642,10 @@ function selectContextualCustomerResponse(analysis) {
     return null;
   }
   if (reason === "work") {
+    if (analysis.proposed_day_off_visit) {
+      state.resolutionType = "dayOffAvailability";
+      return customerTurnFromAudio(scenario.audio.possibleAgreements[0], "土日なら行けるかもしれません。");
+    }
     if (analysis.proposed_weekend) {
       state.resolutionType = "weekend";
       return customerTurnFromAudio(scenario.audio.possibleAgreements[0], "土日なら行けるかもしれません。");

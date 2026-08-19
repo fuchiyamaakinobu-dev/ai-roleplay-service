@@ -142,7 +142,7 @@ assert.equal(context.state.appointmentTime, null);
 context.state.currentState = "VISIT_PROPOSAL";
 context.state.currentObjection = "distance";
 context.state.pickupReason = "drivingConfidence";
-const unresolvedDriving = context.nextCustomerMessage({
+const continuedDriving = context.nextCustomerMessage({
   explained_service_time: false,
   asked_additional_service: false,
   asked_vehicle_concern: false,
@@ -151,11 +151,12 @@ const unresolvedDriving = context.nextCustomerMessage({
   schedule_time_options: [],
   proposed_time: false
 });
-assert.equal(unresolvedDriving.text, "遠いし運転に自信が無いのでお店には行けません。");
-assert.equal(unresolvedDriving.audioId, "distance-03");
-assert.equal(context.state.currentState, "VISIT_PROPOSAL");
+assert.equal(continuedDriving.text, "では、いつなら空いていますか？");
+assert.equal(continuedDriving.audioId, "follow-up");
+assert.equal(context.state.currentState, "ALTERNATIVE_PROPOSAL");
 assert.equal(context.state.ended, false);
 
+context.appointmentFollowUpCount = 0;
 context.state.currentState = "VISIT_PROPOSAL";
 context.state.currentObjection = "work";
 context.state.pickupReason = "work";
