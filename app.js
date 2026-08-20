@@ -1790,7 +1790,7 @@ function hasCompleteInspectionAppointmentProposal(text) {
 
 function inspectionAppointmentDateCandidates(text) {
   const normalized = normalizeScriptedText(text);
-  return [...normalized.matchAll(/(\d{1,2})月(\d{1,2})日/g)]
+  const explicitDates = [...normalized.matchAll(/(\d{1,2})月(\d{1,2})日/g)]
     .filter((match) => {
       const followingText = normalized.slice(match.index + match[0].length);
       return !/^[、,。.]*(?:以降|以後|から|より|まで)/.test(followingText);
@@ -1801,6 +1801,29 @@ function inspectionAppointmentDateCandidates(text) {
       index: match.index,
       end: match.index + match[0].length
     }));
+
+  // 「8月1日以降」と案内した後の「9日土曜日」のように、
+  // 会話上明らかな月を省略した日付は、直前の月と組み合わせて保持する。
+  const contextualDates = [...normalized.matchAll(/(\d{1,2})日/g)]
+    .filter((match) => normalized[match.index - 1] !== "月")
+    .filter((match) => {
+      const followingText = normalized.slice(match.index + match[0].length);
+      return !/^[、,。.]*(?:以降|以後|から|より|まで)/.test(followingText);
+    })
+    .map((match) => {
+      const precedingMonths = [...normalized.slice(0, match.index).matchAll(/(\d{1,2})月/g)];
+      const precedingMonth = precedingMonths[precedingMonths.length - 1];
+      if (!precedingMonth) return null;
+      return {
+        month: precedingMonth[1],
+        day: match[1],
+        index: match.index,
+        end: match.index + match[0].length
+      };
+    })
+    .filter(Boolean);
+
+  return [...explicitDates, ...contextualDates].sort((a, b) => a.index - b.index);
 }
 
 function inspectionAppointmentProposalMatch(text) {
@@ -2111,7 +2134,7 @@ function combinedScriptedReply(text, step) {
 
 function asksInspectionDayPreference(normalized) {
   const hasDayChoice = /(?:平日|土日|週末|曜日)/.test(normalized);
-  const asksPreference = /(?:どちら|希望|都合|よろしい|良い)/.test(normalized);
+  const asksPreference = /(?:どちら|希望|都合|よろしい|良い|いかが)/.test(normalized);
   return hasDayChoice && asksPreference && isScriptedQuestion(normalized);
 }
 

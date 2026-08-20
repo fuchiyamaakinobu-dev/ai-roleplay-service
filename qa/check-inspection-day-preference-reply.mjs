@@ -19,7 +19,8 @@ vm.runInContext(appSource.slice(preferenceStart, preferenceEnd), preferenceConte
 for (const phrase of [
   "平日と週末ですと、どちらがよろしいでしょうか。",
   "土日と平日ならどちらがご希望ですか？",
-  "曜日のご都合はいかがですか？"
+  "曜日のご都合はいかがですか？",
+  "来週の火曜日ではいかがでしょうか？"
 ]) {
   assert.equal(
     preferenceContext.asksInspectionDayPreference(phrase),

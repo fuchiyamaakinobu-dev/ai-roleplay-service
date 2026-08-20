@@ -42,7 +42,7 @@ const proposalContext = {
   normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
   isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text),
   asksInspectionDayPreference: (text) => /(?:平日|土日|週末|曜日)/.test(text)
-    && /(?:どちら|希望|都合|よろしい|良い)/.test(text)
+    && /(?:どちら|希望|都合|よろしい|良い|いかが)/.test(text)
     && /(?:でしょうか|ますか|ですか|[?？])/.test(text)
 };
 vm.createContext(proposalContext);
@@ -99,6 +99,19 @@ assert.equal(
   "希望日を尋ねる依頼表現を日時調整として認識できません"
 );
 
+const contextualDayCandidates = proposalContext.inspectionAppointmentDateCandidates(
+  "車検は8月1日以降いつでも可能です。来週の火曜日ではいかがでしょうか。次の9日土曜日はいかがでしょうか。"
+);
+assert.equal(contextualDayCandidates.length, 1, "月の文脈がある『9日土曜日』を予約日として保持できません");
+assert.equal(contextualDayCandidates[0].month, "8", "省略された予約日の月を直前の文脈から取得できません");
+assert.equal(contextualDayCandidates[0].day, "9", "省略された予約日の日を取得できません");
+const contextualAppointment = proposalContext.inspectionAppointmentProposalMatch(
+  "車検は8月1日以降いつでも可能です。次の9日土曜日はいかがでしょうか。10時はいかがでしょうか。"
+);
+assert.equal(contextualAppointment?.month, "8", "月を省略した予約日時の月が一致しません");
+assert.equal(contextualAppointment?.day, "9", "月を省略した予約日時の日が一致しません");
+assert.equal(contextualAppointment?.hour, "10", "月を省略した日付と後続の時刻を合わせて予約日時を確定できません");
+
 const retryStart = appSource.indexOf("function scriptedRetryForMissingDetails");
 const retryEnd = appSource.indexOf("function naturalScriptedRetryVariants", retryStart);
 assert.notEqual(retryStart, -1, "不足項目の聞き返し関数が見つかりません");
@@ -111,7 +124,7 @@ const retryContext = {
   hasSupportedInspectionDuration: () => false,
   hasInspectionScheduleQuestionIntent: (text) => /(?:でしょうか|ますか|ですか|[?？]|(?:ご)?都合.{0,12}(?:よろしい|良い|いい)(?:でしょう)?)/.test(text),
   asksInspectionDayPreference: (text) => /(?:平日|土日|週末|曜日)/.test(text)
-    && /(?:どちら|希望|都合|よろしい|良い)/.test(text)
+    && /(?:どちら|希望|都合|よろしい|良い|いかが)/.test(text)
     && /(?:でしょうか|ますか|ですか|[?？])/.test(text)
 };
 vm.createContext(retryContext);
@@ -200,6 +213,21 @@ assert.equal(
   availabilityDayChoiceRetry.missingDetail,
   "appointmentDate",
   "入庫可能日の案内後に具体的な予約日が確定扱いになっています"
+);
+
+const contextualDayOnlyRetry = retryContext.scriptedRetryForMissingDetails(
+  "車検は8月1日以降いつでも可能です。来週の火曜日ではいかがでしょうか。次の9日土曜日はいかがでしょうか。",
+  { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }
+);
+assert.equal(
+  contextualDayOnlyRetry.text,
+  "何時が空いていますか？",
+  "月の文脈がある『9日土曜日』の提示後に曜日希望を繰り返しています"
+);
+assert.equal(
+  contextualDayOnlyRetry.audioId,
+  "inspection_appointment_time_missing_retry",
+  "日付提示後の既存まこと音声を使用していません"
 );
 
 const availabilityThenTimeRetry = retryContext.scriptedRetryForMissingDetails(
