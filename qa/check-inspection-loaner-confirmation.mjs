@@ -16,6 +16,8 @@ vm.runInContext(appSource.slice(normalizeStart, helperEnd), helperContext);
 for (const text of [
   "代車をご用意します。",
   "代車の方もご用意させていただくような形になりますね。",
+  "代車も問題なくご用意できるかと思います。",
+  "代車をご用意できると思います。",
   "代車を準備しておきます。",
   "代車を手配いたします。",
   "台車をご用意できます。"
@@ -31,6 +33,7 @@ for (const text of [
   "代車をご用意できません。",
   "代車の用意は難しいです。",
   "代車について確認します。",
+  "代車をご用意できるか確認します。",
   "代車ですね。"
 ]) {
   assert.equal(
@@ -69,6 +72,15 @@ assert.equal(
   ),
   true,
   "早め・予約がなくても、依頼後の明確な代車手配を達成にできません"
+);
+assert.equal(
+  matcherContext.scriptedRequiredGroupsMatch(
+    "代車も問題なくご用意できるかと思います。",
+    loanerStep,
+    [["代車"], [], [], ["ご用意"]]
+  ),
+  true,
+  "『ご用意できるかと思います』を代車手配の承諾として認識できません"
 );
 assert.equal(
   matcherContext.scriptedRequiredGroupsMatch(

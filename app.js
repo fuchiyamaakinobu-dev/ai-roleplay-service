@@ -1720,8 +1720,9 @@ function hasInspectionLoanerConfirmation(text) {
   const hasLoaner = normalized.includes("代車");
   const hasArrangement = /(?:用意|準備|手配)/.test(normalized);
   const hasNegative = /(?:できません|できない|難しい|空きがない|空いていない|用意がない|用意はない)/.test(normalized);
-  const hasCommitment = /(?:できます|可能です|いたします|します|させていただ|しておきます|しておきましょう|なります)/.test(normalized);
-  return hasLoaner && hasArrangement && hasCommitment && !hasNegative;
+  const isPendingConfirmation = /(?:できるか|可能か|空き(?:を|が)?).*確認(?:します|いたします|して)/.test(normalized);
+  const hasCommitment = /(?:できます|できる(?:か)?と思います|可能です|いたします|します|させていただ|しておきます|しておきましょう|なります)/.test(normalized);
+  return hasLoaner && hasArrangement && hasCommitment && !hasNegative && !isPendingConfirmation;
 }
 
 function hasInspectionAvailableFromInformation(text) {
