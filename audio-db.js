@@ -442,7 +442,9 @@ const vehicleInspectionAudioLines = [
   ["inspection_recapped_appointment_retry", "予約復唱・聞き返し", "ん！？、何日の予定でしたっけ？"],
   ["inspection_closed_politely_customer", "終話・お客様回答", "ありがとうございました。"],
   ["inspection_closed_politely_retry", "終話・聞き返し", "はい。"],
-  ["inspection_missing_appointment_angry", "入庫日時未確定・少し怒り気味", "いつ行けばいいんですか？"]
+  ["inspection_missing_appointment_angry", "入庫日時未確定・少し怒り気味", "いつ行けばいいんですか？"],
+  ["inspection_missing_appointment_repeat", "入庫日時未確定・再確認", "入庫する日と時間を教えてください。"],
+  ["inspection_missing_appointment_specific", "入庫日時未確定・具体確認", "何月何日の何時に行けばよいですか？"]
 ];
 
 window.ROLEPLAY_AUDIO_DB.items.push(...vehicleInspectionAudioLines.map(([id, label, text, status = "ready"]) => ({

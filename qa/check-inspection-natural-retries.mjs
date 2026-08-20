@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const audioDbSource = fs.readFileSync(new URL("../audio-db.js", import.meta.url), "utf8");
 
 assert.doesNotMatch(
   source,
@@ -66,5 +67,28 @@ assert.deepEqual(
   [{ text: "今、このまま予約できますか？", audioId: "inspection_confirmed_booking_time_retry" }],
   "予約確認の聞き返しにブラウザー標準音声の自動生成文が残っています"
 );
+
+const missingAppointmentAudio = [
+  {
+    id: "inspection_missing_appointment_repeat",
+    text: "入庫する日と時間を教えてください。"
+  },
+  {
+    id: "inspection_missing_appointment_specific",
+    text: "何月何日の何時に行けばよいですか？"
+  }
+];
+
+for (const { id, text } of missingAppointmentAudio) {
+  assert.match(source, new RegExp(`audioId: "${id}"`), `${id} が会話処理で使用されていません`);
+  assert.match(
+    audioDbSource,
+    new RegExp(`\\["${id}",\\s*"[^"]+",\\s*"${text.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}"\\]`),
+    `${id} の表示文と音声登録文が一致していません`
+  );
+  const audioPath = new URL(`../audio-ondoku/${id}.mp3`, import.meta.url);
+  assert.equal(fs.existsSync(audioPath), true, `${id} のまことMP3がありません`);
+  assert.ok(fs.statSync(audioPath).size > 1000, `${id} のまことMP3が空または破損しています`);
+}
 
 console.log("車検誘致・登録済みまこと音声限定テスト: OK");
