@@ -1775,7 +1775,7 @@ function hasInspectionBookingInvitation(text) {
 
 function hasInspectionAppointmentProposalEvidence(text) {
   const normalized = normalizeScriptedText(text);
-  const hasConcreteDateOrTime = /\d{1,2}月\d{1,2}日/.test(normalized)
+  const hasConcreteDateOrTime = inspectionAppointmentDateCandidates(normalized).length > 0
     || /\d{1,2}時/.test(normalized);
   const hasProposalContext = /(?:いかが|どうでしょう|空いて|空き|予約|予定)/.test(normalized);
   return hasConcreteDateOrTime && hasProposalContext && isScriptedQuestion(normalized);
@@ -1784,8 +1784,37 @@ function hasInspectionAppointmentProposalEvidence(text) {
 function hasCompleteInspectionAppointmentProposal(text) {
   const normalized = normalizeScriptedText(text);
   return hasInspectionAppointmentProposalEvidence(normalized)
-    && /\d{1,2}月\d{1,2}日/.test(normalized)
-    && /\d{1,2}時/.test(normalized);
+    && Boolean(inspectionAppointmentProposalMatch(normalized));
+}
+
+function inspectionAppointmentDateCandidates(text) {
+  const normalized = normalizeScriptedText(text);
+  return [...normalized.matchAll(/(\d{1,2})月(\d{1,2})日/g)]
+    .filter((match) => {
+      const followingText = normalized.slice(match.index + match[0].length);
+      return !/^[、,。.]*(?:以降|以後|から|より|まで)/.test(followingText);
+    })
+    .map((match) => ({
+      month: match[1],
+      day: match[2],
+      index: match.index,
+      end: match.index + match[0].length
+    }));
+}
+
+function inspectionAppointmentProposalMatch(text) {
+  const normalized = normalizeScriptedText(text);
+  for (const date of inspectionAppointmentDateCandidates(normalized)) {
+    const timeMatch = normalized.slice(date.end).match(/(\d{1,2})時/);
+    if (timeMatch) {
+      return {
+        month: date.month,
+        day: date.day,
+        hour: timeMatch[1]
+      };
+    }
+  }
+  return null;
 }
 
 function hasInspectionScheduleQuestionIntent(normalized) {
@@ -1889,13 +1918,13 @@ function analyzeScriptedStaff(text, step) {
     && scriptedStepSpecificMatches(normalized, step);
 
   if (step.key === "proposed_appointment") {
-    const appointmentMatch = normalized.match(/(\d{1,2})月(\d{1,2})日.*?(\d{1,2})時/);
+    const appointmentMatch = inspectionAppointmentProposalMatch(normalized);
     passed = Boolean(passed && appointmentMatch);
     if (passed) {
       state.proposedAppointment = {
-        month: appointmentMatch[1],
-        day: appointmentMatch[2],
-        hour: appointmentMatch[3]
+        month: appointmentMatch.month,
+        day: appointmentMatch.day,
+        hour: appointmentMatch.hour
       };
     }
   }
@@ -2010,6 +2039,10 @@ function scriptedStepSpecificMatches(normalized, step) {
     return hasBookingContinuationConfirmation(normalized);
   }
 
+  if (step.key === "proposed_appointment") {
+    return Boolean(inspectionAppointmentProposalMatch(normalized));
+  }
+
   if (step.key === "explained_available_period") {
     const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
     return Boolean(expiryDate)
@@ -2081,7 +2114,7 @@ function scriptedRetryForMissingDetails(text, step) {
   const normalized = normalizeScriptedText(text);
 
   if (step.key === "proposed_appointment") {
-    const hasDate = /\d{1,2}月\d{1,2}日/.test(normalized);
+    const hasDate = inspectionAppointmentDateCandidates(normalized).length > 0;
     const hasTime = /\d{1,2}時/.test(normalized);
     const hasWeekday = /(?:月|火|水|木|金|土|日)(?:曜|曜日)/.test(normalized);
     const asksTimePreference = /(?:何時|午前|午後|時間帯)/.test(normalized);
