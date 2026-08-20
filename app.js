@@ -1812,6 +1812,22 @@ function advancedPastScriptedStep(startingIndex, currentIndex, steps, stepKey) {
   return targetIndex >= 0 && startingIndex <= targetIndex && currentIndex > targetIndex;
 }
 
+function hasClearInspectionPurposeNotice(text) {
+  const normalized = normalizeScriptedText(text);
+  const explicitlyStatesInspectionPurpose = normalized.includes("車検")
+    && /(?:時期|近|案内|連絡|電話|予約)/.test(normalized);
+  const vehicleName = normalizeScriptedText(scenario.vehicleName || "");
+  const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+  const impliesInspectionFromRegisteredDetails = Boolean(
+    vehicleName
+    && expiryDate
+    && normalized.includes(vehicleName)
+    && normalized.includes(expiryDate)
+    && /(?:予定|予約|都合|決まり|決め|いかが)/.test(normalized)
+  );
+  return explicitlyStatesInspectionPurpose || impliesInspectionFromRegisteredDetails;
+}
+
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // Firestoreに予約手続き時間だけを必須とする旧条件が残っていても、
   // 予約をこのまま進めてよいか確認する自然な言い回しを有効にする。
@@ -2475,6 +2491,16 @@ function handleScriptedStaffReply(text) {
   const answeredDayPreferenceAfterExpiry = shouldAnswerDayPreferenceFromStoredExpiry(text, step);
   const combinedText = combinedScriptedReply(text, step);
   const analysis = analyzeScriptedStaff(combinedText, step);
+  const explainedPurposeWithoutRequiredDetails = step.key === "explained_inspection_notice"
+    && !analysis.passed
+    && hasClearInspectionPurposeNotice(combinedText);
+  if (explainedPurposeWithoutRequiredDetails) {
+    // 車種や具体的な時期が不足していても、車検の用件自体が明確なら会話は進める。
+    // 採点は未達のまま残し、「ご用件は何ですか？」という矛盾した聞き返しを防ぐ。
+    analysis.canAdvance = true;
+    analysis.blocked = false;
+    analysis.evidence.push("車検の用件を説明（車種・時期は不足）");
+  }
   state.turn += 1;
 
   if (!analysis.canAdvance) {
