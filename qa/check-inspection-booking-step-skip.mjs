@@ -88,6 +88,16 @@ assert.equal(
   true,
   "曜日だけの選択質問を日時調整の開始として認識できません"
 );
+assert.equal(
+  proposalContext.hasInspectionAppointmentCoordinationEvidence("まず日程ですが、ご希望の日にちはございますでしょうか？"),
+  true,
+  "希望日の質問を日時調整の開始として認識できません"
+);
+assert.equal(
+  proposalContext.hasInspectionAppointmentCoordinationEvidence("希望の日程を教えてください。"),
+  true,
+  "希望日を尋ねる依頼表現を日時調整として認識できません"
+);
 
 const retryStart = appSource.indexOf("function scriptedRetryForMissingDetails");
 const retryEnd = appSource.indexOf("function naturalScriptedRetryVariants", retryStart);
@@ -97,6 +107,7 @@ assert.notEqual(retryEnd, -1, "不足項目の聞き返し関数の終端が見�
 const retryContext = {
   normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
   inspectionAppointmentDateCandidates: proposalContext.inspectionAppointmentDateCandidates,
+  asksOpenInspectionDatePreference: proposalContext.asksOpenInspectionDatePreference,
   hasSupportedInspectionDuration: () => false,
   hasInspectionScheduleQuestionIntent: (text) => /(?:でしょうか|ますか|ですか|[?？]|(?:ご)?都合.{0,12}(?:よろしい|良い|いい)(?:でしょう)?)/.test(text),
   asksInspectionDayPreference: (text) => /(?:平日|土日|週末|曜日)/.test(text)
@@ -140,8 +151,28 @@ const openPreferenceRetry = retryContext.scriptedRetryForMissingDetails(
 );
 assert.equal(
   openPreferenceRetry.text,
-  "具体的な日時を教えてください。",
-  "希望日時を質問された後に既存の具体日時確認へ進みません"
+  "お願いしたいんですけど、いつできますか？",
+  "希望日時を質問された後に自然な空き日確認へ進みません"
+);
+assert.equal(
+  openPreferenceRetry.audioId,
+  "inspection_asked_availability_customer",
+  "希望日質問後の車検誘致用音声IDが一致していません"
+);
+
+const preferredDateRetry = retryContext.scriptedRetryForMissingDetails(
+  "まず日程でございますが、ご希望の日にちとかございますでしょうか？",
+  { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }
+);
+assert.equal(
+  preferredDateRetry.text,
+  "お願いしたいんですけど、いつできますか？",
+  "希望日の質問に『具体的な日時を教えてください』と回答しています"
+);
+assert.equal(
+  preferredDateRetry.audioId,
+  "inspection_asked_availability_customer",
+  "希望日の質問に登録済みまこと音声を使用していません"
 );
 
 const dayChoiceRetry = retryContext.scriptedRetryForMissingDetails(
@@ -222,6 +253,16 @@ assert.equal(
   fs.existsSync(new URL("../audio-ondoku/inspection_appointment_morning_need_date.mp3", import.meta.url)),
   true,
   "曜日・時間帯質問後のMP3が見つかりません"
+);
+assert.match(
+  audioDbSource,
+  /inspection_asked_availability_customer"[^\n]*"お願いしたいんですけど、いつできますか？"/,
+  "希望日質問後の表示文と音声登録文が一致していません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_asked_availability_customer.mp3", import.meta.url)),
+  true,
+  "希望日質問後のまことMP3が見つかりません"
 );
 
 console.log("予約手続き確認省略後の日時調整テスト: OK");

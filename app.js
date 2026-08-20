@@ -1822,6 +1822,15 @@ function hasInspectionScheduleQuestionIntent(normalized) {
     || /(?:ご)?都合.{0,12}(?:よろしい|良い|いい)(?:でしょう)?/.test(normalized);
 }
 
+function asksOpenInspectionDatePreference(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasPreference = /(?:希望|都合)/.test(normalized);
+  const hasDateContext = /(?:日程|日にち|日付|日取り|何日|いつ(?!も))/.test(normalized);
+  const asksForAnswer = isScriptedQuestion(normalized)
+    || /(?:教えて|お聞かせ|ございますでしょう)/.test(normalized);
+  return hasPreference && hasDateContext && asksForAnswer;
+}
+
 function hasInspectionAppointmentCoordinationEvidence(text) {
   if (hasInspectionAppointmentProposalEvidence(text)) return true;
   const normalized = normalizeScriptedText(text);
@@ -1829,11 +1838,12 @@ function hasInspectionAppointmentCoordinationEvidence(text) {
   const hasTimePreference = /(?:何時|午前|午後|時間帯)/.test(normalized);
   const openTimingQuestion = /(?:いつ(?:ぐらい|頃|ごろ|なら|が|に|から|まで)|何日|何時)/;
   const asksOpenPreference = new RegExp(`(?:都合|希望).{0,24}${openTimingQuestion.source}|${openTimingQuestion.source}.{0,24}(?:都合|希望)`).test(normalized);
-  const hasSchedulingContext = /(?:予約|予定|空いて|空き|都合|いかが|よろしい)/.test(normalized);
+  const hasSchedulingContext = /(?:予約|予定|日程|日にち|希望|空いて|空き|都合|いかが|よろしい)/.test(normalized);
   const asksDayPreference = asksInspectionDayPreference(normalized);
-  return (hasDayPreference && hasTimePreference || asksOpenPreference || asksDayPreference)
+  const asksOpenDatePreference = asksOpenInspectionDatePreference(normalized);
+  return (hasDayPreference && hasTimePreference || asksOpenPreference || asksDayPreference || asksOpenDatePreference)
     && hasSchedulingContext
-    && hasInspectionScheduleQuestionIntent(normalized);
+    && (hasInspectionScheduleQuestionIntent(normalized) || asksOpenDatePreference);
 }
 
 function advancedPastScriptedStep(startingIndex, currentIndex, steps, stepKey) {
@@ -2135,6 +2145,13 @@ function scriptedRetryForMissingDetails(text, step) {
       return {
         text: "土日がいいです。",
         audioId: "inspection_day_preference_answer",
+        missingDetail: "appointmentDate"
+      };
+    }
+    if (!hasDate && !hasTime && asksOpenInspectionDatePreference(normalized)) {
+      return {
+        text: "お願いしたいんですけど、いつできますか？",
+        audioId: "inspection_asked_availability_customer",
         missingDetail: "appointmentDate"
       };
     }
