@@ -1814,8 +1814,18 @@ function advancedPastScriptedStep(startingIndex, currentIndex, steps, stepKey) {
 
 function hasClearInspectionPurposeNotice(text) {
   const normalized = normalizeScriptedText(text);
-  return normalized.includes("車検")
+  const explicitlyStatesInspectionPurpose = normalized.includes("車検")
     && /(?:時期|近|案内|連絡|電話|予約)/.test(normalized);
+  const vehicleName = normalizeScriptedText(scenario.vehicleName || "");
+  const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+  const impliesInspectionFromRegisteredDetails = Boolean(
+    vehicleName
+    && expiryDate
+    && normalized.includes(vehicleName)
+    && normalized.includes(expiryDate)
+    && /(?:予定|予約|都合|決まり|決め|いかが)/.test(normalized)
+  );
+  return explicitlyStatesInspectionPurpose || impliesInspectionFromRegisteredDetails;
 }
 
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {

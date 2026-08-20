@@ -9,7 +9,12 @@ const helperEnd = source.indexOf("function scriptedRequiredGroupsMatch", helperS
 assert.notEqual(helperStart, -1, "車検誘致の正規化関数が見つかりません");
 assert.notEqual(helperEnd, -1, "車検用件判定関数の終端が見つかりません");
 
-const context = {};
+const context = {
+  scenario: {
+    vehicleName: "ヤリス",
+    expiryDate: "9月30日"
+  }
+};
 vm.createContext(context);
 vm.runInContext(source.slice(helperStart, helperEnd), context);
 
@@ -19,9 +24,19 @@ assert.equal(
   "車検の用件が明確な発話を認識できません"
 );
 assert.equal(
+  context.hasClearInspectionPurposeNotice("お使いのヤリスですが9月30日までとなりましたが、ご予定はお決まりでしたでしょうか"),
+  true,
+  "登録車種・満了日・予定確認を車検案内の文脈として認識できません"
+);
+assert.equal(
   context.hasClearInspectionPurposeNotice("点検の時期が近くなりましたのでご連絡しました"),
   false,
   "車検と明示していない発話を車検用件として誤認識しています"
+);
+assert.equal(
+  context.hasClearInspectionPurposeNotice("お使いのヤリスですが、ご予定はお決まりでしたでしょうか"),
+  false,
+  "登録満了日のない曖昧な予定確認を車検案内として誤認識しています"
 );
 assert.equal(
   context.hasClearInspectionPurposeNotice("お世話になっております"),
