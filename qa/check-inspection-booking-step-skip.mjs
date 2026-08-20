@@ -96,6 +96,7 @@ assert.notEqual(retryEnd, -1, "不足項目の聞き返し関数の終端が見�
 
 const retryContext = {
   normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
+  inspectionAppointmentDateCandidates: proposalContext.inspectionAppointmentDateCandidates,
   hasSupportedInspectionDuration: () => false,
   hasInspectionScheduleQuestionIntent: (text) => /(?:でしょうか|ますか|ですか|[?？]|(?:ご)?都合.{0,12}(?:よろしい|良い|いい)(?:でしょう)?)/.test(text),
   asksInspectionDayPreference: (text) => /(?:平日|土日|週末|曜日)/.test(text)
@@ -152,6 +153,32 @@ assert.equal(
   dayChoiceRetry.audioId,
   "inspection_day_preference_answer",
   "曜日選択質問後の既存音声IDが一致していません"
+);
+
+const availabilityDayChoice = "8月11日以降でしたら作業可能です。平日と週末ではどちらがよろしいでしょうか？";
+const availabilityDayChoiceRetry = retryContext.scriptedRetryForMissingDetails(
+  availabilityDayChoice,
+  { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }
+);
+assert.equal(
+  availabilityDayChoiceRetry.text,
+  "土日がいいです。",
+  "入庫可能日を予約日と誤認し、曜日希望への回答を省略しています"
+);
+assert.equal(
+  availabilityDayChoiceRetry.missingDetail,
+  "appointmentDate",
+  "入庫可能日の案内後に具体的な予約日が確定扱いになっています"
+);
+
+const availabilityThenTimeRetry = retryContext.scriptedRetryForMissingDetails(
+  `${availabilityDayChoice} 今のところ空いていますが、朝10時半はいかがでしょうか？`,
+  { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }
+);
+assert.equal(
+  availabilityThenTimeRetry.text,
+  "何日の予定ですか？",
+  "入庫可能日と時刻を合成して予約確定へ進んでいます"
 );
 
 assert.match(

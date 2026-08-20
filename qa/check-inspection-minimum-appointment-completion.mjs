@@ -33,6 +33,21 @@ assert.equal(
   false,
   "時刻だけで入庫日時確定へ進んでいます"
 );
+assert.equal(
+  context.hasCompleteInspectionAppointmentProposal("8月11日以降でしたら作業可能ですが、朝10時半はいかがでしょうか？"),
+  false,
+  "入庫可能期間の開始日と時刻を予約日時として誤認識しています"
+);
+assert.equal(
+  context.hasCompleteInspectionAppointmentProposal("車検は9月30日までです。8月1日から作業可能ですが、10時はいかがでしょうか？"),
+  false,
+  "満了日・入庫可能日と時刻を予約日時として誤認識しています"
+);
+assert.equal(
+  context.hasCompleteInspectionAppointmentProposal("8月11日以降でしたら作業可能です。8月20日の10時はいかがでしょうか？"),
+  true,
+  "入庫可能日の後に提示された具体的な予約日時を認識できません"
+);
 
 assert.match(
   source,
