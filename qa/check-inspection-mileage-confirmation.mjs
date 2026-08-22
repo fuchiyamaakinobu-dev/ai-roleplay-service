@@ -127,7 +127,7 @@ assert.match(
 );
 assert.match(
   appSource,
-  /const mileageOnlyMissing = step\.key === "explained_duration_and_wait"[\s\S]*?const canAdvance = passed \|\| mileageOnlyMissing/,
+  /const mileageOnlyMissing = step\.key === "explained_duration_and_wait"[\s\S]*?const canAdvance = passed[\s\S]{0,160}?\|\| mileageOnlyMissing/,
   "走行距離だけが未確認の場合に、未達のまま会話を進められません"
 );
 assert.match(scenarioSource, /inspectionCycle:\s*"初回車検"/);

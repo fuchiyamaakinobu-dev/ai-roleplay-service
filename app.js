@@ -2117,6 +2117,7 @@ function analyzeScriptedStaff(text, step) {
   const matchedGroups = step.requiredGroups.map((group) => group.filter((word) => normalized.includes(word)));
   let passed = scriptedRequiredGroupsMatch(normalized, step, matchedGroups)
     && scriptedStepSpecificMatches(normalized, step);
+  let recappedConfirmedDateTime = false;
 
   if (step.key === "proposed_appointment") {
     const appointmentMatch = inspectionAppointmentProposalMatch(normalized);
@@ -2132,19 +2133,25 @@ function analyzeScriptedStaff(text, step) {
 
   if (step.key === "recapped_appointment") {
     const appointment = state.proposedAppointment;
-    passed = Boolean(
-      passed
-      && appointment
+    recappedConfirmedDateTime = Boolean(
+      appointment
       && normalized.includes(`${appointment.month}月`)
       && normalized.includes(`${appointment.day}日`)
       && normalized.includes(`${appointment.hour}時`)
+    );
+    passed = Boolean(
+      passed
+      && recappedConfirmedDateTime
     );
   }
   const mileageOnlyMissing = step.key === "explained_duration_and_wait"
     && !state.inspectionMileageAsked
     && hasSupportedInspectionDuration(normalized)
     && ["待", "店内"].some((word) => normalized.includes(word));
-  const canAdvance = passed || mileageOnlyMissing || scriptedStepCanAdvanceOnFailure(step);
+  const canAdvance = passed
+    || mileageOnlyMissing
+    || recappedConfirmedDateTime
+    || scriptedStepCanAdvanceOnFailure(step);
   const analysis = {
     scripted: true,
     stepKey: step.key,
@@ -2156,6 +2163,9 @@ function analyzeScriptedStaff(text, step) {
     evidence: matchedGroups.flat().slice(0, 8)
   };
   analysis[step.key] = passed;
+  if (recappedConfirmedDateTime && !passed) {
+    analysis.evidence.push("確定済みの予約日時を復唱（氏名・締め表現は不足）");
+  }
   state.analyses.push(analysis);
   if (
     passed
