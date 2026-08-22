@@ -2527,6 +2527,18 @@ function recordSkippedStepsBeforeAppointment(text, startIndex, appointmentIndex)
   recordSkippedScriptedSteps(text, startIndex, appointmentIndex, "入庫日時調整を優先");
 }
 
+function findFurthestMatchingOptionalStepIndex(text, startIndex) {
+  if (!state.proposedAppointment) return -1;
+
+  let targetIndex = -1;
+  for (let index = startIndex + 1; index < scenario.steps.length; index += 1) {
+    const candidate = scenario.steps[index];
+    if (!candidate.optionalAfterAppointment) break;
+    if (scriptedStepMatches(text, candidate)) targetIndex = index;
+  }
+  return targetIndex;
+}
+
 function handleScriptedStaffReply(text) {
   const startingScriptStep = state.scriptStep;
   const step = scenario.steps[state.scriptStep];
@@ -2564,6 +2576,25 @@ function handleScriptedStaffReply(text) {
     recordSkippedScriptedSteps(text, state.scriptStep, bookingTimeIndex, "予約手続き確認を優先");
     state.scriptStep = bookingTimeIndex;
     state.currentState = scenario.steps[bookingTimeIndex].state;
+    handleScriptedStaffReply(text);
+    return;
+  }
+
+  // 入庫日時の確定後は、未確認の任意項目へ戻らない。
+  // スタッフが先の任意項目を説明した場合は、間の未確認項目を未達のまま通過し、
+  // 同じ発話内で実際に確認できた持参品・ロックナット・事前連絡などを記録する。
+  const optionalForwardIndex = step.optionalAfterAppointment
+    ? findFurthestMatchingOptionalStepIndex(text, state.scriptStep)
+    : -1;
+  if (optionalForwardIndex > state.scriptStep) {
+    recordSkippedScriptedSteps(
+      text,
+      state.scriptStep,
+      optionalForwardIndex,
+      "入庫日時確定後に先の確認項目を案内"
+    );
+    state.scriptStep = optionalForwardIndex;
+    state.currentState = scenario.steps[state.scriptStep].state;
     handleScriptedStaffReply(text);
     return;
   }

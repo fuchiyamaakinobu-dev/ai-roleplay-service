@@ -60,4 +60,44 @@ assert.match(
   "日時確定後の終話あいさつで終了する処理が見つかりません"
 );
 
+const optionalJumpStart = source.indexOf("function findFurthestMatchingOptionalStepIndex");
+const optionalJumpEnd = source.indexOf("function handleScriptedStaffReply", optionalJumpStart);
+assert.notEqual(optionalJumpStart, -1, "日時確定後の任意工程ジャンプ判定が見つかりません");
+assert.notEqual(optionalJumpEnd, -1, "任意工程ジャンプ判定の終端が見つかりません");
+
+const optionalContext = {
+  state: { proposedAppointment: { month: 8, day: 20, hour: 13 } },
+  scenario: {
+    steps: [
+      { key: "asked_vehicle_concerns", optionalAfterAppointment: true },
+      { key: "explained_documents", optionalAfterAppointment: true },
+      { key: "explained_lock_and_arrival", optionalAfterAppointment: true },
+      { key: "confirmed_reminder_contact", optionalAfterAppointment: true },
+      { key: "recapped_appointment", optionalAfterAppointment: true },
+      { key: "closed_politely" }
+    ]
+  },
+  scriptedStepMatches(text, step) {
+    return text.includes(step.key);
+  }
+};
+vm.createContext(optionalContext);
+vm.runInContext(
+  `${source.slice(optionalJumpStart, optionalJumpEnd)}\nthis.findFurthestMatchingOptionalStepIndex = findFurthestMatchingOptionalStepIndex;`,
+  optionalContext
+);
+assert.equal(
+  optionalContext.findFurthestMatchingOptionalStepIndex(
+    "explained_documents explained_lock_and_arrival confirmed_reminder_contact",
+    0
+  ),
+  3,
+  "気になる所を省略して事前連絡まで説明した発話へ進めません"
+);
+assert.match(
+  source,
+  /optionalForwardIndex > state\.scriptStep[\s\S]*?recordSkippedScriptedSteps[\s\S]*?state\.scriptStep = optionalForwardIndex[\s\S]*?handleScriptedStaffReply\(text\)/,
+  "日時確定後に先の任意工程を優先する処理が見つかりません"
+);
+
 console.log("車検誘致・入庫日時を最低限とする終話テスト: OK");
