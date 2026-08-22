@@ -1864,7 +1864,8 @@ function hasInspectionLoanerConfirmation(text, allowImplicitLoaner = false) {
   return hasLoaner
     && (confirmsArrangement || hasContextualAvailability || hasContextualAffirmation)
     && !hasNegative
-    && !isPendingConfirmation;
+    && !isPendingConfirmation
+    && !isQuestion;
 }
 
 function hasInspectionAvailableFromInformation(text) {
@@ -2079,6 +2080,12 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
     return true;
   }
 
+  // 入庫日時確定後、スタッフが代車を手配済みと明確に案内した場合は、
+  // お客様から先に代車希望がなくても当日の待ち方を代車利用として確定する。
+  if (step.key === "confirmed_waiting" && hasInspectionLoanerConfirmation(normalized)) {
+    return true;
+  }
+
   // Firestoreに15分前のみの旧条件が残っていても、10分前・15分前の両方を有効にする。
   if (step.key === "explained_lock_and_arrival") {
     const hasArrivalLeadTime = /(?:10分|十分|15分|十五分)/.test(normalized)
@@ -2150,7 +2157,13 @@ function analyzeScriptedStaff(text, step) {
   };
   analysis[step.key] = passed;
   state.analyses.push(analysis);
-  if (step.key === "explained_loaner" && passed && state.inspectionLoanerRequested) {
+  if (
+    passed
+    && (
+      (step.key === "explained_loaner" && state.inspectionLoanerRequested)
+      || (step.key === "confirmed_waiting" && hasInspectionLoanerConfirmation(normalized))
+    )
+  ) {
     state.inspectionLoanerConfirmed = true;
   }
   return analysis;
@@ -2247,7 +2260,7 @@ function scriptedStepSpecificMatches(normalized, step) {
   }
 
   if (step.key === "confirmed_waiting") {
-    return isScriptedQuestion(normalized);
+    return isScriptedQuestion(normalized) || hasInspectionLoanerConfirmation(normalized);
   }
 
   if (step.key === "asked_vehicle_concerns") {
@@ -2950,6 +2963,16 @@ function handleScriptedStaffReply(text) {
         audioId: "inspection_booking_invitation_intent_customer"
       }
     ]);
+  }
+  if (
+    !customerResponseOverride
+    && responseStep.key === "confirmed_waiting"
+    && hasInspectionLoanerConfirmation(combinedText)
+  ) {
+    customerResponseOverride = {
+      text: "分かりました。",
+      audioId: "inspection_explained_lock_and_arrival_customer"
+    };
   }
   if (!customerResponseOverride && responseStep.key === "asked_vehicle_concerns") {
     customerResponseOverride = {

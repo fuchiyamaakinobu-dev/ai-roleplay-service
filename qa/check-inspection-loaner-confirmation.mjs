@@ -18,6 +18,7 @@ for (const text of [
   "代車の方もご用意させていただくような形になりますね。",
   "代車も問題なくご用意できるかと思います。",
   "代車をご用意できると思います。",
+  "代車をご準備させていただいております。",
   "代車を準備しておきます。",
   "代車を手配いたします。",
   "台車をご用意できます。"
@@ -54,7 +55,12 @@ assert.equal(
   true,
   "代車希望直後の『空いてますよ』を手配可能の返答として認識できません"
 );
-for (const text of ["大丈夫ですか？", "空いていません。", "空いてません。"] ) {
+for (const text of [
+  "大丈夫ですか？",
+  "空いていません。",
+  "空いてません。",
+  "代車をご用意しますか？"
+] ) {
   assert.equal(
     helperContext.hasInspectionLoanerConfirmation(text, true),
     false,
@@ -168,6 +174,16 @@ assert.equal(
   "スタッフから先に案内する通常分岐の『早め・予約』条件を省略しています"
 );
 
+assert.equal(
+  matcherContext.scriptedRequiredGroupsMatch(
+    "代車をご準備させていただいております。",
+    { key: "confirmed_waiting" },
+    [[]]
+  ),
+  true,
+  "スタッフが手配済みの代車を案内しても待ち方を確定できません"
+);
+
 const markerStart = appSource.indexOf("function markScriptedStepNotApplicable");
 const markerEnd = appSource.indexOf("function scriptedStepMatches", markerStart);
 assert.notEqual(markerStart, -1, "工程達成記録関数が見つかりません");
@@ -191,6 +207,11 @@ assert.match(
   appSource,
   /resolvedWaitingStep\?\.key === "confirmed_waiting"[\s\S]*?inspectionLoanerConfirmed[\s\S]*?markScriptedStepPassed[\s\S]*?state\.scriptStep \+= 1/,
   "代車手配後に店内待ち確認を繰り返さない処理が見つかりません"
+);
+assert.match(
+  appSource,
+  /responseStep\.key === "confirmed_waiting"[\s\S]*?hasInspectionLoanerConfirmation\(combinedText\)[\s\S]*?text: "分かりました。"[\s\S]*?inspection_explained_lock_and_arrival_customer/,
+  "スタッフ側から代車手配済みと案内した後の自然な回答が見つかりません"
 );
 
 console.log("代車手配承諾の重複質問防止テスト: OK");
