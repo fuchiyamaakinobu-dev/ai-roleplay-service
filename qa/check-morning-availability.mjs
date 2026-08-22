@@ -152,6 +152,27 @@ assert.equal(
   "否定表現を午前中の提案として解析しました"
 );
 
+const kanjiSingleTimeAnalysis = context.analyzeStaff("その日はお昼一時はいかがでしょうか？");
+assert.equal(kanjiSingleTimeAnalysis.has_schedule_time, true);
+assert.deepEqual(
+  [...kanjiSingleTimeAnalysis.schedule_time_options],
+  ["13時"],
+  "スタッフ発話の解析で、お昼一時を13時の単一候補として認識できません"
+);
+const kanjiSingleTimeResponse = context.selectAppointmentTimeOption(kanjiSingleTimeAnalysis);
+assert.deepEqual(
+  kanjiSingleTimeResponse,
+  {
+    text: "では、その時間でお願いします。",
+    audioId: "appointmentSingleTime"
+  },
+  "お昼一時の提案から予約時刻の受諾へ進みません"
+);
+assert.equal(context.state.appointmentTime, "13時");
+context.state.appointmentTimeConfirmed = false;
+context.state.appointmentTime = null;
+context.state.ended = false;
+
 const multipleTimeAnalysis = context.analyzeStaff(
   "午前中ですと10時、お昼からですと４時に空きがあります"
 );

@@ -1030,10 +1030,26 @@ function normalizeFullWidthDigits(text) {
   );
 }
 
+function normalizeKanjiScheduleHours(text) {
+  const kanjiHours = {
+    "二十三": 23, "二十二": 22, "二十一": 21, "二十": 20,
+    "十九": 19, "十八": 18, "十七": 17, "十六": 16, "十五": 15,
+    "十四": 14, "十三": 13, "十二": 12, "十一": 11, "十": 10,
+    "九": 9, "八": 8, "七": 7, "六": 6, "五": 5,
+    "四": 4, "三": 3, "二": 2, "一": 1
+  };
+  const pattern = Object.keys(kanjiHours).join("|");
+  return String(text || "").replace(
+    new RegExp(`(${pattern})時(?!間|点)`, "g"),
+    (match, hour) => `${kanjiHours[hour]}時`
+  );
+}
+
 function extractScheduleTimeOptions(normalized) {
-  const timeOptions = [...normalized.matchAll(/(\d{1,2})時(?!間|点)/g)].map((match) => {
+  const scheduleText = normalizeKanjiScheduleHours(normalized);
+  const timeOptions = [...scheduleText.matchAll(/(\d{1,2})時(?!間|点)/g)].map((match) => {
     let hour = Number.parseInt(match[1], 10);
-    const context = normalized.slice(Math.max(0, match.index - 24), match.index);
+    const context = scheduleText.slice(Math.max(0, match.index - 24), match.index);
     const lastMorningMarker = Math.max(
       context.lastIndexOf("午前"),
       context.lastIndexOf("朝")
@@ -1042,6 +1058,9 @@ function extractScheduleTimeOptions(normalized) {
       context.lastIndexOf("午後"),
       context.lastIndexOf("お昼から"),
       context.lastIndexOf("昼から"),
+      context.lastIndexOf("お昼"),
+      context.lastIndexOf("昼頃"),
+      context.lastIndexOf("昼過ぎ"),
       context.lastIndexOf("夕方"),
       context.lastIndexOf("夜")
     );

@@ -45,6 +45,24 @@ assert.deepEqual(
   "既存の半角24時間表記を維持できません"
 );
 
+assert.deepEqual(
+  [...context.extractScheduleTimeOptions("お昼一時はいかがでしょうか")],
+  ["13時"],
+  "お昼一時を13時として抽出できません"
+);
+
+assert.deepEqual(
+  [...context.extractScheduleTimeOptions("一時はいかがでしょうか")],
+  ["1時"],
+  "漢数字の一時を具体的な時刻として抽出できません"
+);
+
+assert.deepEqual(
+  [...context.extractScheduleTimeOptions("作業は一時間程度です")],
+  [],
+  "一時間を予約時刻として誤認識しています"
+);
+
 const afternoonMappings = [
   ["午後１時", "13時"],
   ["午後２時", "14時"],
