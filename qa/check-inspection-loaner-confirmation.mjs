@@ -29,6 +29,44 @@ for (const text of [
   );
 }
 
+assert.equal(
+  helperContext.hasInspectionLoanerConfirmation("大丈夫ですよ。ご用意させていただきます。", true),
+  true,
+  "直前の代車希望を受けた省略形の手配承諾を認識できません"
+);
+assert.equal(
+  helperContext.hasInspectionLoanerConfirmation("大丈夫ですよ。ご用意させていただきます。"),
+  false,
+  "代車希望の文脈がない省略形を代車手配の承諾として誤認識しています"
+);
+assert.equal(
+  helperContext.hasInspectionLoanerConfirmation("大丈夫ですよ。", true),
+  true,
+  "代車希望直後の『大丈夫ですよ』を手配可能の返答として認識できません"
+);
+assert.equal(
+  helperContext.hasInspectionLoanerConfirmation("大丈夫です。", true),
+  true,
+  "代車希望直後の『大丈夫です』を手配可能の返答として認識できません"
+);
+assert.equal(
+  helperContext.hasInspectionLoanerConfirmation("空いてますよ。", true),
+  true,
+  "代車希望直後の『空いてますよ』を手配可能の返答として認識できません"
+);
+for (const text of ["大丈夫ですか？", "空いていません。", "空いてません。"] ) {
+  assert.equal(
+    helperContext.hasInspectionLoanerConfirmation(text, true),
+    false,
+    `質問または否定を代車手配可能として誤認識しています: ${text}`
+  );
+}
+assert.equal(
+  helperContext.hasInspectionLoanerConfirmation("大丈夫です。"),
+  false,
+  "代車希望の文脈がない『大丈夫です』を代車手配として誤認識しています"
+);
+
 for (const text of [
   "代車をご用意できません。",
   "代車の用意は難しいです。",
@@ -64,6 +102,33 @@ vm.createContext(matcherContext);
 vm.runInContext(appSource.slice(matcherStart, matcherEnd), matcherContext);
 
 const loanerStep = { key: "explained_loaner" };
+assert.equal(
+  matcherContext.scriptedRequiredGroupsMatch(
+    "大丈夫です。",
+    loanerStep,
+    [[], [], [], []]
+  ),
+  true,
+  "代車希望直後の『大丈夫です』を達成にできません"
+);
+assert.equal(
+  matcherContext.scriptedRequiredGroupsMatch(
+    "空いてますよ。",
+    loanerStep,
+    [[], [], [], []]
+  ),
+  true,
+  "代車希望直後の『空いてますよ』を達成にできません"
+);
+assert.equal(
+  matcherContext.scriptedRequiredGroupsMatch(
+    "大丈夫ですよ。ご用意させていただきます。",
+    loanerStep,
+    [[], [], [], ["ご用意"]]
+  ),
+  true,
+  "代車希望直後の『ご用意させていただきます』を達成にできません"
+);
 assert.equal(
   matcherContext.scriptedRequiredGroupsMatch(
     "代車の方もご用意させていただくような形になりますね。",
