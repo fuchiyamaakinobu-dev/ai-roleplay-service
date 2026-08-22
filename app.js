@@ -2718,6 +2718,26 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // 日頃のお礼を言い間違えたまま任意進行した後、スタッフが正しく言い直した場合は、
+  // その発話を次の車検案内不足として扱わず、前工程のお礼の訂正として回収する。
+  // 車検の用件も同時に説明している場合は、通常の複数工程判定へ委ねる。
+  const courtesyStep = scenario.steps.find((item) => item.key === "thanked_customer");
+  const correctsSkippedCourtesy = step.key === "explained_inspection_notice"
+    && hasCourtesyExpression(text)
+    && !hasClearInspectionPurposeNotice(text)
+    && state.analyses.some((item) => item.stepKey === "thanked_customer" && !item.passed);
+  if (correctsSkippedCourtesy && courtesyStep) {
+    markScriptedStepPassed(courtesyStep, text);
+    delete state.scriptedPartialReplies[step.key];
+    state.turn += 1;
+    addMessage("customer", courtesyStep.customerResponse, {
+      audioId: "inspection_thanked_customer_customer"
+    });
+    els.speechNote.textContent = "日頃のお礼の言い直しを確認しました。続けて車検のご案内をしてください。";
+    renderProgress();
+    return;
+  }
+
   const answeredDayPreferenceAfterExpiry = shouldAnswerDayPreferenceFromStoredExpiry(text, step);
   const combinedText = combinedScriptedReply(text, step);
   const analysis = analyzeScriptedStaff(combinedText, step);
