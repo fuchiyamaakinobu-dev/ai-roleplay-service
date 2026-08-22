@@ -1081,6 +1081,21 @@ function isDayOffVisitQuestion(normalized, isQuestion) {
   return mentionsCustomerDayOff && asksAboutVisit && !rejectsVisit;
 }
 
+function hasInspectionOilChangeRequest() {
+  return state.transcript.some((message) =>
+    message.role === "customer"
+    && normalizeScriptedText(message.text).includes("オイル交換")
+  );
+}
+
+function asksInspectionAdditionalServiceFollowUp(text) {
+  const normalized = normalizeScriptedText(text);
+  if (!isScriptedQuestion(normalized)) return false;
+  const asksAboutOtherWork = /(?:その他|そのほか|ほかに|他に|追加)/.test(normalized);
+  const hasServiceContext = /(?:追加作業|追加整備|ご用命|オイル交換|作業)/.test(normalized);
+  return asksAboutOtherWork && hasServiceContext;
+}
+
 function analyzeStaff(text) {
   // 音声認識が主要語をひらがなで返した場合も、表示文を変更せず判定だけをそろえる。
   const normalized = normalizeScriptedText(text);
@@ -2536,6 +2551,23 @@ function handleScriptedStaffReply(text) {
       renderProgress();
       return;
     }
+  }
+
+  // オイル交換希望に対して「その他の追加作業」を再確認された場合は、
+  // 現在工程の店内待ち不足よりも実際に聞かれた質問への回答を優先する。
+  // 作業時間など現在工程で説明済みの内容は保持し、回答後に同じ工程を継続する。
+  if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text)) {
+    state.scriptedPartialReplies[step.key] = {
+      text: combinedScriptedReply(text, step),
+      missingDetail: "additionalServiceReconfirmed"
+    };
+    state.turn += 1;
+    addMessage("customer", "そのほかは大丈夫です。", {
+      audioId: "inspection_additional_service_none_customer"
+    });
+    els.speechNote.textContent = "その他の追加作業はないことを確認しました。現在の案内を続けてください。";
+    renderProgress();
+    return;
   }
 
   // 初回車検の作業時間を判断するため、現在の走行距離を先に確認する。

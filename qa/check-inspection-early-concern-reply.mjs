@@ -76,4 +76,41 @@ assert.doesNotMatch(
   "車両状態確認後の旧返答が残っています"
 );
 
+const additionalServiceFollowUpStart = appSource.indexOf(
+  "if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text))"
+);
+const mileageBranchStart = appSource.indexOf(
+  "if (step.key === \"explained_duration_and_wait\" && asksCurrentMileage(text))"
+);
+assert.notEqual(additionalServiceFollowUpStart, -1, "追加作業再確認への専用分岐がありません");
+assert.ok(
+  additionalServiceFollowUpStart < mileageBranchStart,
+  "追加作業再確認が現在工程の不足確認より後に判定されています"
+);
+const additionalServiceFollowUpBlock = appSource.slice(
+  additionalServiceFollowUpStart,
+  mileageBranchStart
+);
+assert.match(additionalServiceFollowUpBlock, /そのほかは大丈夫です。/);
+assert.match(additionalServiceFollowUpBlock, /inspection_additional_service_none_customer/);
+assert.match(additionalServiceFollowUpBlock, /state\.scriptedPartialReplies\[step\.key\]/);
+assert.match(
+  audioDbSource,
+  /inspection_additional_service_none_customer",\s*"追加作業再確認・ほかはなし",\s*"そのほかは大丈夫です。"\]/,
+  "追加作業再確認の表示文と音声登録文が一致していません"
+);
+const additionalServiceNoneAudio = new URL(
+  "../audio-ondoku/inspection_additional_service_none_customer.mp3",
+  import.meta.url
+);
+assert.equal(
+  fs.existsSync(additionalServiceNoneAudio),
+  true,
+  "追加作業再確認用のまこと音声ファイルがありません"
+);
+assert.ok(
+  fs.statSync(additionalServiceNoneAudio).size > 1000,
+  "追加作業再確認用MP3が空、または小さすぎます"
+);
+
 console.log("inspection early concern reply checks passed");
