@@ -13,6 +13,8 @@ const timeSelectionStart = source.indexOf("function selectAppointmentTimeOption(
 const timeSelectionEnd = source.indexOf("function selectObjection(", timeSelectionStart);
 const followUpStart = source.indexOf("function appointmentFollowUpTurn(");
 const followUpEnd = source.indexOf("function selectContextualCustomerResponse(", followUpStart);
+const recognitionNormalizeStart = source.indexOf("function normalizeScriptedText(");
+const recognitionNormalizeEnd = source.indexOf("function hasSupportedInspectionDuration(", recognitionNormalizeStart);
 
 assert.notEqual(start, -1, "午前中提案の判定関数が見つかりません");
 assert.notEqual(precisionHelperStart, -1, "肯定・否定判定ヘルパーが見つかりません");
@@ -24,6 +26,8 @@ assert.notEqual(timeSelectionStart, -1, "時刻候補の選択関数が見つか
 assert.notEqual(timeSelectionEnd, -1, "時刻候補の選択関数を切り出せません");
 assert.notEqual(followUpStart, -1, "日時確認の応答関数が見つかりません");
 assert.notEqual(followUpEnd, -1, "日時確認の応答関数を切り出せません");
+assert.notEqual(recognitionNormalizeStart, -1, "音声認識のひらがな補正を切り出せません");
+assert.notEqual(recognitionNormalizeEnd, -1, "音声認識のひらがな補正の終端が見つかりません");
 
 const context = {
   state: {
@@ -64,6 +68,7 @@ vm.createContext(context);
 vm.runInContext(`
   ${source.slice(precisionHelperStart, precisionHelperEnd)}
   ${source.slice(serviceTimeHelperStart, serviceTimeHelperEnd)}
+  ${source.slice(recognitionNormalizeStart, recognitionNormalizeEnd)}
   ${source.slice(start, analysisEnd)}
   ${source.slice(timeSelectionStart, timeSelectionEnd)}
   ${source.slice(followUpStart, followUpEnd)}

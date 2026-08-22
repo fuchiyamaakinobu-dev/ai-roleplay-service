@@ -1082,7 +1082,8 @@ function isDayOffVisitQuestion(normalized, isQuestion) {
 }
 
 function analyzeStaff(text) {
-  const normalized = normalizeFullWidthDigits(text.replace(/\s+/g, ""));
+  // 音声認識が主要語をひらがなで返した場合も、表示文を変更せず判定だけをそろえる。
+  const normalized = normalizeScriptedText(text);
   const isQuestion = /[？?]$/.test(text)
     || includesAny(normalized, ["でしょうか", "ですか", "ますか", "ませんか", "ないですか", "ございませんか", "でしょう"])
     || hasTrailingServiceInquiry(normalized);
@@ -1689,14 +1690,110 @@ function normalizeLoanerHomophone(text) {
 }
 
 function normalizeScriptedText(text) {
-  return String(text || "")
+  let normalized = String(text || "")
     .replace(/[０-９]/g, (character) =>
       String.fromCharCode(character.charCodeAt(0) - 0xFEE0)
     )
     .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1")
     .replace(/台車/g, "代車")
-    .replace(/(?:やりす|ヤリす)/g, "ヤリス")
     .replace(/\s+/g, "");
+
+  // 日付で使われる固有の読みを先に数値へ変換する。
+  const specialDayReadings = [
+    ["ついたち", 1], ["ふつか", 2], ["みっか", 3], ["よっか", 4],
+    ["いつか", 5], ["むいか", 6], ["なのか", 7], ["ようか", 8],
+    ["ここのか", 9], ["とおか", 10], ["じゅうよっか", 14],
+    ["はつか", 20], ["にじゅうよっか", 24]
+  ];
+  specialDayReadings
+    .sort(([left], [right]) => right.length - left.length)
+    .forEach(([reading, value]) => {
+    normalized = normalized.replace(new RegExp(reading, "g"), `${value}日`);
+    });
+
+  // 月日・時刻・分数に続くひらがなの数詞だけを数値化する。
+  // 通常文中の数詞は変換しないため、表示や別の語への誤補正を避ける。
+  const digitReadings = {
+    1: ["いち"], 2: ["に"], 3: ["さん"], 4: ["よん", "し"],
+    5: ["ご"], 6: ["ろく"], 7: ["なな", "しち"],
+    8: ["はち"], 9: ["きゅう", "く"]
+  };
+  const kanaNumberMap = new Map();
+  for (let value = 1; value <= 99; value += 1) {
+    const tens = Math.floor(value / 10);
+    const ones = value % 10;
+    const tensReadings = tens === 0
+      ? [""]
+      : tens === 1
+        ? ["じゅう"]
+        : digitReadings[tens].map((reading) => `${reading}じゅう`);
+    const onesReadings = ones === 0 ? [""] : digitReadings[ones];
+    tensReadings.forEach((tensReading) => {
+      onesReadings.forEach((onesReading) => {
+        kanaNumberMap.set(`${tensReading}${onesReading}`, value);
+      });
+    });
+  }
+  const kanaNumberPattern = [...kanaNumberMap.keys()]
+    .sort((left, right) => right.length - left.length)
+    .join("|");
+  const replaceKanaNumber = (match, reading, unit) => `${kanaNumberMap.get(reading)}${unit}`;
+  normalized = normalized
+    .replace(/じゅっ(?=ぷん)/g, "じゅう")
+    .replace(/じっ(?=ぷん)/g, "じゅう")
+    .replace(new RegExp(`(${kanaNumberPattern})がつ`, "g"), (match, reading) => replaceKanaNumber(match, reading, "月"))
+    .replace(new RegExp(`(${kanaNumberPattern})にち`, "g"), (match, reading) => replaceKanaNumber(match, reading, "日"))
+    .replace(new RegExp(`(${kanaNumberPattern})じかん`, "g"), (match, reading) => replaceKanaNumber(match, reading, "時間"))
+    .replace(
+      new RegExp(`(${kanaNumberPattern})じ(?=$|[、。,.!?！？]|から|まで|では|です|に|の|が|を|と|は)`, "g"),
+      (match, reading) => replaceKanaNumber(match, reading, "時")
+    )
+    .replace(new RegExp(`(${kanaNumberPattern})(?:ふん|ぷん)`, "g"), (match, reading) => replaceKanaNumber(match, reading, "分"))
+    .replace(/(\d{1,2})じかん/g, "$1時間")
+    .replace(/(\d{1,2})時間はん/g, "$1時間半")
+    .replace(/(\d{1,2}(?:日|分))まえ/g, "$1前");
+
+  // 判定専用の同義表記。会話欄・保存ログの発話原文には適用しない。
+  const recognitionAliases = [
+    [/(?:とよたもびりてぃ|トヨタもびりてぃ)/g, "トヨタモビリティ"],
+    [/おびひろ/g, "帯広"], [/ふちやま/g, "渕山"],
+    [/さとう/g, "佐藤"], [/さいとう/g, "斉藤"],
+    [/(?:やりす|ヤリす)/g, "ヤリス"],
+    [/のうぜいしょうめいしょ/g, "納税証明書"], [/のうぜいしょうめい/g, "納税証明"],
+    [/しゃけんしょう/g, "車検証"], [/じばいせき/g, "自賠責"],
+    [/しゃけん/g, "車検"], [/てんけん/g, "点検"], [/まんりょう/g, "満了"],
+    [/さぎょう/g, "作業"], [/にゅうこ/g, "入庫"], [/かのう/g, "可能"], [/だいしゃ/g, "代車"],
+    [/ごりよう/g, "ご利用"], [/ごあいこ/g, "ご愛顧"], [/かんしゃ/g, "感謝"],
+    [/ごつごう/g, "ご都合"], [/つごう/g, "都合"], [/よてい/g, "予定"],
+    [/にってい/g, "日程"], [/よやく/g, "予約"], [/てつづき/g, "手続き"],
+    [/ごきぼう/g, "ご希望"], [/きぼう/g, "希望"], [/ひにち/g, "日にち"],
+    [/そうこうきょり/g, "走行距離"], [/きょりすう/g, "距離数"], [/なんきろ/g, "何キロ"],
+    [/おいるこうかん/g, "オイル交換"], [/ついかせいび/g, "追加整備"], [/ごようめい/g, "ご用命"],
+    [/てんない/g, "店内"], [/おはやめ/g, "お早め"], [/はやめ/g, "早め"], [/ようい/g, "用意"],
+    [/じゅんび/g, "準備"], [/てはい/g, "手配"],
+    [/きになる/g, "気になる"], [/ふぐあい/g, "不具合"], [/ちょうし/g, "調子"],
+    [/ぐあい/g, "具合"], [/いおん/g, "異音"], [/しょうじょう/g, "症状"], [/いわかん/g, "違和感"],
+    [/にもつ/g, "荷物"], [/ろっくなっときー/g, "ロックナットキー"],
+    [/ろっくなっと/g, "ロックナット"], [/ろっくきー/g, "ロックキー"],
+    [/あだぷたー/g, "アダプター"], [/せんようこうぐ/g, "専用工具"], [/こうぐ/g, "工具"], [/どうぐ/g, "道具"],
+    [/(?:さんにちまえ|みっかまえ)/g, "3日前"], [/れんらく/g, "連絡"],
+    [/けいたい/g, "携帯"], [/でんわばんごう/g, "電話番号"],
+    [/へいじつ/g, "平日"], [/どにち/g, "土日"], [/しゅうまつ/g, "週末"],
+    [/どよう/g, "土曜"], [/にちよう/g, "日曜"], [/きゅうじつ/g, "休日"],
+    [/ごぜん/g, "午前"], [/ごご/g, "午後"], [/じかんたい/g, "時間帯"],
+    [/ひきとり/g, "引き取り"], [/じたく/g, "自宅"], [/しょくば/g, "職場"],
+    [/うんてん/g, "運転"], [/ふあん/g, "不安"], [/しごと/g, "仕事"],
+    [/はたけ/g, "畑"], [/いそがしい/g, "忙しい"], [/とおい/g, "遠い"], [/きょり/g, "距離"],
+    [/らいてん/g, "来店"], [/せつめい/g, "説明"], [/あんしん/g, "安心"],
+    [/ちかくのおみせ/g, "近くのお店"], [/ちかいてんぽ/g, "近い店舗"],
+    [/もよりのてんぽ/g, "最寄りの店舗"], [/たてんぽ/g, "他店舗"], [/べつてんぽ/g, "別店舗"],
+    [/ごしゅじん/g, "ご主人"], [/かぞく/g, "家族"], [/しゅじん/g, "主人"], [/しょうち/g, "承知"]
+  ];
+  recognitionAliases.forEach(([pattern, replacement]) => {
+    normalized = normalized.replace(pattern, replacement);
+  });
+
+  return normalized;
 }
 
 function hasSupportedInspectionDuration(text) {

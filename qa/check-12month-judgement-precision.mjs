@@ -9,12 +9,16 @@ const unchangedStart = precisionEnd;
 const unchangedEnd = source.indexOf("function isServiceTimeRequirementSatisfied(", unchangedStart);
 const analysisStart = source.indexOf("function normalizeFullWidthDigits(");
 const analysisEnd = source.indexOf("function collectEvidence(", analysisStart);
+const recognitionNormalizeStart = source.indexOf("function normalizeScriptedText(");
+const recognitionNormalizeEnd = source.indexOf("function hasSupportedInspectionDuration(", recognitionNormalizeStart);
 
 assert.notEqual(lexiconStart, -1, "12カ月点検の判定辞書が見つかりません");
 assert.notEqual(precisionEnd, -1, "精密判定ヘルパーを切り出せません");
 assert.notEqual(unchangedEnd, -1, "時間変更なし判定を切り出せません");
 assert.notEqual(analysisStart, -1, "スタッフ発話解析の開始位置が見つかりません");
 assert.notEqual(analysisEnd, -1, "スタッフ発話解析を切り出せません");
+assert.notEqual(recognitionNormalizeStart, -1, "音声認識のひらがな補正を切り出せません");
+assert.notEqual(recognitionNormalizeEnd, -1, "音声認識のひらがな補正の終端が見つかりません");
 
 const context = {
   state: { analyses: [] },
@@ -35,6 +39,7 @@ vm.createContext(context);
 vm.runInContext(`
   ${source.slice(lexiconStart, precisionEnd)}
   ${source.slice(unchangedStart, unchangedEnd)}
+  ${source.slice(recognitionNormalizeStart, recognitionNormalizeEnd)}
   ${source.slice(analysisStart, analysisEnd)}
   this.analyzeStaff = analyzeStaff;
   this.extractScheduleTimeOptions = extractScheduleTimeOptions;
