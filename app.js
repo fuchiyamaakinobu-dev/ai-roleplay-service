@@ -1891,6 +1891,11 @@ function hasClearInspectionPurposeNotice(text) {
   return explicitlyStatesInspectionPurpose || impliesInspectionFromRegisteredDetails;
 }
 
+function hasInspectionSelfIntroduction(text) {
+  const normalized = normalizeScriptedText(text);
+  return /(?:トヨタモビリティ(?:帯広)?|トヨタ)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|と(?:申|もう)します)/.test(normalized);
+}
+
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // Firestoreに予約手続き時間だけを必須とする旧条件が残っていても、
   // 予約をこのまま進めてよいか確認する自然な言い回しを有効にする。
@@ -1898,6 +1903,12 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // ここで完了扱いにし、同じ予約可否をお客様が聞き返さないようにする。
   if (step.key === "confirmed_booking_time") {
     return hasBookingContinuationConfirmation(normalized);
+  }
+
+  // 音声認識で「申します」が「もうします」となる場合も、
+  // 店舗名と担当者名がそろっていれば名乗りとして扱う。
+  if (step.key === "introduced_self") {
+    return hasInspectionSelfIntroduction(normalized);
   }
 
   // Firestoreに「満了・車検」の旧キーワード条件が残っていても、
@@ -2069,7 +2080,7 @@ function scriptedStepSpecificMatches(normalized, step) {
   }
 
   if (step.key === "introduced_self") {
-    return /(?:トヨタモビリティ(?:帯広)?|トヨタ).{0,16}(?:の|、).{1,12}(?:です|と申します)/.test(normalized);
+    return hasInspectionSelfIntroduction(normalized);
   }
 
   if (step.key === "asked_availability") {

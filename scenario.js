@@ -206,7 +206,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       state: "PHONE_OPENING",
       key: "introduced_self",
       expected: "店舗名と担当者名を名乗る",
-      requiredGroups: [["トヨタモビリティ", "トヨタ"], ["です", "申します"]],
+      requiredGroups: [["トヨタモビリティ", "トヨタ"], ["です", "申します", "もうします"]],
       customerResponse: "お世話になっております。",
       retryResponse: "どちら様でしょうか？"
     },

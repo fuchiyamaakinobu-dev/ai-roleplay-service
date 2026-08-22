@@ -51,4 +51,44 @@ assert.equal(
   "既存のお礼省略進行が維持されていません"
 );
 
+const introductionStart = appSource.indexOf("function hasInspectionSelfIntroduction");
+const introductionEnd = appSource.indexOf("function scriptedRequiredGroupsMatch", introductionStart);
+assert.notEqual(introductionStart, -1, "店舗・担当者名の名乗り判定が見つかりません");
+assert.notEqual(introductionEnd, -1, "店舗・担当者名の名乗り判定の終端が見つかりません");
+const introductionContext = {
+  normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, "")
+};
+vm.createContext(introductionContext);
+vm.runInContext(appSource.slice(introductionStart, introductionEnd), introductionContext);
+
+for (const phrase of [
+  "私、トヨタモビリティ帯広の渕山と申します",
+  "私、トヨタモビリティ帯広の渕山ともうします",
+  "トヨタモビリティ帯広の渕山です"
+]) {
+  assert.equal(
+    introductionContext.hasInspectionSelfIntroduction(phrase),
+    true,
+    `${phrase}を店舗・担当者名の名乗りとして認識できません`
+  );
+}
+
+for (const phrase of [
+  "トヨタです",
+  "渕山ともうします",
+  "トヨタモビリティ帯広です"
+]) {
+  assert.equal(
+    introductionContext.hasInspectionSelfIntroduction(phrase),
+    false,
+    `${phrase}を店舗・担当者名がそろった名乗りとして誤認識しています`
+  );
+}
+
+assert.match(
+  scenarioSource,
+  /requiredGroups:\s*\[\["トヨタモビリティ",\s*"トヨタ"\],\s*\["です",\s*"申します",\s*"もうします"\]\]/,
+  "標準シナリオに『もうします』の音声認識表記がありません"
+);
+
 console.log("携帯電話発信・本人確認省略テスト: OK");
