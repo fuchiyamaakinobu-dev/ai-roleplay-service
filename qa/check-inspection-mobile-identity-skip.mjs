@@ -64,7 +64,9 @@ vm.runInContext(appSource.slice(introductionStart, introductionEnd), introductio
 for (const phrase of [
   "私、トヨタモビリティ帯広の渕山と申します",
   "私、トヨタモビリティ帯広の渕山ともうします",
-  "トヨタモビリティ帯広の渕山です"
+  "トヨタモビリティ帯広の渕山です",
+  "わたし、とよたもびりてぃおびひろのふちやまともうします",
+  "とよたもびりてぃ帯広のふちやまです"
 ]) {
   assert.equal(
     introductionContext.hasInspectionSelfIntroduction(phrase),
@@ -87,8 +89,8 @@ for (const phrase of [
 
 assert.match(
   scenarioSource,
-  /requiredGroups:\s*\[\["トヨタモビリティ",\s*"トヨタ"\],\s*\["です",\s*"申します",\s*"もうします"\]\]/,
-  "標準シナリオに『もうします』の音声認識表記がありません"
+  /requiredGroups:\s*\[\["トヨタモビリティ",\s*"トヨタ",\s*"とよたもびりてぃ",\s*"とよた"\],\s*\["です",\s*"申します",\s*"もうします"\]\]/,
+  "標準シナリオに名乗りのひらがな音声認識表記がありません"
 );
 
 console.log("携帯電話発信・本人確認省略テスト: OK");
