@@ -2151,6 +2151,7 @@ function analyzeScriptedStaff(text, step) {
   const canAdvance = passed
     || mileageOnlyMissing
     || recappedConfirmedDateTime
+    || step.key === "recapped_appointment"
     || scriptedStepCanAdvanceOnFailure(step);
   const analysis = {
     scripted: true,
@@ -2165,6 +2166,8 @@ function analyzeScriptedStaff(text, step) {
   analysis[step.key] = passed;
   if (recappedConfirmedDateTime && !passed) {
     analysis.evidence.push("確定済みの予約日時を復唱（氏名・締め表現は不足）");
+  } else if (step.key === "recapped_appointment" && !passed) {
+    analysis.evidence.push("予約復唱を実施（確定済み日時との不一致または必要表現不足）");
   }
   state.analyses.push(analysis);
   if (

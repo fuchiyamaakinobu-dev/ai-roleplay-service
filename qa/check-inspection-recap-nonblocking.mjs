@@ -55,7 +55,8 @@ const wrongDate = context.analyzeScriptedStaff(
   recapStep
 );
 assert.equal(wrongDate.passed, false);
-assert.equal(wrongDate.canAdvance, false, "予約日が違う復唱を通過させています");
+assert.equal(wrongDate.canAdvance, true, "予約日が違う復唱で会話を停止しています");
+assert.equal(wrongDate.blocked, false, "予約日が違う復唱を聞き返し対象にしています");
 
 context.state.analyses = [];
 const completeRecap = context.analyzeScriptedStaff(
@@ -66,4 +67,3 @@ assert.equal(completeRecap.passed, true, "氏名と確定日時がそろう復�
 assert.equal(completeRecap.canAdvance, true);
 
 console.log("車検誘致・予約日時復唱の非ブロッキング判定テスト: OK");
-
