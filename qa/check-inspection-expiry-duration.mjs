@@ -64,7 +64,7 @@ assert.equal(
 
 assert.match(
   scenarioSource,
-  /requiredGroups:\s*\[\["9月30日"\],\s*\["満了",\s*"車検"\]\]/,
+  /requiredGroups:\s*\[\["9月30日"\]\]/,
   "車検満了日だけで達成する必須条件になっていません"
 );
 assert.doesNotMatch(
@@ -150,11 +150,43 @@ assert.equal(
 );
 assert.equal(
   context.scriptedStepSpecificMatches(
+    context.normalizeScriptedText("9月30日までとなります"),
+    { key: "explained_available_period" }
+  ),
+  true,
+  "『車検』『満了』を省略した具体的な満了日案内を認識できません"
+);
+assert.equal(
+  context.scriptedStepSpecificMatches(
     context.normalizeScriptedText("8月1日以降に作業できます"),
     { key: "explained_available_period" }
   ),
   false,
   "入庫可能日だけの案内を満了日として誤認識しています"
+);
+
+context.scenario = { customerName: "佐藤様", expiryDate: "9月30日" };
+assert.equal(
+  requiredGroupsMatch(
+    "9月30日までとなります",
+    {
+      key: "explained_available_period",
+      requiredGroups: [["9月30日"], ["満了", "車検"]]
+    }
+  ),
+  true,
+  "Firestoreの旧条件が残る場合に具体的な満了日だけで達成できません"
+);
+assert.equal(
+  requiredGroupsMatch(
+    "8月1日までとなります",
+    {
+      key: "explained_available_period",
+      requiredGroups: [["9月30日"], ["満了", "車検"]]
+    }
+  ),
+  false,
+  "作業可能日を車検満了日として誤認識しています"
 );
 
 console.log("車検満了日・作業時間判定テスト: OK");

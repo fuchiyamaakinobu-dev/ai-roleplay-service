@@ -239,7 +239,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       state: "INSPECTION_GUIDANCE",
       key: "explained_available_period",
       expected: "車検満了日を案内する",
-      requiredGroups: [["9月30日"], ["満了", "車検"]],
+      requiredGroups: [["9月30日"]],
       customerResponse: "どれくらい時間がかかるのですか？",
       retryResponse: "車検はいつまでですか？"
     },

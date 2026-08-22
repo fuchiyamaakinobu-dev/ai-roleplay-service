@@ -1900,6 +1900,13 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
     return hasBookingContinuationConfirmation(normalized);
   }
 
+  // Firestoreに「満了・車検」の旧キーワード条件が残っていても、
+  // 登録済みの具体的な満了日を案内できれば達成とする。
+  if (step.key === "explained_available_period") {
+    const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+    return Boolean(expiryDate) && normalized.includes(expiryDate);
+  }
+
   // Firestoreの公開シナリオに旧キーワードが残っていても、
   // 走行距離確認と、確定済みの作業時間（60・75・90分）・店内待ちを必須にする。
   if (step.key === "explained_duration_and_wait") {
@@ -2079,9 +2086,7 @@ function scriptedStepSpecificMatches(normalized, step) {
 
   if (step.key === "explained_available_period") {
     const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
-    return Boolean(expiryDate)
-      && normalized.includes(expiryDate)
-      && /(?:満了|車検)/.test(normalized);
+    return Boolean(expiryDate) && normalized.includes(expiryDate);
   }
 
   if (step.key === "explained_duration_and_wait") {
