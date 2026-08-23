@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const audioSource = fs.readFileSync(new URL("../audio-db.js", import.meta.url), "utf8");
 const start = source.indexOf("function analyzeScriptedStaff");
 const end = source.indexOf("function scriptedStepCanAdvanceOnFailure", start);
 
@@ -65,5 +66,21 @@ const completeRecap = context.analyzeScriptedStaff(
 );
 assert.equal(completeRecap.passed, true, "氏名と確定日時がそろう復唱を採点達成にできません");
 assert.equal(completeRecap.canAdvance, true);
+
+assert.match(
+  source,
+  /step\.key === "recapped_appointment"[\s\S]*?text: "ん！？、何日の予定でしたっけ？"[\s\S]*?audioId: "inspection_recapped_appointment_retry"/,
+  "予約復唱不足時の表示文と音声IDが新しい文言へ固定されていません"
+);
+assert.match(
+  audioSource,
+  /"inspection_recapped_appointment_retry"[^\n]*"ん！？、何日の予定でしたっけ？"/,
+  "予約復唱不足時の音声登録文が表示文と一致していません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_recapped_appointment_retry.mp3", import.meta.url)),
+  true,
+  "予約復唱不足時のMP3がありません"
+);
 
 console.log("車検誘致・予約日時復唱の非ブロッキング判定テスト: OK");

@@ -77,12 +77,37 @@
     return scenario;
   }
 
+  function normalizeVehicleInspectionScenario(publishedScenario, localScenario) {
+    const scenario = mergeMissingDefaults(localScenario, publishedScenario);
+    const publishedSteps = Array.isArray(publishedScenario.steps)
+      ? publishedScenario.steps
+      : [];
+
+    // 公開Firestoreに古い発話が残っていても、表示文と登録済みMP3を一致させる。
+    // optionalAfterAppointmentなど、現在のローカル確定仕様の進行属性も保持する。
+    scenario.steps = (localScenario.steps || []).map((localStep) => {
+      const publishedStep = publishedSteps.find((step) => step.key === localStep.key);
+      const step = mergeMissingDefaults(localStep, publishedStep);
+      const customerAudioId = `inspection_${localStep.key}_customer`;
+      const retryAudioId = `inspection_${localStep.key}_retry`;
+      step.customerResponse = readyAudioText(customerAudioId, localStep.customerResponse);
+      step.retryResponse = readyAudioText(retryAudioId, localStep.retryResponse);
+      if (localStep.optionalAfterAppointment === true) step.optionalAfterAppointment = true;
+      if (localStep.advanceOnFailure === true) step.advanceOnFailure = true;
+      return step;
+    });
+    return scenario;
+  }
+
   function normalizePublishedScenarios(publishedScenarios) {
     return publishedScenarios.map((publishedScenario) => {
       const localScenario = localScenarios.find((item) => item.id === publishedScenario.id);
       if (!localScenario) return publishedScenario;
       if (publishedScenario.id === "service-12month-visit-promotion") {
         return normalize12MonthScenario(publishedScenario, localScenario);
+      }
+      if (publishedScenario.mode === "staff-led-scripted") {
+        return normalizeVehicleInspectionScenario(publishedScenario, localScenario);
       }
       return mergeMissingDefaults(localScenario, publishedScenario);
     });

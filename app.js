@@ -1794,7 +1794,7 @@ function normalizeScriptedText(text) {
     [/(?:とよたもびりてぃ|トヨタもびりてぃ)/g, "トヨタモビリティ"],
     [/おびひろ/g, "帯広"], [/ふちやま/g, "渕山"],
     [/さとう/g, "佐藤"], [/さいとう/g, "斉藤"],
-    [/(?:やりす|ヤリす)/g, "ヤリス"],
+    [/(?:やりす|ヤリす|やるしす|ヤルシス)/g, "ヤリス"],
     [/のうぜいしょうめいしょ/g, "納税証明書"], [/のうぜいしょうめい/g, "納税証明"],
     [/しゃけんしょう/g, "車検証"], [/じばいせき/g, "自賠責"],
     [/しゃけん/g, "車検"], [/てんけん/g, "点検"], [/まんりょう/g, "満了"],
@@ -2044,6 +2044,26 @@ function hasInspectionSelfIntroduction(text) {
   return /(?:(?:トヨタ|とよた)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)?|(?:トヨタ|とよた)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|と(?:申|もう)します)/.test(normalized);
 }
 
+function hasInspectionDocumentGuidance(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasEmptyVehicleGuidance = /(?:荷物|空荷)/.test(normalized)
+    && /(?:降ろ|下ろ|積まない|積まず|空に|ない状態)/.test(normalized);
+  return hasEmptyVehicleGuidance
+    && normalized.includes("納税証明")
+    && normalized.includes("車検証")
+    && normalized.includes("自賠責");
+}
+
+function hasInspectionReminderContactConfirmation(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasThreeDayReminder = /(?:3日前|三日前)/.test(normalized)
+    && /(?:連絡|電話)/.test(normalized);
+  const asksKnownContact = /(?:この|同じ|今の|こちらの).{0,8}(?:携帯|電話|連絡先)/.test(normalized)
+    || /(?:携帯|電話|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(normalized)
+    || /(?:どちら|電話番号)/.test(normalized);
+  return hasThreeDayReminder && asksKnownContact && isScriptedQuestion(normalized);
+}
+
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // Firestoreに予約手続き時間だけを必須とする旧条件が残っていても、
   // 予約をこのまま進めてよいか確認する自然な言い回しを有効にする。
@@ -2081,6 +2101,12 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
       && hasWaiting;
   }
 
+  // Firestoreの公開シナリオとローカル標準シナリオの差にかかわらず、
+  // 必要書類と空荷を複数発話に分けて案内した場合も合算して確認する。
+  if (step.key === "explained_documents") {
+    return hasInspectionDocumentGuidance(normalized);
+  }
+
   // お客様がすでに代車を希望した分岐では、スタッフが手配を明確に承諾すれば完了とする。
   // スタッフ側から先に代車を案内する通常分岐では、従来の「早め・予約・用意」を維持する。
   if (
@@ -2102,6 +2128,12 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
     const hasArrivalLeadTime = /(?:10分|十分|15分|十五分)/.test(normalized)
       && /(?:早め|前)/.test(normalized);
     return hasLockNutToolExpression(normalized) && hasArrivalLeadTime;
+  }
+
+  // 「この電話」「この連絡先でよろしいですか」も、3日前確認の
+  // 連絡先を尋ねる自然な表現として扱う。
+  if (step.key === "confirmed_reminder_contact") {
+    return hasInspectionReminderContactConfirmation(normalized);
   }
 
   if (matchedGroups.every((matches) => matches.length > 0)) return true;
@@ -2462,11 +2494,29 @@ function scriptedRetryForMissingDetails(text, step) {
     }
   }
 
+  // 公開済みFirestoreに旧文言が残っていても、表示文と登録済みMP3を一致させる。
+  if (step.key === "recapped_appointment") {
+    return {
+      text: "ん！？、何日の予定でしたっけ？",
+      audioId: "inspection_recapped_appointment_retry",
+      missingDetail: null
+    };
+  }
+
   return {
     text: step.retryResponse,
     audioId: `inspection_${step.key}_retry`,
     missingDetail: null
   };
+}
+
+function shouldUseInspectionTimeOnlyAppointmentResponse(text, step, analysis) {
+  if (step?.key !== "proposed_appointment" || !analysis?.passed) return false;
+  const normalized = normalizeScriptedText(text);
+  const partial = state.scriptedPartialReplies?.[step.key];
+  return partial?.missingDetail === "appointmentTime"
+    && inspectionAppointmentDateCandidates(normalized).length === 0
+    && /\d{1,2}時/.test(normalized);
 }
 
 function naturalScriptedRetryVariants(retry, step) {
@@ -2493,6 +2543,15 @@ function hasScriptedClosingIntent(text) {
   const isQuestion = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized);
   if (isQuestion) return false;
 
+  // 入庫日時確定後は、実際の電話で使われる自然な締め表現も終話として扱う。
+  // 日時確定前の単なる「ありがとうございます」は、予約工程を飛ばす終話意図にしない。
+  if (
+    state.proposedAppointment
+    && /(?:ありがとうございます|よろしくお願い(?:いた)?します|失礼(?:いた)?します)/.test(normalized)
+  ) {
+    return true;
+  }
+
   return [
     /当日.*お待ち/,
     /ご?予約.*承り/,
@@ -2500,6 +2559,27 @@ function hasScriptedClosingIntent(text) {
     /これで.*(?:予約|案内)/,
     /ありがとうございました/
   ].some((pattern) => pattern.test(normalized));
+}
+
+function hasScriptedAppointmentRecapEvidence(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasDateAndTime = /\d{1,2}月\d{1,2}日/.test(normalized)
+    && /\d{1,2}時/.test(normalized);
+  return hasDateAndTime && /(?:予約|予定|お待ち|来店)/.test(normalized);
+}
+
+function rememberFutureScriptedAchievements(text, currentIndex) {
+  const excludedKeys = new Set([
+    "proposed_appointment",
+    "recapped_appointment",
+    "closed_politely"
+  ]);
+
+  scenario.steps.slice(currentIndex + 1).forEach((candidate) => {
+    if (excludedKeys.has(candidate.key)) return;
+    if (!scriptedStepMatches(text, candidate)) return;
+    markScriptedStepPassed(candidate, text);
+  });
 }
 
 function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
@@ -2579,7 +2659,12 @@ function findFurthestMatchingOptionalStepIndex(text, startIndex) {
   for (let index = startIndex + 1; index < scenario.steps.length; index += 1) {
     const candidate = scenario.steps[index];
     if (!candidate.optionalAfterAppointment) break;
-    if (scriptedStepMatches(text, candidate)) targetIndex = index;
+    if (
+      scriptedStepMatches(text, candidate)
+      || (candidate.key === "recapped_appointment" && hasScriptedAppointmentRecapEvidence(text))
+    ) {
+      targetIndex = index;
+    }
   }
   return targetIndex;
 }
@@ -2596,6 +2681,11 @@ function handleScriptedStaffReply(text) {
   if (expiryStep && scriptedStepMatches(text, expiryStep)) {
     state.inspectionExpiryEvidence = text;
   }
+
+  // 現在工程より後の案内も会話全体の確認済み項目として記憶する。
+  // 後工程へ到達した際に、すでに聞いた内容を再質問しないための記録であり、
+  // この時点で会話順序を強制的に進めるものではない。
+  rememberFutureScriptedAchievements(text, state.scriptStep);
 
   // 具体的な入庫日と時刻が提示された場合は、未確認の過去工程へ戻らず日時調整を優先する。
   // 省略した項目は未達のまま採点し、同じ内容をAIお客様から聞き直さない。
@@ -2836,6 +2926,11 @@ function handleScriptedStaffReply(text) {
   const answeredDayPreferenceAfterExpiry = shouldAnswerDayPreferenceFromStoredExpiry(text, step);
   const combinedText = combinedScriptedReply(text, step);
   const analysis = analyzeScriptedStaff(combinedText, step);
+  const appointmentCompletedWithTimeOnly = shouldUseInspectionTimeOnlyAppointmentResponse(
+    text,
+    step,
+    analysis
+  );
   const explainedPurposeWithoutRequiredDetails = step.key === "explained_inspection_notice"
     && !analysis.passed
     && hasClearInspectionPurposeNotice(combinedText);
@@ -2850,6 +2945,47 @@ function handleScriptedStaffReply(text) {
 
   if (!analysis.canAdvance) {
     const retry = scriptedRetryForMissingDetails(combinedText, step);
+    const retryKey = `inspection-retry:${step.key}:${retry.missingDetail || "general"}`;
+    const alreadyAsked = (state.questionRepeats[retryKey] || 0) > 0;
+    const maySkipRepeatedQuestion = step.key !== "proposed_appointment";
+    const optionalAfterAppointment = Boolean(state.proposedAppointment && step.optionalAfterAppointment);
+
+    // 入庫日時確定後の任意案内は聞き返さない。
+    // 日時確定前でも同じ質問を一度行っている場合は、再質問せず未達のまま先へ進む。
+    // ただし最低条件である具体的な入庫日・時刻だけは、そろうまで確認を続ける。
+    if (optionalAfterAppointment || (alreadyAsked && maySkipRepeatedQuestion)) {
+      analysis.canAdvance = true;
+      analysis.blocked = false;
+      analysis.skippedRepeatedQuestion = alreadyAsked;
+      analysis.skippedAfterAppointment = optionalAfterAppointment;
+      delete state.scriptedPartialReplies[step.key];
+      state.scriptStep += 1;
+      while (
+        state.scriptStep < scenario.steps.length
+        && state.analyses.some((item) =>
+          item.stepKey === scenario.steps[state.scriptStep].key && item.passed
+        )
+      ) {
+        state.scriptStep += 1;
+      }
+      const finishedAfterSkip = state.scriptStep >= scenario.steps.length;
+      if (finishedAfterSkip) {
+        state.ended = true;
+      } else {
+        state.currentState = scenario.steps[state.scriptStep].state;
+      }
+      addMessage("customer", "はい。", {
+        audioId: "inspection_thanked_customer_retry",
+        onCommitted: finishedAfterSkip
+          ? () => finishRoleplay({ keepCustomerPlayback: true })
+          : null
+      });
+      els.speechNote.textContent = optionalAfterAppointment
+        ? "入庫日時が確定しているため、未確認項目を聞き返さず先へ進みました。"
+        : "同じ質問は繰り返さず、未確認項目として採点に反映して先へ進みました。";
+      renderProgress();
+      return;
+    }
     if (retry.missingDetail === "waiting") {
       state.inspectionWaitingRequested = true;
     }
@@ -2858,7 +2994,7 @@ function handleScriptedStaffReply(text) {
       missingDetail: retry.missingDetail
     };
     const retryQuestion = customerQuestionTurn(
-      `inspection-retry:${step.key}:${retry.missingDetail || "general"}`,
+      retryKey,
       naturalScriptedRetryVariants(retry, step)
     );
     addMessage("customer", retryQuestion.text, {
@@ -2891,7 +3027,12 @@ function handleScriptedStaffReply(text) {
   delete state.scriptedPartialReplies[step.key];
 
   let responseStep = step;
-  let customerResponseOverride = answeredDayPreferenceAfterExpiry
+  let customerResponseOverride = appointmentCompletedWithTimeOnly
+    ? {
+        text: "では、その時間でお願いします。",
+        audioId: "inspection_appointment_single_time_customer"
+      }
+    : answeredDayPreferenceAfterExpiry
     ? {
         text: "土日がいいです。",
         audioId: "inspection_day_preference_answer"
@@ -3206,12 +3347,21 @@ function scoreScriptedRoleplay() {
       .map((analysis) => analysis.stepKey)
   );
   const applicableScoring = scenario.scoring.filter((metric) => !notApplicableKeys.has(metric.key));
+  const optionalAfterAppointmentKeys = new Set(
+    (scenario.steps || [])
+      .filter((step) => step.optionalAfterAppointment)
+      .map((step) => step.key)
+  );
   const achieved = {};
   scenario.scoring.forEach((metric) => {
     achieved[metric.key] = state.analyses.some((analysis) => analysis[metric.key] === true);
   });
 
-  const retryCount = state.analyses.filter((analysis) => analysis.scripted && analysis.blocked).length;
+  const retryCount = state.analyses.filter((analysis) =>
+    analysis.scripted
+    && analysis.blocked
+    && !optionalAfterAppointmentKeys.has(analysis.stepKey)
+  ).length;
   const earnedPoints = applicableScoring.reduce(
     (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
     0
@@ -3226,7 +3376,12 @@ function scoreScriptedRoleplay() {
     .map((metric) => `${metric.action}ことができています`);
   const improve = applicableScoring
     .filter((metric) => !achieved[metric.key])
-    .map((metric) => `${metric.action}ことを意識すると、より良い応対になります`);
+    .map((metric) => {
+      if (metric.key === "explained_duration_and_wait" && !state.inspectionMileageAsked) {
+        return "作業時間を判断するため、現在の走行距離を確認することを意識すると、より良い応対になります";
+      }
+      return `${metric.action}ことを意識すると、より良い応対になります`;
+    });
   if (retryCount > 0) {
     improve.unshift(`案内不足によるお客様の聞き返しが${retryCount}回ありました`);
   }
