@@ -1794,7 +1794,7 @@ function normalizeScriptedText(text) {
     [/(?:とよたもびりてぃ|トヨタもびりてぃ)/g, "トヨタモビリティ"],
     [/おびひろ/g, "帯広"], [/ふちやま/g, "渕山"],
     [/さとう/g, "佐藤"], [/さいとう/g, "斉藤"],
-    [/(?:やりす|ヤリす)/g, "ヤリス"],
+    [/(?:やりす|ヤリす|やるしす|ヤルシス)/g, "ヤリス"],
     [/のうぜいしょうめいしょ/g, "納税証明書"], [/のうぜいしょうめい/g, "納税証明"],
     [/しゃけんしょう/g, "車検証"], [/じばいせき/g, "自賠責"],
     [/しゃけん/g, "車検"], [/てんけん/g, "点検"], [/まんりょう/g, "満了"],
@@ -2044,6 +2044,26 @@ function hasInspectionSelfIntroduction(text) {
   return /(?:(?:トヨタ|とよた)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)?|(?:トヨタ|とよた)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|と(?:申|もう)します)/.test(normalized);
 }
 
+function hasInspectionDocumentGuidance(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasEmptyVehicleGuidance = /(?:荷物|空荷)/.test(normalized)
+    && /(?:降ろ|下ろ|積まない|積まず|空に|ない状態)/.test(normalized);
+  return hasEmptyVehicleGuidance
+    && normalized.includes("納税証明")
+    && normalized.includes("車検証")
+    && normalized.includes("自賠責");
+}
+
+function hasInspectionReminderContactConfirmation(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasThreeDayReminder = /(?:3日前|三日前)/.test(normalized)
+    && /(?:連絡|電話)/.test(normalized);
+  const asksKnownContact = /(?:この|同じ|今の|こちらの).{0,8}(?:携帯|電話|連絡先)/.test(normalized)
+    || /(?:携帯|電話|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(normalized)
+    || /(?:どちら|電話番号)/.test(normalized);
+  return hasThreeDayReminder && asksKnownContact && isScriptedQuestion(normalized);
+}
+
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // Firestoreに予約手続き時間だけを必須とする旧条件が残っていても、
   // 予約をこのまま進めてよいか確認する自然な言い回しを有効にする。
@@ -2081,6 +2101,12 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
       && hasWaiting;
   }
 
+  // Firestoreの公開シナリオとローカル標準シナリオの差にかかわらず、
+  // 必要書類と空荷を複数発話に分けて案内した場合も合算して確認する。
+  if (step.key === "explained_documents") {
+    return hasInspectionDocumentGuidance(normalized);
+  }
+
   // お客様がすでに代車を希望した分岐では、スタッフが手配を明確に承諾すれば完了とする。
   // スタッフ側から先に代車を案内する通常分岐では、従来の「早め・予約・用意」を維持する。
   if (
@@ -2102,6 +2128,12 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
     const hasArrivalLeadTime = /(?:10分|十分|15分|十五分)/.test(normalized)
       && /(?:早め|前)/.test(normalized);
     return hasLockNutToolExpression(normalized) && hasArrivalLeadTime;
+  }
+
+  // 「この電話」「この連絡先でよろしいですか」も、3日前確認の
+  // 連絡先を尋ねる自然な表現として扱う。
+  if (step.key === "confirmed_reminder_contact") {
+    return hasInspectionReminderContactConfirmation(normalized);
   }
 
   if (matchedGroups.every((matches) => matches.length > 0)) return true;
@@ -3206,12 +3238,21 @@ function scoreScriptedRoleplay() {
       .map((analysis) => analysis.stepKey)
   );
   const applicableScoring = scenario.scoring.filter((metric) => !notApplicableKeys.has(metric.key));
+  const optionalAfterAppointmentKeys = new Set(
+    (scenario.steps || [])
+      .filter((step) => step.optionalAfterAppointment)
+      .map((step) => step.key)
+  );
   const achieved = {};
   scenario.scoring.forEach((metric) => {
     achieved[metric.key] = state.analyses.some((analysis) => analysis[metric.key] === true);
   });
 
-  const retryCount = state.analyses.filter((analysis) => analysis.scripted && analysis.blocked).length;
+  const retryCount = state.analyses.filter((analysis) =>
+    analysis.scripted
+    && analysis.blocked
+    && !optionalAfterAppointmentKeys.has(analysis.stepKey)
+  ).length;
   const earnedPoints = applicableScoring.reduce(
     (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
     0
@@ -3226,7 +3267,12 @@ function scoreScriptedRoleplay() {
     .map((metric) => `${metric.action}ことができています`);
   const improve = applicableScoring
     .filter((metric) => !achieved[metric.key])
-    .map((metric) => `${metric.action}ことを意識すると、より良い応対になります`);
+    .map((metric) => {
+      if (metric.key === "explained_duration_and_wait" && !state.inspectionMileageAsked) {
+        return "作業時間を判断するため、現在の走行距離を確認することを意識すると、より良い応対になります";
+      }
+      return `${metric.action}ことを意識すると、より良い応対になります`;
+    });
   if (retryCount > 0) {
     improve.unshift(`案内不足によるお客様の聞き返しが${retryCount}回ありました`);
   }
