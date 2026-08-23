@@ -2059,6 +2059,12 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
     return hasInspectionSelfIntroduction(normalized);
   }
 
+  // 「ご利用」「ご愛顧」を使わなくても、日頃から世話になっていることと
+  // 感謝を同じ発話で伝えた場合は、日頃の利用へのお礼として扱う。
+  if (step.key === "thanked_customer") {
+    return hasCourtesyExpression(normalized);
+  }
+
   // Firestoreに「満了・車検」の旧キーワード条件が残っていても、
   // 登録済みの具体的な満了日を案内できれば達成とする。
   if (step.key === "explained_available_period") {
@@ -2294,7 +2300,15 @@ function scriptedStepSpecificMatches(normalized, step) {
 
 function hasCourtesyExpression(text) {
   const normalized = text.replace(/\s+/g, "");
-  return /(?:お世話になって(?:おります|います)|ありがとうございます|感謝)/.test(normalized);
+  const hasThanks = /(?:ありがとう|感謝)/.test(normalized);
+  const hasDirectPatronage = /(?:ご利用|ご愛顧)/.test(normalized);
+  const hasAlwaysThanks = normalized.includes("いつも") && hasThanks;
+  const hasEstablishedGreeting = /お世話になって(?:おります|います)/.test(normalized);
+  const hasOngoingRelationship = /(?:日頃|いつも|平素)/.test(normalized)
+    && /お世話にな(?:って(?:おります|います)|り(?:まして)?)/.test(normalized);
+  return hasAlwaysThanks
+    || hasEstablishedGreeting
+    || (hasThanks && (hasDirectPatronage || hasOngoingRelationship));
 }
 
 function isAffirmativeScriptedReply(text) {

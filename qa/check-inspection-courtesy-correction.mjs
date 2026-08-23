@@ -1,8 +1,44 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import vm from "node:vm";
 
 const appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const audioDbSource = fs.readFileSync(new URL("../audio-db.js", import.meta.url), "utf8");
+
+const courtesyStart = appSource.indexOf("function hasCourtesyExpression");
+const courtesyEnd = appSource.indexOf("function isAffirmativeScriptedReply", courtesyStart);
+assert.notEqual(courtesyStart, -1, "日頃のお礼判定がありません");
+assert.notEqual(courtesyEnd, -1, "日頃のお礼判定の終端がありません");
+const courtesyContext = {};
+vm.createContext(courtesyContext);
+vm.runInContext(appSource.slice(courtesyStart, courtesyEnd), courtesyContext);
+
+for (const text of [
+  "日頃は大変お世話になり、ありがとうございます。",
+  "いつもお世話になっております。ありがとうございます。",
+  "平素はお世話になりまして、誠に感謝しております。",
+  "日頃は当社をご利用いただき、ありがとうございます。",
+  "ご愛顧いただき感謝しております。",
+  "いつもありがとうございます。",
+  "お世話になっております。",
+  "お世話になっています。"
+]) {
+  assert.equal(courtesyContext.hasCourtesyExpression(text), true, `日頃のお礼として判定できません: ${text}`);
+}
+
+for (const text of [
+  "ありがとうございます。",
+  "ご連絡ありがとうございます。",
+  "お世話になります。"
+]) {
+  assert.equal(courtesyContext.hasCourtesyExpression(text), false, `一般的なお礼を日頃のお礼と誤判定しています: ${text}`);
+}
+
+assert.match(
+  appSource,
+  /step\.key === "thanked_customer"[\s\S]*?return hasCourtesyExpression\(normalized\);/,
+  "日頃のお礼の自然な言い回しが工程達成判定へ接続されていません"
+);
 
 const correctionStart = appSource.indexOf("const courtesyStep = scenario.steps.find");
 const normalAnalysisStart = appSource.indexOf(
