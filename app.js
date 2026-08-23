@@ -2041,7 +2041,7 @@ function hasClearInspectionPurposeNotice(text) {
 
 function hasInspectionSelfIntroduction(text) {
   const normalized = normalizeScriptedText(text);
-  return /(?:(?:トヨタ|とよた)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)?|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|と(?:申|もう)します)/.test(normalized);
+  return /(?:(?:トヨタ|とよた)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)?|(?:トヨタ|とよた)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|と(?:申|もう)します)/.test(normalized);
 }
 
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
