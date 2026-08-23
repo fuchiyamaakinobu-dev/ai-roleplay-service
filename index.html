@@ -51,28 +51,15 @@
         </label>
 
         <label class="reply-delay-selector">
-          <span>お客様返答までの間隔</span>
-          <select id="replyDelaySelect">
-            <option value="0">すぐに返答</option>
-            <option value="500">0.5秒</option>
-            <option value="1000" selected>1秒</option>
-            <option value="1500">1.5秒</option>
-            <option value="2000">2秒</option>
-            <option value="3000">3秒</option>
-          </select>
-          <small>スタッフの発話送信後から、AIお客様が返答を始めるまでの時間です。</small>
-        </label>
-
-        <label class="reply-delay-selector">
-          <span>発話完了判定までの時間</span>
-          <select id="speechDecisionDelaySelect">
+          <span>AIお客様の反応速度</span>
+          <select id="interactionDelaySelect">
             <option value="500">0.5秒（最速）</option>
             <option value="800">0.8秒</option>
             <option value="1000">1秒</option>
             <option value="1500" selected>1.5秒（推奨）</option>
             <option value="2000">2秒（安定）</option>
           </select>
-          <small>スタッフが話し終えたと判断するまでの時間です。短くすると、発話途中で送信される場合があります。</small>
+          <small>スタッフの発話完了判定からAIお客様が返答を始めるまでの速さをまとめて調整します。短くすると、発話途中で送信される場合があります。</small>
         </label>
 
         <a class="audio-manager-link" href="./audio-list.html">

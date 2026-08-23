@@ -8,6 +8,7 @@ let speechListening = false;
 let speechBaseText = "";
 let speechRestartTimer = null;
 let speechDecisionTimer = null;
+let interactionDelayAlreadyElapsed = false;
 let speechPausedForAck = false;
 let lastAcknowledgedText = "";
 let activeCustomerAudio = null;
@@ -75,8 +76,7 @@ const els = {
   employeeCode: document.querySelector("#employeeCode"),
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceCredit: document.querySelector("#voiceCredit"),
-  replyDelaySelect: document.querySelector("#replyDelaySelect"),
-  speechDecisionDelaySelect: document.querySelector("#speechDecisionDelaySelect"),
+  interactionDelaySelect: document.querySelector("#interactionDelaySelect"),
   replyForm: document.querySelector("#replyForm"),
   staffInput: document.querySelector("#staffInput"),
   micButton: document.querySelector("#micButton"),
@@ -571,13 +571,8 @@ function updateVoiceSelection() {
   }
 }
 
-function customerReplyDelayMs() {
-  const selected = Number(els.replyDelaySelect?.value);
-  return [0, 500, 1000, 1500, 2000, 3000].includes(selected) ? selected : 1000;
-}
-
-function speechDecisionDelayMs() {
-  const selected = Number(els.speechDecisionDelaySelect?.value);
+function interactionDelayMs() {
+  const selected = Number(els.interactionDelaySelect?.value);
   return [500, 800, 1000, 1500, 2000].includes(selected) ? selected : 1500;
 }
 
@@ -659,7 +654,8 @@ function addMessage(role, text, options = {}) {
   const delay = role === "customer"
     && previousMessage?.role === "staff"
     && options.immediate !== true
-      ? customerReplyDelayMs()
+    && !interactionDelayAlreadyElapsed
+      ? interactionDelayMs()
       : 0;
 
   if (delay <= 0) {
@@ -3349,12 +3345,14 @@ function setupSpeech() {
         if (looksLikeCompleteJapaneseSentence(fullText)) {
           stopSpeechInput();
           els.speechNote.textContent = "発言が完了したため、自動的に次へ進みます。";
+          interactionDelayAlreadyElapsed = true;
           els.replyForm.requestSubmit();
+          interactionDelayAlreadyElapsed = false;
         } else {
           els.speechNote.textContent = "発言が途中のため、続きを聞いています。";
           acknowledgeAndContinue(fullText);
         }
-      }, speechDecisionDelayMs());
+      }, interactionDelayMs());
     } else {
       els.speechNote.textContent = "音声入力中です。話し終えると自動的に次へ進みます。";
     }
@@ -3455,11 +3453,8 @@ els.progressEnabled?.addEventListener("change", () => {
   renderProgress();
 });
 els.voiceSelect?.addEventListener("change", updateVoiceSelection);
-els.replyDelaySelect?.addEventListener("change", () => {
-  localStorage.setItem("roleplayCustomerReplyDelayMs", String(customerReplyDelayMs()));
-});
-els.speechDecisionDelaySelect?.addEventListener("change", () => {
-  localStorage.setItem("roleplaySpeechDecisionDelayMs", String(speechDecisionDelayMs()));
+els.interactionDelaySelect?.addEventListener("change", () => {
+  localStorage.setItem("roleplayInteractionDelayMs", String(interactionDelayMs()));
 });
 els.replyForm.addEventListener("submit", handleReply);
 els.scenarioList.addEventListener("click", (event) => {
@@ -3508,19 +3503,14 @@ const savedVoice = localStorage.getItem("roleplayVoice");
 if (savedVoice && audioDb.voices?.[savedVoice] && els.voiceSelect) {
   els.voiceSelect.value = savedVoice;
 }
-const savedCustomerReplyDelay = localStorage.getItem("roleplayCustomerReplyDelayMs");
+const savedInteractionDelay = localStorage.getItem("roleplayInteractionDelayMs")
+  || localStorage.getItem("roleplaySpeechDecisionDelayMs")
+  || localStorage.getItem("roleplayCustomerReplyDelayMs");
 if (
-  els.replyDelaySelect
-  && ["0", "500", "1000", "1500", "2000", "3000"].includes(savedCustomerReplyDelay)
+  els.interactionDelaySelect
+  && ["500", "800", "1000", "1500", "2000"].includes(savedInteractionDelay)
 ) {
-  els.replyDelaySelect.value = savedCustomerReplyDelay;
-}
-const savedSpeechDecisionDelay = localStorage.getItem("roleplaySpeechDecisionDelayMs");
-if (
-  els.speechDecisionDelaySelect
-  && ["500", "800", "1000", "1500", "2000"].includes(savedSpeechDecisionDelay)
-) {
-  els.speechDecisionDelaySelect.value = savedSpeechDecisionDelay;
+  els.interactionDelaySelect.value = savedInteractionDelay;
 }
 window.addEventListener?.("roleplay-history-status", (event) => {
   if (!els.resultSaveStatus) return;
