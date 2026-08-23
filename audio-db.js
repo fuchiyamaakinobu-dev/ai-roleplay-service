@@ -423,6 +423,7 @@ const vehicleInspectionAudioLines = [
   ["inspection_confirmed_booking_time_customer", "予約時間確認・お客様回答", "大丈夫ですよ。"],
   ["inspection_confirmed_booking_time_retry", "予約時間確認・聞き返し", "今、このまま予約できますか？"],
   ["inspection_proposed_appointment_customer", "予約日時提案・お客様回答", "では、その日でお願いします。"],
+  ["inspection_appointment_single_time_customer", "予約時刻確定・お客様回答", "では、その時間でお願いします。"],
   ["inspection_proposed_appointment_retry", "予約日時提案・聞き返し", "具体的な日時を教えてください。"],
   ["inspection_appointment_morning_need_date", "曜日・時間帯質問後の日付確認", "午前中でお願いします。何日の予定ですか？"],
   ["inspection_appointment_time_missing_retry", "予約日時提案・時刻不足", "何時が空いていますか？"],

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const audioSource = fs.readFileSync(new URL("../audio-db.js", import.meta.url), "utf8");
 const proposalStart = source.indexOf("function hasInspectionAppointmentProposalEvidence");
 const proposalEnd = source.indexOf("function hasInspectionScheduleQuestionIntent", proposalStart);
 
@@ -79,6 +80,9 @@ const optionalContext = {
   },
   scriptedStepMatches(text, step) {
     return text.includes(step.key);
+  },
+  hasScriptedAppointmentRecapEvidence(text) {
+    return text.includes("recapped_appointment");
   }
 };
 vm.createContext(optionalContext);
@@ -98,6 +102,54 @@ assert.match(
   source,
   /optionalForwardIndex > state\.scriptStep[\s\S]*?recordSkippedScriptedSteps[\s\S]*?state\.scriptStep = optionalForwardIndex[\s\S]*?handleScriptedStaffReply\(text\)/,
   "日時確定後に先の任意工程を優先する処理が見つかりません"
+);
+
+const timeOnlyStart = source.indexOf("function shouldUseInspectionTimeOnlyAppointmentResponse");
+const timeOnlyEnd = source.indexOf("function naturalScriptedRetryVariants", timeOnlyStart);
+assert.notEqual(timeOnlyStart, -1, "時刻だけを最後に確定した場合の返答判定が見つかりません");
+assert.notEqual(timeOnlyEnd, -1, "時刻だけを最後に確定した場合の返答判定の終端が見つかりません");
+
+const timeOnlyContext = {
+  state: {
+    scriptedPartialReplies: {
+      proposed_appointment: { missingDetail: "appointmentTime" }
+    }
+  },
+  normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
+  inspectionAppointmentDateCandidates: (text) => /\d{1,2}月\d{1,2}日/.test(text) ? [text] : []
+};
+vm.createContext(timeOnlyContext);
+vm.runInContext(
+  `${source.slice(timeOnlyStart, timeOnlyEnd)}\nthis.shouldUseInspectionTimeOnlyAppointmentResponse = shouldUseInspectionTimeOnlyAppointmentResponse;`,
+  timeOnlyContext
+);
+assert.equal(
+  timeOnlyContext.shouldUseInspectionTimeOnlyAppointmentResponse(
+    "10時はいかがでしょうか？",
+    { key: "proposed_appointment" },
+    { passed: true }
+  ),
+  true,
+  "日付確定後の時刻提示で『その時間』の返答へ切り替わりません"
+);
+assert.equal(
+  timeOnlyContext.shouldUseInspectionTimeOnlyAppointmentResponse(
+    "8月20日10時はいかがでしょうか？",
+    { key: "proposed_appointment" },
+    { passed: true }
+  ),
+  false,
+  "月日と時刻の同時提示まで『その時間』の返答へ切り替えています"
+);
+assert.match(
+  source,
+  /text: "では、その時間でお願いします。"[\s\S]*?audioId: "inspection_appointment_single_time_customer"/,
+  "時刻確定時の表示文と音声IDが一致していません"
+);
+assert.match(
+  audioSource,
+  /\["inspection_appointment_single_time_customer",[^\n]*"では、その時間でお願いします。"\]/,
+  "時刻確定時の音声登録文がありません"
 );
 
 console.log("車検誘致・入庫日時を最低限とする終話テスト: OK");

@@ -58,11 +58,47 @@ const publishedScenario = {
   }
 };
 
-const content = JSON.stringify({ scenarios: [publishedScenario] });
+const localInspectionScenario = {
+  id: "vehicle-inspection-phone-followup",
+  mode: "staff-led-scripted",
+  title: "車検誘致・電話フォロー",
+  steps: [
+    {
+      key: "asked_vehicle_concerns",
+      customerResponse: "オイル交換もお願いしたいです。",
+      retryResponse: "ほかに確認することはありますか？",
+      optionalAfterAppointment: true
+    },
+    {
+      key: "recapped_appointment",
+      customerResponse: "お願いします。",
+      retryResponse: "ん！？、何日の予定でしたっけ？",
+      optionalAfterAppointment: true
+    }
+  ]
+};
+
+const publishedInspectionScenario = {
+  ...structuredClone(localInspectionScenario),
+  steps: [
+    {
+      key: "asked_vehicle_concerns",
+      customerResponse: "別にないです。",
+      retryResponse: "ほかに確認することはありますか？"
+    },
+    {
+      key: "recapped_appointment",
+      customerResponse: "お願いします。",
+      retryResponse: "最後に予約内容をもう一度お願いします。"
+    }
+  ]
+};
+
+const content = JSON.stringify({ scenarios: [publishedScenario, publishedInspectionScenario] });
 const appendedScripts = [];
 const context = {
   window: {
-    ROLEPLAY_SCENARIOS: [localScenario],
+    ROLEPLAY_SCENARIOS: [localScenario, localInspectionScenario],
     ROLEPLAY_SCENARIO: localScenario,
     ROLEPLAY_AUDIO_DB: {
       items: [
@@ -71,7 +107,27 @@ const context = {
         { id: "pickupRequest01", text: "登録済み引取依頼", status: "ready" },
         { id: "objectionDistance", text: "登録済み距離", status: "ready" },
         { id: "objectionCompetitor", text: "登録済み他店比較", status: "ready" },
-        { id: "appointmentSingleTime", text: "その時間でお願いします", status: "ready" }
+        { id: "appointmentSingleTime", text: "その時間でお願いします", status: "ready" },
+        {
+          id: "inspection_asked_vehicle_concerns_customer",
+          text: "オイル交換もお願いしたいです。",
+          status: "ready"
+        },
+        {
+          id: "inspection_asked_vehicle_concerns_retry",
+          text: "ほかに確認することはありますか？",
+          status: "ready"
+        },
+        {
+          id: "inspection_recapped_appointment_customer",
+          text: "お願いします。",
+          status: "ready"
+        },
+        {
+          id: "inspection_recapped_appointment_retry",
+          text: "ん！？、何日の予定でしたっけ？",
+          status: "ready"
+        }
       ]
     }
   },
@@ -114,5 +170,19 @@ assert.equal(normalized.recommendedTalks.distance, localScenario.recommendedTalk
 assert.equal(normalized.scoring[0].label, "引取事情を受け止めた");
 assert.equal(normalized.scoring[0].action, "引取希望の事情を受け止める");
 assert.equal(appendedScripts.length, 1, "互換補正後にapp.jsが起動していません");
+
+const normalizedInspection = context.window.ROLEPLAY_SCENARIOS[1];
+assert.equal(
+  normalizedInspection.steps[0].customerResponse,
+  "オイル交換もお願いしたいです。",
+  "公開Firestoreの旧発話が車検誘致の登録済みMP3文へ補正されません"
+);
+assert.equal(normalizedInspection.steps[0].optionalAfterAppointment, true);
+assert.equal(
+  normalizedInspection.steps[1].retryResponse,
+  "ん！？、何日の予定でしたっけ？",
+  "予約復唱の旧聞き返しが登録済みMP3文へ補正されません"
+);
+assert.equal(normalizedInspection.steps[1].optionalAfterAppointment, true);
 
 console.log("Firestore旧公開データ互換テスト: OK");
