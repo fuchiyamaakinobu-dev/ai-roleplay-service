@@ -76,6 +76,7 @@ const els = {
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceCredit: document.querySelector("#voiceCredit"),
   replyDelaySelect: document.querySelector("#replyDelaySelect"),
+  speechDecisionDelaySelect: document.querySelector("#speechDecisionDelaySelect"),
   replyForm: document.querySelector("#replyForm"),
   staffInput: document.querySelector("#staffInput"),
   micButton: document.querySelector("#micButton"),
@@ -573,6 +574,11 @@ function updateVoiceSelection() {
 function customerReplyDelayMs() {
   const selected = Number(els.replyDelaySelect?.value);
   return [0, 500, 1000, 1500, 2000, 3000].includes(selected) ? selected : 1000;
+}
+
+function speechDecisionDelayMs() {
+  const selected = Number(els.speechDecisionDelaySelect?.value);
+  return [500, 800, 1000, 1500, 2000].includes(selected) ? selected : 1500;
 }
 
 function setCustomerReplyPending(pending) {
@@ -3348,7 +3354,7 @@ function setupSpeech() {
           els.speechNote.textContent = "発言が途中のため、続きを聞いています。";
           acknowledgeAndContinue(fullText);
         }
-      }, 2000);
+      }, speechDecisionDelayMs());
     } else {
       els.speechNote.textContent = "音声入力中です。話し終えると自動的に次へ進みます。";
     }
@@ -3452,6 +3458,9 @@ els.voiceSelect?.addEventListener("change", updateVoiceSelection);
 els.replyDelaySelect?.addEventListener("change", () => {
   localStorage.setItem("roleplayCustomerReplyDelayMs", String(customerReplyDelayMs()));
 });
+els.speechDecisionDelaySelect?.addEventListener("change", () => {
+  localStorage.setItem("roleplaySpeechDecisionDelayMs", String(speechDecisionDelayMs()));
+});
 els.replyForm.addEventListener("submit", handleReply);
 els.scenarioList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-scenario-id]");
@@ -3505,6 +3514,13 @@ if (
   && ["0", "500", "1000", "1500", "2000", "3000"].includes(savedCustomerReplyDelay)
 ) {
   els.replyDelaySelect.value = savedCustomerReplyDelay;
+}
+const savedSpeechDecisionDelay = localStorage.getItem("roleplaySpeechDecisionDelayMs");
+if (
+  els.speechDecisionDelaySelect
+  && ["500", "800", "1000", "1500", "2000"].includes(savedSpeechDecisionDelay)
+) {
+  els.speechDecisionDelaySelect.value = savedSpeechDecisionDelay;
 }
 window.addEventListener?.("roleplay-history-status", (event) => {
   if (!els.resultSaveStatus) return;

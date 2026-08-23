@@ -63,6 +63,18 @@
           <small>スタッフの発話送信後から、AIお客様が返答を始めるまでの時間です。</small>
         </label>
 
+        <label class="reply-delay-selector">
+          <span>発話完了判定までの時間</span>
+          <select id="speechDecisionDelaySelect">
+            <option value="500">0.5秒（最速）</option>
+            <option value="800">0.8秒</option>
+            <option value="1000">1秒</option>
+            <option value="1500" selected>1.5秒（推奨）</option>
+            <option value="2000">2秒（安定）</option>
+          </select>
+          <small>スタッフが話し終えたと判断するまでの時間です。短くすると、発話途中で送信される場合があります。</small>
+        </label>
+
         <a class="audio-manager-link" href="./audio-list.html">
           <span aria-hidden="true">🔊</span>
           <span><strong>お客様音声を管理</strong><small>自然な音声の作り方・追加方法</small></span>
