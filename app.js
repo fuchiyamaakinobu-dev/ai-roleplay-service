@@ -1848,24 +1848,27 @@ function hasInspectionWaitingChoiceOffer(text) {
 
 function hasInspectionLoanerConfirmation(text, allowImplicitLoaner = false) {
   const normalized = normalizeScriptedText(text);
-  const hasLoaner = normalized.includes("代車") || allowImplicitLoaner;
-  const hasArrangement = /(?:用意|準備|手配)/.test(normalized);
-  const hasNegative = /(?:できません|できない|難しい|空きがない|空いていない|空いていません|空いてません|用意がない|用意はない)/.test(normalized);
-  const isPendingConfirmation = /(?:できるか|可能か|空き(?:を|が)?).*確認(?:します|いたします|して)/.test(normalized);
-  const hasCommitment = /(?:できます|できる(?:か)?と思います|可能です|いたします|します|させていただ|しておきます|しておきましょう|なります)/.test(normalized);
-  const isQuestion = /(?:でしょうか|ますか|ですか|ませんか|ございませんか|[?？])/.test(normalized);
-  const hasContextualAvailability = allowImplicitLoaner
-    && /(?:空いて(?:ます|います|る)|空き(?:が)?あります)/.test(normalized)
-    && !isQuestion;
-  const hasContextualAffirmation = allowImplicitLoaner
-    && /大丈夫です(?:よ)?(?:[。！!]|$)/.test(normalized)
-    && !isQuestion;
-  const confirmsArrangement = hasArrangement && hasCommitment;
-  return hasLoaner
-    && (confirmsArrangement || hasContextualAvailability || hasContextualAffirmation)
-    && !hasNegative
-    && !isPendingConfirmation
-    && !isQuestion;
+  const clauses = normalized.split(/[。.!！?？]+/).filter(Boolean);
+  return clauses.some((clause) => {
+    const hasLoaner = /(?:代車|代わりの車)/.test(clause) || allowImplicitLoaner;
+    const hasArrangement = /(?:用意|準備|手配)/.test(clause);
+    const hasNegative = /(?:できません|できない|難しい|空きがない|空いていない|空いていません|空いてません|用意がない|用意はない)/.test(clause);
+    const isPendingConfirmation = /(?:できるか|可能か|空き(?:を|が)?).*確認(?:します|いたします|して)/.test(clause);
+    const hasCommitment = /(?:できます|できる(?:か)?と思います|可能です|いたします|します|させていただ|しておきます|しておきましょう|なります)/.test(clause);
+    const isQuestion = /(?:でしょうか|ますか|ですか|ませんか|ございませんか)/.test(clause);
+    const hasContextualAvailability = allowImplicitLoaner
+      && /(?:空いて(?:ます|います|る)|空き(?:が)?あります)/.test(clause)
+      && !isQuestion;
+    const hasContextualAffirmation = allowImplicitLoaner
+      && /大丈夫です(?:よ)?$/.test(clause)
+      && !isQuestion;
+    const confirmsArrangement = hasArrangement && hasCommitment;
+    return hasLoaner
+      && (confirmsArrangement || hasContextualAvailability || hasContextualAffirmation)
+      && !hasNegative
+      && !isPendingConfirmation
+      && !isQuestion;
+  });
 }
 
 function hasInspectionAvailableFromInformation(text) {

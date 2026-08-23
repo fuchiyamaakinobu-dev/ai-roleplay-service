@@ -21,12 +21,25 @@ for (const text of [
   "代車をご準備させていただいております。",
   "代車を準備しておきます。",
   "代車を手配いたします。",
-  "台車をご用意できます。"
+  "台車をご用意できます。",
+  "代わりの車をご用意いたします。"
 ]) {
   assert.equal(
     helperContext.hasInspectionLoanerConfirmation(text),
     true,
     `代車手配の承諾を認識できません: ${text}`
+  );
+}
+
+for (const text of [
+  "代わりの車をご用意いたします。",
+  "代わりの車をご用意いたします。車検を受ける時、日程等はいつ頃よろしいでしょうか。",
+  "代車をご用意いたします。日程はいつ頃よろしいでしょうか。 代車の方はご用意いたします。"
+]) {
+  assert.equal(
+    helperContext.hasInspectionLoanerConfirmation(text, true),
+    true,
+    `後続の質問を含む代車手配承諾を認識できません: ${text}`
   );
 }
 
