@@ -77,6 +77,29 @@ assert.equal(
 );
 assert.equal(advanceContext.state.scriptStep, 3, "同じ発話で達成した名乗りとお礼を通過できません");
 
+const rememberStart = appSource.indexOf("function rememberFutureScriptedAchievements");
+const rememberEnd = appSource.indexOf("function recordOptionalShortcutEvidence", rememberStart);
+assert.notEqual(rememberStart, -1, "先行工程の達成記録処理が見つかりません");
+assert.notEqual(rememberEnd, -1, "先行工程の達成記録処理の終端が見つかりません");
+const rememberedKeys = [];
+const rememberContext = {
+  scenario: { steps: [identityStep, introducedStep, courtesyStep] },
+  scriptedStepMatches: (_text, candidate) => candidate.key === "introduced_self",
+  hasCourtesyExpression: (text) => /お世話になっております/.test(text),
+  markScriptedStepPassed: (candidate) => rememberedKeys.push(candidate.key)
+};
+vm.createContext(rememberContext);
+vm.runInContext(appSource.slice(rememberStart, rememberEnd), rememberContext);
+rememberContext.rememberFutureScriptedAchievements(
+  "私、トヨタモビリティ帯広の渕山と申します。どうもいつもお世話になっております。",
+  0
+);
+assert.deepEqual(
+  rememberedKeys,
+  ["introduced_self", "thanked_customer"],
+  "本人確認省略時の同一発話に含まれる名乗りと日頃のお礼を両方記録できません"
+);
+
 advanceContext.state.scriptStep = 1;
 advanceContext.state.analyses = [{ stepKey: "introduced_self", passed: true }];
 assert.equal(

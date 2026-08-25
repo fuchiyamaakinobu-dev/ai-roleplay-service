@@ -2593,7 +2593,9 @@ function rememberFutureScriptedAchievements(text, currentIndex) {
 
   scenario.steps.slice(currentIndex + 1).forEach((candidate) => {
     if (excludedKeys.has(candidate.key)) return;
-    if (!scriptedStepMatches(text, candidate)) return;
+    const matched = scriptedStepMatches(text, candidate)
+      || (candidate.key === "thanked_customer" && hasCourtesyExpression(text));
+    if (!matched) return;
     markScriptedStepPassed(candidate, text);
   });
 }
