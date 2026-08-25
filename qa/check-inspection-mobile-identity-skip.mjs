@@ -63,6 +63,7 @@ vm.runInContext(appSource.slice(introductionStart, introductionEnd), introductio
 
 for (const phrase of [
   "私、トヨタモビリティ帯広の渕山と申します",
+  "私、豊田モビリティ帯広の渕山と申します",
   "私、トヨタモビリティ帯広の渕山ともうします",
   "トヨタモビリティ帯広の渕山です",
   "私、トヨタモビリヒロの渕山と申します",

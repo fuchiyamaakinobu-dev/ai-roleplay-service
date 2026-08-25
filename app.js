@@ -1796,6 +1796,7 @@ function normalizeScriptedText(text) {
 
   // 判定専用の同義表記。会話欄・保存ログの発話原文には適用しない。
   const recognitionAliases = [
+    [/豊田(?=(?:モビリティ|もびりてぃ|モビリヒロ|もびりひろ))/g, "トヨタ"],
     [/(?:とよたもびりてぃ|トヨタもびりてぃ)/g, "トヨタモビリティ"],
     [/おびひろ/g, "帯広"], [/ふちやま/g, "渕山"],
     [/さとう/g, "佐藤"], [/さいとう/g, "斉藤"],
@@ -2056,7 +2057,7 @@ function hasClearInspectionPurposeNotice(text) {
 
 function hasInspectionSelfIntroduction(text) {
   const normalized = normalizeScriptedText(text);
-  return /(?:(?:トヨタ|とよた)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)?|(?:トヨタ|とよた)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|と(?:申|もう)します)/.test(normalized);
+  return /(?:(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)?|(?:トヨタ|とよた|豊田)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|と(?:申|もう)します)/.test(normalized);
 }
 
 function hasInspectionDocumentGuidance(text) {
