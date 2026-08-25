@@ -1113,7 +1113,9 @@ function asksInspectionAdditionalServiceFollowUp(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
   const asksAboutOtherWork = /(?:その他|そのほか|ほかに|他に|追加)/.test(normalized);
-  const hasServiceContext = /(?:追加作業|追加整備|ご用命|オイル交換|作業)/.test(normalized);
+  // 「追加整備」だけでなく、音声会話で自然に挟まれる
+  // 「追加する整備」「ほかに整備」なども同じ再確認として扱う。
+  const hasServiceContext = /(?:追加作業|追加整備|ご用命|オイル交換|作業|整備)/.test(normalized);
   return asksAboutOtherWork && hasServiceContext;
 }
 
