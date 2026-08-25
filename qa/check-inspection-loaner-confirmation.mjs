@@ -3,6 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const scenarioSource = fs.readFileSync(new URL("../scenario.js", import.meta.url), "utf8");
 
 const normalizeStart = appSource.indexOf("function normalizeLoanerHomophone");
 const helperEnd = appSource.indexOf("function hasInspectionAvailableFromInformation", normalizeStart);
@@ -17,6 +18,9 @@ for (const text of [
   "代車をご用意します。",
   "代車の方もご用意させていただくような形になりますね。",
   "代車も問題なくご用意できるかと思います。",
+  "あ、はい。代車ですね。ええ、ご用意は。ええ、問題なくできるかと思います。",
+  "代車。用意。できる。",
+  "代車。用意。出来る。",
   "代車をご用意できると思います。",
   "代車をご準備させていただいております。",
   "代車を準備しておきます。",
@@ -63,6 +67,13 @@ assert.equal(
   true,
   "代車希望直後の『大丈夫です』を手配可能の返答として認識できません"
 );
+for (const text of ["大丈夫。", "だいじょうぶ。", "だいじょうぶです。"]) {
+  assert.equal(
+    helperContext.hasInspectionLoanerConfirmation(text, true),
+    true,
+    `代車希望直後の短い承諾を認識できません: ${text}`
+  );
+}
 assert.equal(
   helperContext.hasInspectionLoanerConfirmation("空いてますよ。", true),
   true,
@@ -72,7 +83,12 @@ for (const text of [
   "大丈夫ですか？",
   "空いていません。",
   "空いてません。",
-  "代車をご用意しますか？"
+  "代車をご用意しますか？",
+  "代車ですね。ご用意できますか？",
+  "代車。用意。できる？",
+  "代車。用意。出来る？",
+  "大丈夫？",
+  "だいじょうぶ？"
 ] ) {
   assert.equal(
     helperContext.hasInspectionLoanerConfirmation(text, true),
@@ -84,6 +100,11 @@ assert.equal(
   helperContext.hasInspectionLoanerConfirmation("大丈夫です。"),
   false,
   "代車希望の文脈がない『大丈夫です』を代車手配として誤認識しています"
+);
+assert.equal(
+  helperContext.hasInspectionLoanerConfirmation("だいじょうぶ。"),
+  false,
+  "代車希望の文脈がない『だいじょうぶ』を代車手配として誤認識しています"
 );
 
 for (const text of [
@@ -225,6 +246,11 @@ assert.match(
   appSource,
   /responseStep\.key === "confirmed_waiting"[\s\S]*?hasInspectionLoanerConfirmation\(combinedText\)[\s\S]*?text: "分かりました。"[\s\S]*?inspection_explained_lock_and_arrival_customer/,
   "スタッフ側から代車手配済みと案内した後の自然な回答が見つかりません"
+);
+assert.match(
+  scenarioSource,
+  /key:\s*"explained_loaner"[\s\S]*?customerResponse:\s*"予約しようかな。"/,
+  "代車手配を承諾した後の『予約しようかな。』が設定されていません"
 );
 
 console.log("代車手配承諾の重複質問防止テスト: OK");

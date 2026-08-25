@@ -1856,19 +1856,39 @@ function hasInspectionWaitingChoiceOffer(text) {
 
 function hasInspectionLoanerConfirmation(text, allowImplicitLoaner = false) {
   const normalized = normalizeScriptedText(text);
-  const clauses = normalized.split(/[。.!！?？]+/).filter(Boolean);
-  return clauses.some((clause) => {
+  const clauses = [...normalized.matchAll(/([^。.!！?？]+)([。.!！?？]+|$)/g)]
+    .map((match) => ({
+      text: match[1],
+      hasQuestionMark: /[?？]/.test(match[2] || "")
+    }))
+    .filter((clause) => clause.text);
+  const candidates = [...clauses];
+  // 音声認識が「代車ですね。」「ご用意は。」「問題なくできます。」のように
+  // 一続きの承諾を短く区切る場合があるため、隣接する最大3文も合わせて判定する。
+  for (let size = 2; size <= 3; size += 1) {
+    for (let start = 0; start + size <= clauses.length; start += 1) {
+      const adjacentClauses = clauses.slice(start, start + size);
+      candidates.push({
+        text: adjacentClauses.map((clause) => clause.text).join(""),
+        hasQuestionMark: adjacentClauses.some((clause) => clause.hasQuestionMark)
+      });
+    }
+  }
+  return candidates.some((candidate) => {
+    const clause = candidate.text;
     const hasLoaner = /(?:代車|代わりの車)/.test(clause) || allowImplicitLoaner;
     const hasArrangement = /(?:用意|準備|手配)/.test(clause);
     const hasNegative = /(?:できません|できない|難しい|空きがない|空いていない|空いていません|空いてません|用意がない|用意はない)/.test(clause);
     const isPendingConfirmation = /(?:できるか|可能か|空き(?:を|が)?).*確認(?:します|いたします|して)/.test(clause);
-    const hasCommitment = /(?:できます|できる(?:か)?と思います|可能です|いたします|します|させていただ|しておきます|しておきましょう|なります)/.test(clause);
-    const isQuestion = /(?:でしょうか|ますか|ですか|ませんか|ございませんか)/.test(clause);
+    const hasCommitment = /(?:できます|出来ます|(?:できる|出来る)(?:か)?と思います|可能です|いたします|します|させていただ|しておきます|しておきましょう|なります)/.test(clause)
+      || /(?:できる|出来る)$/.test(clause);
+    const isQuestion = candidate.hasQuestionMark
+      || /(?:でしょうか|ますか|ですか|ませんか|ございませんか)/.test(clause);
     const hasContextualAvailability = allowImplicitLoaner
       && /(?:空いて(?:ます|います|る)|空き(?:が)?あります)/.test(clause)
       && !isQuestion;
     const hasContextualAffirmation = allowImplicitLoaner
-      && /大丈夫です(?:よ)?$/.test(clause)
+      && /(?:大丈夫|だいじょうぶ)(?:です(?:よ)?)?$/.test(clause)
       && !isQuestion;
     const confirmsArrangement = hasArrangement && hasCommitment;
     return hasLoaner
