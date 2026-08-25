@@ -864,6 +864,10 @@ function escapeHtml(value) {
 function looksLikeCompleteJapaneseSentence(text) {
   const normalized = text.replace(/\s+/g, "").trim();
   if (!normalized) return false;
+  const withoutTrailingPunctuation = normalized.replace(/[、。,.！？!?]+$/g, "");
+  if (/(?:それから|それと|そして|続いて|このあと|そのあと|ええと|えっと|あの|あと)$/.test(withoutTrailingPunctuation)) {
+    return false;
+  }
   const completeShortReplies = [
     "はい", "いいえ", "大丈夫です", "いいですよ", "良いですよ",
     "わかりました", "分かりました", "承知しました", "かしこまりました", "行きます", "いきます"

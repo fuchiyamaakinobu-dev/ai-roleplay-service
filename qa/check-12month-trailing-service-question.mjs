@@ -18,6 +18,39 @@ assert.match(
   "語尾省略の質問を音声認識の完結発話として扱っていません"
 );
 
+const sentenceContext = {
+  hasTrailingServiceInquiry: () => false
+};
+vm.createContext(sentenceContext);
+vm.runInContext(
+  source.slice(sentenceCompletionStart, sentenceCompletionEnd),
+  sentenceContext
+);
+for (const phrase of [
+  "ええと。それから。",
+  "それから。",
+  "それと、",
+  "そして。",
+  "続いて。",
+  "えっと。"
+]) {
+  assert.equal(
+    sentenceContext.looksLikeCompleteJapaneseSentence(phrase),
+    false,
+    `接続語で終わる途中発話を完成文として自動送信しています: ${phrase}`
+  );
+}
+for (const phrase of [
+  "それから3日前に確認のお電話をいたします。",
+  "続いて必要書類をご案内します。"
+]) {
+  assert.equal(
+    sentenceContext.looksLikeCompleteJapaneseSentence(phrase),
+    true,
+    `接続語の後まで話した完成文を未完了扱いにしています: ${phrase}`
+  );
+}
+
 const context = {};
 vm.createContext(context);
 vm.runInContext(`
