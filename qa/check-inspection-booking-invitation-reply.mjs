@@ -56,7 +56,21 @@ assert.equal(
 const crossingStart = appSource.indexOf("function advancedPastScriptedStep");
 const crossingEnd = appSource.indexOf("function scriptedRequiredGroupsMatch", crossingStart);
 assert.notEqual(crossingStart, -1, "複合発話の通過項目判定が見つかりません");
-const crossingContext = {};
+const crossingContext = {
+  scenario: {
+    steps: [
+      { key: "thanked_customer" },
+      { key: "explained_inspection_notice" },
+      { key: "asked_availability" },
+      { key: "explained_available_period" }
+    ]
+  },
+  scriptedStepMatches(text, step) {
+    return step.key === "asked_availability"
+      && /ご都合/.test(text)
+      && /(?:でしょうか|ますか|ですか|[?？])/.test(text);
+  }
+};
 vm.createContext(crossingContext);
 vm.runInContext(appSource.slice(crossingStart, crossingEnd), crossingContext);
 const steps = [
@@ -75,6 +89,24 @@ assert.equal(
   false,
   "都合確認を終えた後の発話を予約提案分岐として誤認識しています"
 );
+assert.equal(
+  crossingContext.shouldAnswerCombinedInspectionAvailability(
+    "ヤリスの車検が9月30日までとなりましたので、ご案内のお電話をしました。ご都合はいかがでしょうか？",
+    0,
+    4
+  ),
+  true,
+  "車検案内と都合確認をまとめた発話へ都合の回答を返せません"
+);
+assert.equal(
+  crossingContext.shouldAnswerCombinedInspectionAvailability(
+    "ヤリスの車検が9月30日までとなりましたので、ご案内のお電話をしました。",
+    0,
+    4
+  ),
+  false,
+  "都合を尋ねていない車検案内へ日程回答を返しています"
+);
 
 assert.match(scenarioSource, /requiredGroups:\s*\[\["ご都合",\s*"予定",\s*"日程",\s*"予約",\s*"決まり",\s*"決め"\]\]/);
 assert.match(appSource, /text:\s*"お願いします。"[\s\S]*?audioId:\s*"inspection_booking_invitation_accept_customer"/);
@@ -83,6 +115,11 @@ assert.match(
   appSource,
   /startingScriptStep[\s\S]*?advancedPastScriptedStep\([\s\S]*?"asked_availability"/,
   "複数ステップをまとめた予約提案で肯定返答を優先していません"
+);
+assert.match(
+  appSource,
+  /shouldAnswerCombinedInspectionAvailability\([\s\S]*?text:\s*"お願いしたいんですけど、いつできますか？"[\s\S]*?audioId:\s*"inspection_asked_availability_customer"/,
+  "複数項目と都合確認をまとめた発話へ登録済みの日程回答を選んでいません"
 );
 assert.match(audioDbSource, /inspection_booking_invitation_accept_customer"[^\n]*"お願いします。"/);
 assert.match(audioDbSource, /inspection_booking_invitation_intent_customer"[^\n]*"お願いしようと思っていました。"/);
