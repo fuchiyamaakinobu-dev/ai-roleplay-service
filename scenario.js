@@ -334,7 +334,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
       state: "FINAL_CONFIRMATION",
       key: "closed_politely",
       expected: "感謝を伝えて丁寧に電話を終える",
-      requiredGroups: [["ありがとう"]],
+      requiredGroups: [["ありがとうございました"]],
       customerResponse: "ありがとうございました。",
       retryResponse: "はい。"
     }

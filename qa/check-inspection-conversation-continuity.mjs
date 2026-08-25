@@ -25,8 +25,13 @@ assert.equal(
   "日時確定前の一般的なお礼を終話として誤認識しています"
 );
 closingContext.state.proposedAppointment = { month: 9, day: 10, hour: 9 };
+assert.equal(
+  closingContext.hasScriptedClosingIntent("ありがとうございます。"),
+  false,
+  "日時確定後の会話途中のお礼を終話として誤認識しています"
+);
 for (const phrase of [
-  "ありがとうございます。",
+  "ありがとうございました。",
   "よろしくお願いいたします。",
   "それでは当日よろしくお願いいたします。",
   "失礼いたします。"
@@ -37,6 +42,12 @@ for (const phrase of [
     `日時確定後の自然な終話表現を認識できません: ${phrase}`
   );
 }
+
+assert.match(
+  source,
+  /step\.key === "closed_politely"[\s\S]*?ありがとうございました/,
+  "最終工程で『ありがとうございます』と『ありがとうございました』を区別していません"
+);
 
 const remembered = [];
 closingContext.scenario.steps = [
