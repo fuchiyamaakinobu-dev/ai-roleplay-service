@@ -2600,6 +2600,24 @@ function rememberFutureScriptedAchievements(text, currentIndex) {
   });
 }
 
+function recoverEarlierInspectionOpeningStep(text, currentIndex) {
+  const openingKeys = new Set(["confirmed_identity", "introduced_self"]);
+  const matchedSteps = scenario.steps.slice(0, currentIndex).filter((candidate) =>
+    openingKeys.has(candidate.key)
+    && !state.analyses.some((analysis) =>
+      analysis.stepKey === candidate.key && analysis.passed === true
+    )
+    && scriptedStepMatches(text, candidate)
+  );
+
+  matchedSteps.forEach((candidate) => markScriptedStepPassed(candidate, text));
+
+  // 本人確認と名乗りを同じ発話で行った場合は、名乗りへの挨拶を優先する。
+  return matchedSteps.find((candidate) => candidate.key === "introduced_self")
+    || matchedSteps.find((candidate) => candidate.key === "confirmed_identity")
+    || null;
+}
+
 function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
   const normalized = text.replace(/\s+/g, "");
   const appointment = state.proposedAppointment;
@@ -2720,6 +2738,21 @@ function handleScriptedStaffReply(text) {
   // 後工程へ到達した際に、すでに聞いた内容を再質問しないための記録であり、
   // この時点で会話順序を強制的に進めるものではない。
   rememberFutureScriptedAchievements(text, state.scriptStep);
+
+  // 名乗りを先に済ませた後で本人確認へ戻るなど、冒頭2項目の順序が入れ替わっても
+  // 実際に確認できた内容を採点へ反映し、現在工程の「ご用件は何ですか？」へ誤分岐しない。
+  const recoveredOpeningStep = recoverEarlierInspectionOpeningStep(text, state.scriptStep);
+  if (recoveredOpeningStep) {
+    state.turn += 1;
+    addMessage("customer", recoveredOpeningStep.customerResponse, {
+      audioId: `inspection_${recoveredOpeningStep.key}_customer`
+    });
+    els.speechNote.textContent = recoveredOpeningStep.key === "introduced_self"
+      ? "店舗名・担当者名の名乗りを確認しました。続けて会話を進めてください。"
+      : "お客様のお名前を確認できました。続けて会話を進めてください。";
+    renderProgress();
+    return;
+  }
 
   // 具体的な入庫日と時刻が提示された場合は、未確認の過去工程へ戻らず日時調整を優先する。
   // 省略した項目は未達のまま採点し、同じ内容をAIお客様から聞き直さない。

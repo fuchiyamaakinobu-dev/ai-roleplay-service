@@ -100,6 +100,46 @@ assert.deepEqual(
   "本人確認省略時の同一発話に含まれる名乗りと日頃のお礼を両方記録できません"
 );
 
+const recoverStart = appSource.indexOf("function recoverEarlierInspectionOpeningStep");
+const recoverEnd = appSource.indexOf("function recordOptionalShortcutEvidence", recoverStart);
+assert.notEqual(recoverStart, -1, "順不同の冒頭工程を回収する処理が見つかりません");
+assert.notEqual(recoverEnd, -1, "順不同の冒頭工程を回収する処理の終端が見つかりません");
+const recoveredKeys = [];
+const recoverContext = {
+  scenario: { steps: [identityStep, introducedStep, courtesyStep] },
+  state: {
+    analyses: [
+      { stepKey: "confirmed_identity", passed: false },
+      { stepKey: "introduced_self", passed: true }
+    ]
+  },
+  scriptedStepMatches: (_text, candidate) => candidate.key === "confirmed_identity",
+  markScriptedStepPassed: (candidate) => {
+    recoveredKeys.push(candidate.key);
+    recoverContext.state.analyses.push({ stepKey: candidate.key, passed: true });
+  }
+};
+vm.createContext(recoverContext);
+vm.runInContext(appSource.slice(recoverStart, recoverEnd), recoverContext);
+assert.equal(
+  recoverContext.recoverEarlierInspectionOpeningStep("佐藤様のお電話でしょうか。", 2).customerResponse,
+  "そうです。",
+  "名乗りを先に行った後の本人確認へ『そうです。』と返せません"
+);
+assert.deepEqual(recoveredKeys, ["confirmed_identity"], "後から行った本人確認を採点へ記録できません");
+
+recoverContext.state.analyses = [];
+recoverContext.scriptedStepMatches = (_text, candidate) =>
+  candidate.key === "confirmed_identity" || candidate.key === "introduced_self";
+assert.equal(
+  recoverContext.recoverEarlierInspectionOpeningStep(
+    "トヨタモビリティ帯広の渕山です。佐藤様でしょうか。",
+    2
+  ).customerResponse,
+  "お世話になっております。",
+  "本人確認と名乗りが同時の場合に名乗りへの挨拶を優先できません"
+);
+
 advanceContext.state.scriptStep = 1;
 advanceContext.state.analyses = [{ stepKey: "introduced_self", passed: true }];
 assert.equal(
