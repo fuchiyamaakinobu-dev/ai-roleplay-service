@@ -18,6 +18,37 @@ const context = {
 vm.createContext(context);
 vm.runInContext(appSource.slice(helperStart, helperEnd), context);
 
+const additionalFollowUpStart = appSource.indexOf("function asksInspectionAdditionalServiceFollowUp");
+const additionalFollowUpEnd = appSource.indexOf("function analyzeStaff", additionalFollowUpStart);
+assert.notEqual(additionalFollowUpStart, -1, "追加作業再確認の判定関数が見つかりません");
+assert.notEqual(additionalFollowUpEnd, -1, "追加作業再確認の判定関数の終端が見つかりません");
+const additionalFollowUpContext = {
+  normalizeScriptedText: (text) => String(text).replace(/\s+/g, ""),
+  isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|ませんか|ございませんか|[?？])/.test(text)
+};
+vm.createContext(additionalFollowUpContext);
+vm.runInContext(
+  appSource.slice(additionalFollowUpStart, additionalFollowUpEnd),
+  additionalFollowUpContext
+);
+
+for (const phrase of [
+  "その他の追加作業はございますでしょうか？",
+  "その他何か、追加する整備などはございますでしょうか？",
+  "そのほかに整備しておくことはありますか？"
+]) {
+  assert.equal(
+    additionalFollowUpContext.asksInspectionAdditionalServiceFollowUp(phrase),
+    true,
+    `${phrase} をオイル交換後の追加作業再確認として認識できません`
+  );
+}
+assert.equal(
+  additionalFollowUpContext.asksInspectionAdditionalServiceFollowUp("お店で待つことはできますか？"),
+  false,
+  "店内待ちの質問を追加作業再確認として誤認識しています"
+);
+
 const concernStep = {
   key: "asked_vehicle_concerns",
   requiredGroups: [["気になる", "不具合", "調子", "具合"]]
