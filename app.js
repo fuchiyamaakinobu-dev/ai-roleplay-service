@@ -2101,6 +2101,12 @@ function hasInspectionReminderContactConfirmation(text) {
 }
 
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
+  // 「ありがとうございます」は会話途中のお礼として扱い、過去形の
+  // 「ありがとうございました」のときだけ終話あいさつを達成する。
+  if (step.key === "closed_politely") {
+    return /ありがとうございました/.test(normalized);
+  }
+
   // Firestoreに予約手続き時間だけを必須とする旧条件が残っていても、
   // 予約をこのまま進めてよいか確認する自然な言い回しを有効にする。
   // 「よろしければご予約をいただければと思いますが、いかがでしょうか」も
@@ -2580,10 +2586,10 @@ function hasScriptedClosingIntent(text) {
   if (isQuestion) return false;
 
   // 入庫日時確定後は、実際の電話で使われる自然な締め表現も終話として扱う。
-  // 日時確定前の単なる「ありがとうございます」は、予約工程を飛ばす終話意図にしない。
+  // 「ありがとうございます」は会話途中のお礼にも使うため、日時確定後も終話意図にしない。
   if (
     state.proposedAppointment
-    && /(?:ありがとうございます|よろしくお願い(?:いた)?します|失礼(?:いた)?します)/.test(normalized)
+    && /(?:よろしくお願い(?:いた)?します|失礼(?:いた)?します)/.test(normalized)
   ) {
     return true;
   }
