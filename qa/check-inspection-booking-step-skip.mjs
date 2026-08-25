@@ -39,13 +39,17 @@ assert.notEqual(proposalStart, -1, "予約日時の先行提案判定が見つ�
 assert.notEqual(proposalEnd, -1, "予約日時の先行提案判定の終端が見つかりません");
 
 const proposalContext = {
-  normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
   isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text),
   asksInspectionDayPreference: (text) => /(?:平日|土日|週末|曜日)/.test(text)
     && /(?:どちら|希望|都合|よろしい|良い|いかが)/.test(text)
     && /(?:でしょうか|ますか|ですか|[?？])/.test(text)
 };
 vm.createContext(proposalContext);
+const normalizeStart = appSource.indexOf("function normalizeScriptedText");
+const normalizeEnd = appSource.indexOf("function hasSupportedInspectionDuration", normalizeStart);
+assert.notEqual(normalizeStart, -1, "予約日時判定用の正規化関数が見つかりません");
+assert.notEqual(normalizeEnd, -1, "予約日時判定用の正規化関数終端が見つかりません");
+vm.runInContext(appSource.slice(normalizeStart, normalizeEnd), proposalContext);
 vm.runInContext(appSource.slice(proposalStart, proposalEnd), proposalContext);
 
 assert.equal(
@@ -53,6 +57,18 @@ assert.equal(
   true,
   "具体的な日付の先行提案を認識できません"
 );
+const firstDayCandidates = proposalContext.inspectionAppointmentDateCandidates(
+  "9月の一日はいかがでしょうか？"
+);
+assert.equal(firstDayCandidates.length, 1, "漢字の『一日』を予約日として認識できません");
+assert.equal(firstDayCandidates[0].month, "9", "漢字の『一日』を含む予約月が一致しません");
+assert.equal(firstDayCandidates[0].day, "1", "漢字の『一日』を1日として認識できません");
+const firstDayAppointment = proposalContext.inspectionAppointmentProposalMatch(
+  "9月の一日の10時はいかがでしょうか？"
+);
+assert.equal(firstDayAppointment?.month, "9", "漢字の『一日』を含む予約日時の月が一致しません");
+assert.equal(firstDayAppointment?.day, "1", "漢字の『一日』を含む予約日時の日が一致しません");
+assert.equal(firstDayAppointment?.hour, "10", "漢字の『一日』を含む予約日時の時刻が一致しません");
 assert.equal(
   proposalContext.hasInspectionAppointmentProposalEvidence("8月20日です。"),
   false,
@@ -118,7 +134,7 @@ assert.notEqual(retryStart, -1, "不足項目の聞き返し関数が見つか�
 assert.notEqual(retryEnd, -1, "不足項目の聞き返し関数の終端が見つかりません");
 
 const retryContext = {
-  normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
+  normalizeScriptedText: proposalContext.normalizeScriptedText,
   inspectionAppointmentDateCandidates: proposalContext.inspectionAppointmentDateCandidates,
   asksOpenInspectionDatePreference: proposalContext.asksOpenInspectionDatePreference,
   hasSupportedInspectionDuration: () => false,
@@ -136,6 +152,21 @@ const dateOnlyRetry = retryContext.scriptedRetryForMissingDetails(
 );
 assert.equal(dateOnlyRetry.text, "何時が空いていますか？", "日付提示後に時刻だけを確認できません");
 assert.equal(dateOnlyRetry.missingDetail, "appointmentTime", "日付提示後の不足項目が時刻になっていません");
+
+const firstDayOnlyRetry = retryContext.scriptedRetryForMissingDetails(
+  "9月の一日はいかがでしょうか？",
+  { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }
+);
+assert.equal(
+  firstDayOnlyRetry.text,
+  "何時が空いていますか？",
+  "漢字の『一日』を認識した後に日付を繰り返し質問しています"
+);
+assert.equal(
+  firstDayOnlyRetry.missingDetail,
+  "appointmentTime",
+  "漢字の『一日』を認識した後の不足項目が時刻になっていません"
+);
 
 const timeOnlyRetry = retryContext.scriptedRetryForMissingDetails(
   "4時はいかがでしょうか？",

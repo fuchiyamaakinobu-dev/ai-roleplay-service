@@ -1730,6 +1730,9 @@ function normalizeScriptedText(text) {
     .replace(/[０-９]/g, (character) =>
       String.fromCharCode(character.charCodeAt(0) - 0xFEE0)
     )
+    // 音声認識が「ついたち」を漢字の「一日」で返した場合も、
+    // 月の直後だけを予約日の1日として扱う。「作業に一日かかる」は変換しない。
+    .replace(/(\d{1,2}月)の?一日(?!間)/g, (match, month) => `${month}1日`)
     .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1")
     .replace(/台車/g, "代車")
     .replace(/\s+/g, "");
