@@ -51,6 +51,40 @@ assert.equal(
   "既存のお礼省略進行が維持されていません"
 );
 
+const advanceStart = appSource.indexOf("function advancePastPassedScriptedSteps");
+const advanceEnd = appSource.indexOf("function findFurthestMatchingOptionalStepIndex", advanceStart);
+assert.notEqual(advanceStart, -1, "本人確認省略後の返答工程補正が見つかりません");
+assert.notEqual(advanceEnd, -1, "本人確認省略後の返答工程補正の終端が見つかりません");
+const identityStep = { key: "confirmed_identity", customerResponse: "そうです。" };
+const introducedStep = { key: "introduced_self", customerResponse: "お世話になっております。" };
+const courtesyStep = { key: "thanked_customer", customerResponse: "こちらこそ。" };
+const advanceContext = {
+  state: {
+    scriptStep: 1,
+    analyses: [
+      { stepKey: "introduced_self", passed: true },
+      { stepKey: "thanked_customer", passed: true }
+    ]
+  },
+  scenario: { steps: [identityStep, introducedStep, courtesyStep] }
+};
+vm.createContext(advanceContext);
+vm.runInContext(appSource.slice(advanceStart, advanceEnd), advanceContext);
+assert.equal(
+  advanceContext.advancePastPassedScriptedSteps(identityStep).customerResponse,
+  "こちらこそ。",
+  "本人確認を省略して名乗りとお礼を伝えた発話へ本人確認用の『そうです。』を返しています"
+);
+assert.equal(advanceContext.state.scriptStep, 3, "同じ発話で達成した名乗りとお礼を通過できません");
+
+advanceContext.state.scriptStep = 1;
+advanceContext.state.analyses = [{ stepKey: "introduced_self", passed: true }];
+assert.equal(
+  advanceContext.advancePastPassedScriptedSteps(identityStep).customerResponse,
+  "お世話になっております。",
+  "本人確認を省略して名乗りだけ伝えた発話へ名乗り工程のお客様返答を選べません"
+);
+
 const introductionStart = appSource.indexOf("function hasInspectionSelfIntroduction");
 const introductionEnd = appSource.indexOf("function scriptedRequiredGroupsMatch", introductionStart);
 assert.notEqual(introductionStart, -1, "店舗・担当者名の名乗り判定が見つかりません");
