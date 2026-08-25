@@ -2026,6 +2026,16 @@ function advancedPastScriptedStep(startingIndex, currentIndex, steps, stepKey) {
   return targetIndex >= 0 && startingIndex <= targetIndex && currentIndex > targetIndex;
 }
 
+function shouldAnswerCombinedInspectionAvailability(text, startingIndex, currentIndex) {
+  const availabilityIndex = scenario.steps.findIndex((item) => item.key === "asked_availability");
+  const availabilityStep = scenario.steps[availabilityIndex];
+  return Boolean(
+    availabilityStep
+    && advancedPastScriptedStep(startingIndex, currentIndex, scenario.steps, "asked_availability")
+    && scriptedStepMatches(text, availabilityStep)
+  );
+}
+
 function hasClearInspectionPurposeNotice(text) {
   const normalized = normalizeScriptedText(text);
   const explicitlyStatesInspectionPurpose = normalized.includes("車検")
@@ -3139,6 +3149,19 @@ function handleScriptedStaffReply(text) {
         audioId: "inspection_booking_invitation_intent_customer"
       }
     ]);
+  }
+  if (
+    !customerResponseOverride
+    && shouldAnswerCombinedInspectionAvailability(
+      combinedText,
+      startingScriptStep,
+      state.scriptStep
+    )
+  ) {
+    customerResponseOverride = {
+      text: "お願いしたいんですけど、いつできますか？",
+      audioId: "inspection_asked_availability_customer"
+    };
   }
   if (
     !customerResponseOverride
