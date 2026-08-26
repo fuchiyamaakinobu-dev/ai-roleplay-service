@@ -3090,12 +3090,13 @@ function handleScriptedStaffReply(text) {
     const retry = scriptedRetryForMissingDetails(combinedText, step);
     const retryKey = `inspection-retry:${step.key}:${retry.missingDetail || "general"}`;
     const alreadyAsked = (state.questionRepeats[retryKey] || 0) > 0;
-    const maySkipRepeatedQuestion = step.key !== "proposed_appointment";
+    const maySkipRepeatedQuestion = !["proposed_appointment", "closed_politely"].includes(step.key);
     const optionalAfterAppointment = Boolean(state.proposedAppointment && step.optionalAfterAppointment);
 
     // 入庫日時確定後の任意案内は聞き返さない。
     // 日時確定前でも同じ質問を一度行っている場合は、再質問せず未達のまま先へ進む。
-    // ただし最低条件である具体的な入庫日・時刻だけは、そろうまで確認を続ける。
+    // ただし最低条件である具体的な入庫日・時刻と、実際の終話あいさつは
+    // 自動スキップしない。終話前に採点済みとなってマイクが止まるのを防ぐ。
     if (optionalAfterAppointment || (alreadyAsked && maySkipRepeatedQuestion)) {
       analysis.canAdvance = true;
       analysis.blocked = false;
