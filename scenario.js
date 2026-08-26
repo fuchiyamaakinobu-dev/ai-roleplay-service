@@ -161,7 +161,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
   availableFrom: "8月1日",
   inspectionCycle: "初回車検",
   assumedMileageKm: 30000,
-  appointmentDate: "8月20日10時",
+  appointmentDate: "8月30日10時",
   ringbackAudioId: "inspection_call_ringback",
   openingCustomerMessage: "はい、もしもし。",
   openingCustomerAudioId: "inspection_phone_greeting_customer",
@@ -340,7 +340,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     }
   ],
   recommendedTalk:
-    "会話を終了する最低限の条件は、具体的な入庫日と時刻の確定です。その他の未確認項目へ後戻りせず終話できますが、省略項目は得点になりません。高得点を目指す場合は、本人確認、店舗名と担当者名、日頃のお礼、車種と車検時期、満了日、走行距離、所要時間、追加作業、代車、待ち方、必要書類、ロックナット、10分または15分前来店、3日前確認連絡、予約日時の復唱まで案内してください。"
+    "模範進行は、本人確認、店舗名と担当者名、日頃のお礼、ヤリスと9月30日の車検満了案内、予約意思確認、作業時間、気になる点とオイル交換、走行距離、変更後の作業時間と待ち方、代車、予約手続き時間、8月30日午前10時の確定、荷物と必要書類、ロックナット、15分前来店、3日前確認連絡、予約復唱、終話です。具体的な入庫日と時刻の確定後は未確認項目へ後戻りせず、省略項目は未達として採点します。"
 };
 
 window.ROLEPLAY_SCENARIOS = [

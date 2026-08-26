@@ -46,12 +46,12 @@ assert.match(
 );
 assert.match(
   appSource,
-  /!state\.inspectionWaitingRequested && hasInspectionWaitingChoiceOffer\(combinedText\)[\s\S]*?markScriptedStepNotApplicable[\s\S]*?responseStep = waitingBranchLoanerStep/,
+  /else if \(hasInspectionWaitingChoiceOffer\(combinedText\)\)[\s\S]*?markScriptedStepNotApplicable[\s\S]*?responseStep = waitingBranchLoanerStep/,
   "スタッフから店内待ちを提案した場合に代車を対象外として予約へ進めません"
 );
 assert.match(
   appSource,
-  /state\.inspectionWaitingRequested\)[\s\S]*?出かける可能性があるので、一応代車を用意してほしいんですが、できますか？[\s\S]*?inspection_waiting_followup_loaner_request/,
+  /state\.inspectionWaitingRequested[\s\S]*?asksInspectionWaitingMethodConfirmation\(combinedText\)[\s\S]*?出かける可能性があるので、一応代車を用意してほしいんですが、できますか？[\s\S]*?inspection_waiting_followup_loaner_request/,
   "お客様から店内待ちを確認した後に、外出に備えた代車希望へ進めません"
 );
 assert.match(
@@ -102,6 +102,11 @@ assert.equal(
   waitingOfferContext.hasInspectionWaitingChoiceOffer("はい、お店でお待ちいただけます。"),
   false,
   "店内待ち質問への回答を、スタッフからの積極提案と誤認識しています"
+);
+assert.equal(
+  waitingOfferContext.asksInspectionWaitingMethodConfirmation("90分程度です。店内でお待ちいただけますか？"),
+  true,
+  "模範解答の待ち方確認を代車希望へ接続できません"
 );
 
 const scoringStart = appSource.indexOf("function scoreScriptedRoleplay");

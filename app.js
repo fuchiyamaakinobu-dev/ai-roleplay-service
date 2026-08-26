@@ -1827,6 +1827,13 @@ function hasInspectionWaitingChoiceOffer(text) {
   return hasWaitingContext && offersWaitingChoice;
 }
 
+function asksInspectionWaitingMethodConfirmation(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasWaitingContext = /(?:待|店内)/.test(normalized);
+  const asksCustomerToWait = /(?:お待ちいただけますか|お待ちになりますか|待たれますか|待っていただけますか)/.test(normalized);
+  return hasWaitingContext && asksCustomerToWait;
+}
+
 function hasInspectionLoanerConfirmation(text, allowImplicitLoaner = false) {
   const normalized = normalizeScriptedText(text);
   const clauses = [...normalized.matchAll(/([^。.!！?？]+)([。.!！?？]+|$)/g)]
@@ -3202,15 +3209,18 @@ function handleScriptedStaffReply(text) {
     waitingBranchLoanerStep?.key === "explained_loaner"
     && !scriptedStepMatches(combinedText, waitingBranchLoanerStep)
   ) {
-    if (!state.inspectionWaitingRequested && hasInspectionWaitingChoiceOffer(combinedText)) {
-      markScriptedStepNotApplicable(waitingBranchLoanerStep, "スタッフが店内待ちを提案");
-      responseStep = waitingBranchLoanerStep;
-      state.scriptStep += 1;
-    } else if (state.inspectionWaitingRequested) {
+    if (
+      state.inspectionWaitingRequested
+      || asksInspectionWaitingMethodConfirmation(combinedText)
+    ) {
       customerResponseOverride = {
         text: "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？",
         audioId: "inspection_waiting_followup_loaner_request"
       };
+    } else if (hasInspectionWaitingChoiceOffer(combinedText)) {
+      markScriptedStepNotApplicable(waitingBranchLoanerStep, "スタッフが店内待ちを提案");
+      responseStep = waitingBranchLoanerStep;
+      state.scriptStep += 1;
     }
   }
 
