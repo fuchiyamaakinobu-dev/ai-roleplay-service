@@ -2725,7 +2725,7 @@ function recordSkippedStepsBeforeAppointment(text, startIndex, appointmentIndex)
   recordSkippedScriptedSteps(text, startIndex, appointmentIndex, "入庫日時調整を優先");
 }
 
-function advancePastPassedScriptedSteps(responseStep) {
+function advancePastPassedScriptedSteps(responseStep, options = {}) {
   let latestResponseStep = responseStep;
   while (
     state.scriptStep < scenario.steps.length
@@ -2735,7 +2735,9 @@ function advancePastPassedScriptedSteps(responseStep) {
   ) {
     // 同じ発話で先の工程も達成済みなら、実際に最後に達成した工程の
     // お客様返答を選ぶ。本人確認を省略した名乗りに「そうです。」を返さない。
-    latestResponseStep = scenario.steps[state.scriptStep];
+    if (!options.preserveResponseStep) {
+      latestResponseStep = scenario.steps[state.scriptStep];
+    }
     state.scriptStep += 1;
   }
   return latestResponseStep;
@@ -3204,7 +3206,12 @@ function handleScriptedStaffReply(text) {
   state.scriptStep += 1;
 
   // 先に名乗りが済んでから本人確認へ戻った場合は、名乗りを繰り返させない。
-  responseStep = advancePastPassedScriptedSteps(responseStep);
+  responseStep = advancePastPassedScriptedSteps(responseStep, {
+    // 日時提案への承諾は、その後の店内待ち・車両状態が先に確認済みでも
+    // 必ずこのターンで返す。確認済み工程は通過するだけにして、
+    // 「オイル交換もお願いしたいです。」など過去の返答へ戻さない。
+    preserveResponseStep: step.key === "proposed_appointment" && analysis.passed
+  });
 
   // スタッフが店内待ちを選択肢として積極的に提案した場合は、
   // 代車を対象外にして予約手続きへ進む。

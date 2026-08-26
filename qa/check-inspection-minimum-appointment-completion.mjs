@@ -60,6 +60,53 @@ assert.match(
   /すでに後工程へ進んでいても日時が未確定なら[\s\S]*?完全な日時提案を最優先で確定/,
   "後工程へ進んだ後の完全な日時提案を優先できません"
 );
+
+const advanceStart = source.indexOf("function advancePastPassedScriptedSteps");
+const advanceEnd = source.indexOf("function findFurthestMatchingOptionalStepIndex", advanceStart);
+assert.notEqual(advanceStart, -1, "確認済み工程の通過処理が見つかりません");
+assert.notEqual(advanceEnd, -1, "確認済み工程の通過処理の終端が見つかりません");
+
+const advanceContext = {
+  state: {
+    scriptStep: 1,
+    analyses: [
+      { stepKey: "confirmed_waiting", passed: true },
+      { stepKey: "asked_vehicle_concerns", passed: true }
+    ]
+  },
+  scenario: {
+    steps: [
+      { key: "proposed_appointment", customerResponse: "では、その日でお願いします。" },
+      { key: "confirmed_waiting", customerResponse: "待っています。" },
+      { key: "asked_vehicle_concerns", customerResponse: "オイル交換もお願いしたいです。" },
+      { key: "explained_documents", customerResponse: "はい。" }
+    ]
+  }
+};
+vm.createContext(advanceContext);
+vm.runInContext(
+  `${source.slice(advanceStart, advanceEnd)}\nthis.advancePastPassedScriptedSteps = advancePastPassedScriptedSteps;`,
+  advanceContext
+);
+const preservedAppointmentResponse = advanceContext.advancePastPassedScriptedSteps(
+  advanceContext.scenario.steps[0],
+  { preserveResponseStep: true }
+);
+assert.equal(
+  preservedAppointmentResponse.key,
+  "proposed_appointment",
+  "日時確定後に確認済みのオイル交換希望へ返答が戻っています"
+);
+assert.equal(
+  advanceContext.state.scriptStep,
+  3,
+  "日時確定後に確認済みの待ち方・車両状態工程を通過できません"
+);
+assert.match(
+  source,
+  /preserveResponseStep:\s*step\.key === "proposed_appointment" && analysis\.passed/,
+  "日時確定の返答を最優先に保持する呼び出しがありません"
+);
 const appointmentPriorityIndex = source.indexOf("const appointmentIndex = scenario.steps.findIndex");
 const earlyConcernIndex = source.indexOf("const concernStepIndex = scenario.steps.findIndex", appointmentPriorityIndex);
 assert.ok(
