@@ -117,8 +117,19 @@ assert.match(
 );
 assert.match(
   appSource,
-  /step\.key === "explained_duration_and_wait" && asksCurrentMileage\(text\)[\s\S]*?今、3万キロくらいです。/,
-  "走行距離質問後のお客様回答分岐がありません"
+  /if \(asksCurrentMileage\(text\)\)[\s\S]*?今、3万キロくらいです。どれくらい時間がかかるのですか？[\s\S]*?inspection_current_mileage_and_duration_customer/,
+  "走行距離質問後の作業時間質問付きお客様回答分岐がありません"
+);
+const mileageReplyIndex = appSource.indexOf("if (asksCurrentMileage(text))");
+const appointmentShortcutIndex = appSource.indexOf("const appointmentIndex = scenario.steps.findIndex");
+assert.ok(
+  mileageReplyIndex >= 0 && mileageReplyIndex < appointmentShortcutIndex,
+  "予約日時調整を優先する前に走行距離質問へ回答できません"
+);
+assert.match(
+  appSource,
+  /durationStepIndex < state\.scriptStep[\s\S]*?scriptedStepMatches\(text, durationStep\)[\s\S]*?markScriptedStepPassed\(durationStep, text\)/,
+  "予約日時確定後の作業時間・店内待ち案内を採点へ回収できません"
 );
 assert.match(
   appSource,
@@ -140,12 +151,22 @@ assert.match(
 assert.match(
   audioDbSource,
   /inspection_current_mileage_customer",\s*"走行距離確認・お客様回答",\s*"今、3万キロくらいです。"/,
-  "走行距離回答の音声登録文が一致していません"
+  "従来の走行距離回答音声登録が見つかりません"
+);
+assert.match(
+  audioDbSource,
+  /inspection_current_mileage_and_duration_customer",\s*"走行距離回答・作業時間確認",\s*"今、3万キロくらいです。どれくらい時間がかかるのですか？"/,
+  "作業時間質問付き走行距離回答の音声登録文が一致していません"
 );
 assert.equal(
-  fs.existsSync(new URL("../audio-ondoku/inspection_current_mileage_customer.mp3", import.meta.url)),
+  fs.existsSync(new URL("../audio-ondoku/inspection_current_mileage_and_duration_customer.mp3", import.meta.url)),
   true,
-  "走行距離回答のMP3が見つかりません"
+  "作業時間質問付き走行距離回答のMP3が見つかりません"
+);
+assert.match(
+  appSource,
+  /metric\.key === "explained_duration_and_wait" && state\.inspectionMileageAsked[\s\S]*?基本作業時間と店内で待てること/,
+  "走行距離確認済みの改善点を作業時間・店内待ちだけに限定できません"
 );
 assert.doesNotMatch(
   appSource + audioDbSource,

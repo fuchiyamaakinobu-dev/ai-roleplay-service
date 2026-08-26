@@ -110,17 +110,19 @@ assert.doesNotMatch(
 const additionalServiceFollowUpStart = appSource.indexOf(
   "if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text))"
 );
-const mileageBranchStart = appSource.indexOf(
-  "if (step.key === \"explained_duration_and_wait\" && asksCurrentMileage(text))"
+const currentStepAnalysisStart = appSource.indexOf(
+  "const answeredDayPreferenceAfterExpiry = shouldAnswerDayPreferenceFromStoredExpiry(text, step);",
+  additionalServiceFollowUpStart
 );
 assert.notEqual(additionalServiceFollowUpStart, -1, "追加作業再確認への専用分岐がありません");
+assert.notEqual(currentStepAnalysisStart, -1, "現在工程の通常判定がありません");
 assert.ok(
-  additionalServiceFollowUpStart < mileageBranchStart,
+  additionalServiceFollowUpStart < currentStepAnalysisStart,
   "追加作業再確認が現在工程の不足確認より後に判定されています"
 );
 const additionalServiceFollowUpBlock = appSource.slice(
   additionalServiceFollowUpStart,
-  mileageBranchStart
+  currentStepAnalysisStart
 );
 assert.match(additionalServiceFollowUpBlock, /そのほかは大丈夫です。/);
 assert.match(additionalServiceFollowUpBlock, /inspection_additional_service_none_customer/);

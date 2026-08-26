@@ -2769,6 +2769,43 @@ function handleScriptedStaffReply(text) {
   // この時点で会話順序を強制的に進めるものではない。
   rememberFutureScriptedAchievements(text, state.scriptStep);
 
+  // 走行距離は作業時間を判断するための質問なので、予約日時の確定後など
+  // どの工程で尋ねられても実際の質問を優先して回答する。回答後はそのまま
+  // 作業時間の質問も行い、スタッフが時間と店内待ちを案内しやすくする。
+  if (asksCurrentMileage(text)) {
+    state.inspectionMileageAsked = true;
+    if (step.key === "explained_duration_and_wait") {
+      state.scriptedPartialReplies[step.key] = {
+        text: combinedScriptedReply(text, step),
+        missingDetail: "mileageAnswered"
+      };
+    }
+    state.turn += 1;
+    addMessage(
+      "customer",
+      "今、3万キロくらいです。どれくらい時間がかかるのですか？",
+      { audioId: "inspection_current_mileage_and_duration_customer" }
+    );
+    els.speechNote.textContent = "走行距離は約3万kmです。続けて、作業時間と店内で待てるかをご案内ください。";
+    renderProgress();
+    return;
+  }
+
+  // 予約を先に確定して作業時間工程を通過した後でも、会話全体に証拠が
+  // そろえば走行距離・作業時間・店内待ちを採点へ回収する。
+  const durationStepIndex = scenario.steps.findIndex(
+    (item) => item.key === "explained_duration_and_wait"
+  );
+  const durationStep = scenario.steps[durationStepIndex];
+  if (
+    durationStep
+    && durationStepIndex < state.scriptStep
+    && !state.analyses.some((item) => item.stepKey === durationStep.key && item.passed)
+    && scriptedStepMatches(text, durationStep)
+  ) {
+    markScriptedStepPassed(durationStep, text);
+  }
+
   // 名乗りを先に済ませた後で本人確認へ戻るなど、冒頭2項目の順序が入れ替わっても
   // 実際に確認できた内容を採点へ反映し、現在工程の「ご用件は何ですか？」へ誤分岐しない。
   const recoveredOpeningStep = recoverEarlierInspectionOpeningStep(text, state.scriptStep);
@@ -2859,23 +2896,6 @@ function handleScriptedStaffReply(text) {
       audioId: "inspection_additional_service_none_customer"
     });
     els.speechNote.textContent = "その他の追加作業はないことを確認しました。現在の案内を続けてください。";
-    renderProgress();
-    return;
-  }
-
-  // 初回車検の作業時間を判断するため、現在の走行距離を先に確認する。
-  // 同じ発話ですでに時間を説明していた場合も、その内容は次の判定まで保持する。
-  if (step.key === "explained_duration_and_wait" && asksCurrentMileage(text)) {
-    state.inspectionMileageAsked = true;
-    state.scriptedPartialReplies[step.key] = {
-      text: combinedScriptedReply(text, step),
-      missingDetail: "mileageAnswered"
-    };
-    state.turn += 1;
-    addMessage("customer", "今、3万キロくらいです。", {
-      audioId: "inspection_current_mileage_customer"
-    });
-    els.speechNote.textContent = "走行距離は約3万kmです。続けて、作業時間と店内で待てるかをご案内ください。";
     renderProgress();
     return;
   }
@@ -3482,6 +3502,9 @@ function scoreScriptedRoleplay() {
     .map((metric) => {
       if (metric.key === "explained_duration_and_wait" && !state.inspectionMileageAsked) {
         return "作業時間を判断するため、現在の走行距離を確認することを意識すると、より良い応対になります";
+      }
+      if (metric.key === "explained_duration_and_wait" && state.inspectionMileageAsked) {
+        return "基本作業時間と店内で待てることを説明することを意識すると、より良い応対になります";
       }
       return `${metric.action}ことを意識すると、より良い応対になります`;
     });
