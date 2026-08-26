@@ -52,8 +52,19 @@ assert.equal(
 
 assert.match(
   source,
-  /appointmentIndex > state\.scriptStep[\s\S]*?hasCompleteInspectionAppointmentProposal\(text\)[\s\S]*?recordSkippedStepsBeforeAppointment[\s\S]*?state\.scriptStep = appointmentIndex[\s\S]*?handleScriptedStaffReply\(text\)/,
-  "未確認の過去工程を未達のまま日時工程へ進める処理が見つかりません"
+  /!state\.proposedAppointment[\s\S]*?appointmentIndex !== state\.scriptStep[\s\S]*?hasInspectionAppointmentProposalEvidence\(text\)[\s\S]*?appointmentIndex > state\.scriptStep[\s\S]*?recordSkippedStepsBeforeAppointment[\s\S]*?state\.scriptStep = appointmentIndex[\s\S]*?handleScriptedStaffReply\(text\)/,
+  "日付または時刻の部分提案から日時工程を優先する処理が見つかりません"
+);
+assert.match(
+  source,
+  /すでに後工程へ進んでいても日時が未確定なら[\s\S]*?完全な日時提案を最優先で確定/,
+  "後工程へ進んだ後の完全な日時提案を優先できません"
+);
+const appointmentPriorityIndex = source.indexOf("const appointmentIndex = scenario.steps.findIndex");
+const earlyConcernIndex = source.indexOf("const concernStepIndex = scenario.steps.findIndex", appointmentPriorityIndex);
+assert.ok(
+  appointmentPriorityIndex >= 0 && earlyConcernIndex > appointmentPriorityIndex,
+  "完全な日時提案よりオイル交換の再質問を先に処理しています"
 );
 assert.match(
   source,

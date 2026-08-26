@@ -2822,14 +2822,19 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
-  // 具体的な入庫日と時刻が提示された場合は、未確認の過去工程へ戻らず日時調整を優先する。
-  // 省略した項目は未達のまま採点し、同じ内容をAIお客様から聞き直さない。
+  // 具体的な入庫日または時刻の提案が始まった時点で、未確認の過去工程へ戻らず
+  // 日時調整を優先する。日付だけなら時刻、時刻だけなら日付だけを確認する。
+  // すでに後工程へ進んでいても日時が未確定なら、完全な日時提案を最優先で確定する。
   const appointmentIndex = scenario.steps.findIndex((item) => item.key === "proposed_appointment");
   if (
-    appointmentIndex > state.scriptStep
-    && hasCompleteInspectionAppointmentProposal(text)
+    !state.proposedAppointment
+    && appointmentIndex >= 0
+    && appointmentIndex !== state.scriptStep
+    && hasInspectionAppointmentProposalEvidence(text)
   ) {
-    recordSkippedStepsBeforeAppointment(text, state.scriptStep, appointmentIndex);
+    if (appointmentIndex > state.scriptStep) {
+      recordSkippedStepsBeforeAppointment(text, state.scriptStep, appointmentIndex);
+    }
     state.scriptStep = appointmentIndex;
     state.currentState = scenario.steps[appointmentIndex].state;
     handleScriptedStaffReply(text);
