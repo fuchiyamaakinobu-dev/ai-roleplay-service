@@ -9,8 +9,6 @@ let speechBaseText = "";
 let speechRestartTimer = null;
 let speechDecisionTimer = null;
 let interactionDelayAlreadyElapsed = false;
-let speechPausedForAck = false;
-let lastAcknowledgedText = "";
 let activeCustomerAudio = null;
 let customerPlaybackGeneration = 0;
 let speechInputStartTimer = null;
@@ -857,7 +855,6 @@ function staffLedStartInstruction() {
 function clearStaffInput() {
   els.staffInput.value = "";
   speechBaseText = "";
-  lastAcknowledgedText = "";
 }
 
 function escapeHtml(value) {
@@ -885,44 +882,6 @@ function looksLikeCompleteJapaneseSentence(text) {
   if (hasTrailingServiceInquiry(normalized)) return true;
   if (normalized.length < 5) return false;
   return /(?:です|ます|ました|ません|でしょう|ください|お願いします|と思います|できます|できません|出来ます|出来ません|伺います|行きます|します|ですか|ますか|でしょうか|[。！？!?])$/.test(normalized);
-}
-
-function acknowledgeAndContinue(text) {
-  if (!speechListening || state.ended || text === lastAcknowledgedText) return;
-  lastAcknowledgedText = text;
-  speechPausedForAck = true;
-  try {
-    speechRecognition.abort();
-  } catch (_) {
-    speechPausedForAck = false;
-  }
-
-  const resume = () => {
-    speechPausedForAck = false;
-    if (!speechListening || state.ended) return;
-    speechBaseText = els.staffInput.value.trim();
-    window.setTimeout(() => {
-      try {
-        speechRecognition.start();
-        els.speechNote.textContent = "続きを聞いています。話し終えると自動的に次へ進みます。";
-      } catch (_) {
-        els.speechNote.textContent = "続きを聞き取れませんでした。マイクボタンを押してください。";
-      }
-    }, 120);
-  };
-
-  if ("speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance("はい");
-    utterance.lang = "ja-JP";
-    utterance.rate = 1.15;
-    utterance.volume = 0.75;
-    utterance.addEventListener("end", resume, { once: true });
-    utterance.addEventListener("error", resume, { once: true });
-    window.speechSynthesis.speak(utterance);
-  } else {
-    resume();
-  }
 }
 
 function startRoleplay() {
@@ -3676,8 +3635,9 @@ function setupSpeech() {
           els.replyForm.requestSubmit();
           interactionDelayAlreadyElapsed = false;
         } else {
-          els.speechNote.textContent = "発言が途中のため、続きを聞いています。";
-          acknowledgeAndContinue(fullText);
+          // Web Speech APIはスタッフの発話途中でも区切りをisFinalとして返すことがある。
+          // ここでAIの相づちを再生したり認識を中断したりせず、同じマイクで続きを待つ。
+          els.speechNote.textContent = "発言が途中のため、音声入力を続けています。";
         }
       }, interactionDelayMs());
     } else {
@@ -3686,7 +3646,6 @@ function setupSpeech() {
   });
 
   speechRecognition.addEventListener("end", () => {
-    if (speechPausedForAck) return;
     if (!speechListening || state.ended) {
       updateMicButton(false);
       return;
@@ -3753,8 +3712,6 @@ function stopSpeechInput() {
     window.clearTimeout(speechDecisionTimer);
     speechDecisionTimer = null;
   }
-  speechPausedForAck = false;
-  lastAcknowledgedText = "";
   speechBaseText = "";
   if (speechRecognition) {
     try {

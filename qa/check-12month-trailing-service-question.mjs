@@ -10,7 +10,7 @@ assert.notEqual(start, -1, "語尾省略の追加整備確認判定が見つか�
 assert.notEqual(end, -1, "語尾省略判定を切り出せません");
 assert.match(source.slice(end, end + 500), /hasTrailingServiceInquiry\(normalized\)/);
 const sentenceCompletionStart = source.indexOf("function looksLikeCompleteJapaneseSentence(");
-const sentenceCompletionEnd = source.indexOf("function acknowledgeAndContinue(", sentenceCompletionStart);
+const sentenceCompletionEnd = source.indexOf("function startRoleplay(", sentenceCompletionStart);
 assert.notEqual(sentenceCompletionStart, -1, "文章完結判定が見つかりません");
 assert.match(
   source.slice(sentenceCompletionStart, sentenceCompletionEnd),
