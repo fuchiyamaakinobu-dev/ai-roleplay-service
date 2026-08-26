@@ -46,6 +46,7 @@ const state = {
   inspectionAvailabilityFollowUpPending: false,
   inspectionMileageAsked: false,
   inspectionDurationQuestionAsked: false,
+  inspectionDurationProgressionPending: false,
   inspectionWaitingRequested: false,
   inspectionLoanerRequested: false,
   inspectionLoanerConfirmed: false,
@@ -331,6 +332,7 @@ function selectScenario(scenarioId) {
   state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionMileageAsked = false;
   state.inspectionDurationQuestionAsked = false;
+  state.inspectionDurationProgressionPending = false;
   state.inspectionWaitingRequested = false;
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
@@ -934,6 +936,7 @@ function startRoleplay() {
   state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionMileageAsked = false;
   state.inspectionDurationQuestionAsked = false;
+  state.inspectionDurationProgressionPending = false;
   state.inspectionWaitingRequested = false;
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
@@ -1917,6 +1920,11 @@ function hasExplicitBookingContinuationConfirmation(text) {
     && /(?:予約|手続き)/.test(normalized);
 }
 
+function isInspectionDurationProgressAcknowledgement(text) {
+  const normalized = String(text || "").replace(/[\s、。,.!?！？]/g, "");
+  return /^(?:ありがとうございます|ありがとう)$/.test(normalized);
+}
+
 function hasInspectionBookingInvitation(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
@@ -2768,6 +2776,16 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // 車検案内と予約意思確認をまとめた模範フローでは、お客様の「お願いします。」に
+  // スタッフが「ありがとうございます。」と応じた後、お客様から自然に作業時間を尋ねる。
+  // この1ターンは案内不足の聞き返しではないため、減点対象から除外する。
+  const naturalDurationProgression = Boolean(
+    state.inspectionDurationProgressionPending
+    && step.key === "explained_duration_and_wait"
+    && isInspectionDurationProgressAcknowledgement(text)
+  );
+  state.inspectionDurationProgressionPending = false;
+
   const expiryStep = scenario.steps.find((item) => item.key === "explained_available_period");
   if (expiryStep && scriptedStepMatches(text, expiryStep)) {
     state.inspectionExpiryEvidence = text;
@@ -3066,6 +3084,10 @@ function handleScriptedStaffReply(text) {
     && (state.questionRepeats["inspection-retry:confirmed_booking_time:general"] || 0) > 0;
   const combinedText = combinedScriptedReply(text, step);
   const analysis = analyzeScriptedStaff(combinedText, step);
+  if (naturalDurationProgression && !analysis.passed) {
+    analysis.noClarificationDeduction = true;
+    analysis.evidence.push("予約意思確認後の自然な作業時間質問へ進行");
+  }
   const appointmentCompletedWithTimeOnly = shouldUseInspectionTimeOnlyAppointmentResponse(
     text,
     step,
@@ -3280,6 +3302,7 @@ function handleScriptedStaffReply(text) {
       "asked_availability"
     )
   ) {
+    state.inspectionDurationProgressionPending = true;
     customerResponseOverride = nextQuestionVariant("inspection-booking-invitation-accept", [
       {
         text: "お願いします。",
@@ -3527,6 +3550,7 @@ function scoreScriptedRoleplay() {
   const retryCount = state.analyses.filter((analysis) =>
     analysis.scripted
     && analysis.blocked
+    && analysis.noClarificationDeduction !== true
     && !optionalAfterAppointmentKeys.has(analysis.stepKey)
   ).length;
   const earnedPoints = applicableScoring.reduce(

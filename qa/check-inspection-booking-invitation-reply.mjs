@@ -6,6 +6,24 @@ const appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8")
 const scenarioSource = fs.readFileSync(new URL("../scenario.js", import.meta.url), "utf8");
 const audioDbSource = fs.readFileSync(new URL("../audio-db.js", import.meta.url), "utf8");
 
+const durationProgressStart = appSource.indexOf("function isInspectionDurationProgressAcknowledgement");
+const durationProgressEnd = appSource.indexOf("function hasInspectionBookingInvitation", durationProgressStart);
+assert.notEqual(durationProgressStart, -1, "作業時間質問へ進むお礼判定が見つかりません");
+assert.notEqual(durationProgressEnd, -1, "作業時間質問へ進むお礼判定の終端が見つかりません");
+const durationProgressContext = {};
+vm.createContext(durationProgressContext);
+vm.runInContext(appSource.slice(durationProgressStart, durationProgressEnd), durationProgressContext);
+assert.equal(
+  durationProgressContext.isInspectionDurationProgressAcknowledgement("ありがとうございます。"),
+  true,
+  "予約意思確認後の『ありがとうございます。』から自然な作業時間質問へ進めません"
+);
+assert.equal(
+  durationProgressContext.isInspectionDurationProgressAcknowledgement("基本作業は90分です。"),
+  false,
+  "作業時間を案内済みの発話を進行用のお礼として誤認識しています"
+);
+
 const helperStart = appSource.indexOf("function hasInspectionBookingInvitation");
 const helperEnd = appSource.indexOf("function scriptedRequiredGroupsMatch", helperStart);
 assert.notEqual(helperStart, -1, "電話予約提案の判定関数が見つかりません");
@@ -190,6 +208,72 @@ assert.match(
   appSource,
   /asksWhetherInspectionPlanIsDecided[\s\S]*?includesConcreteInspectionTiming[\s\S]*?return true/,
   "車検時期と『ご予定はお決まり』をまとめた予約意思確認の優先判定がありません"
+);
+assert.match(
+  appSource,
+  /state\.inspectionDurationProgressionPending = true[\s\S]*?text:\s*"お願いします。"/,
+  "予約意思への肯定返答後に自然な作業時間質問の進行状態を保持していません"
+);
+assert.match(
+  appSource,
+  /naturalDurationProgression[\s\S]*?analysis\.noClarificationDeduction = true/,
+  "意図した作業時間質問を案内不足の聞き返し減点から除外していません"
+);
+assert.match(
+  appSource,
+  /analysis\.blocked[\s\S]*?analysis\.noClarificationDeduction !== true[\s\S]*?!optionalAfterAppointmentKeys/,
+  "聞き返し回数の集計で自然な進行質問を除外していません"
+);
+
+const scoreStart = appSource.indexOf("function scoreScriptedRoleplay");
+const scoreEnd = appSource.indexOf("function buildImprovementTalk", scoreStart);
+assert.notEqual(scoreStart, -1, "車検誘致の採点関数が見つかりません");
+assert.notEqual(scoreEnd, -1, "車検誘致の採点関数の終端が見つかりません");
+const scoreContext = {
+  scenario: {
+    scoring: [
+      { key: "completed_flow", action: "確定フローを完了する", points: 95 },
+      { key: "recapped_appointment", action: "お客様名と予約日時を復唱する", points: 5 }
+    ],
+    steps: []
+  },
+  state: {
+    inspectionMileageAsked: true,
+    analyses: [
+      {
+        scripted: true,
+        stepKey: "completed_flow",
+        completed_flow: true,
+        passed: true,
+        blocked: false,
+        confidence: 0.95
+      },
+      {
+        scripted: true,
+        stepKey: "explained_duration_and_wait",
+        passed: false,
+        blocked: true,
+        noClarificationDeduction: true,
+        confidence: 0.55
+      }
+    ]
+  }
+};
+vm.createContext(scoreContext);
+vm.runInContext(
+  `${appSource.slice(scoreStart, scoreEnd)}\nthis.scoreScriptedRoleplay = scoreScriptedRoleplay;`,
+  scoreContext
+);
+const protectedFlowScore = scoreContext.scoreScriptedRoleplay();
+assert.equal(
+  protectedFlowScore.score,
+  95,
+  "自然な作業時間質問が2点減点され、予約復唱不足だけの95点になっていません"
+);
+assert.equal(
+  protectedFlowScore.improve.some((text) => text.includes("聞き返し")),
+  false,
+  "自然な作業時間質問が改善点の聞き返し回数に表示されています"
 );
 assert.match(
   appSource,
