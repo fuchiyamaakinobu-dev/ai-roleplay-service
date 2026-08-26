@@ -2334,7 +2334,7 @@ function scriptedStepMatches(text, step) {
 }
 
 function isScriptedQuestion(normalized) {
-  return /(?:でしょうか|ますか|ですか|ませんか|ございませんか|[?？])/.test(normalized);
+  return /(?:でしょうか|ましょうか|ますか|ですか|ませんか|ございませんか|[?？])/.test(normalized);
 }
 
 function scriptedStepSpecificMatches(normalized, step) {
@@ -3057,6 +3057,9 @@ function handleScriptedStaffReply(text) {
   }
 
   const answeredDayPreferenceAfterExpiry = shouldAnswerDayPreferenceFromStoredExpiry(text, step);
+  const answeredCustomerBookingAvailability = step.key === "confirmed_booking_time"
+    && isAffirmativeScriptedReply(text)
+    && (state.questionRepeats["inspection-retry:confirmed_booking_time:general"] || 0) > 0;
   const combinedText = combinedScriptedReply(text, step);
   const analysis = analyzeScriptedStaff(combinedText, step);
   const appointmentCompletedWithTimeOnly = shouldUseInspectionTimeOnlyAppointmentResponse(
@@ -3073,6 +3076,13 @@ function handleScriptedStaffReply(text) {
     analysis.canAdvance = true;
     analysis.blocked = false;
     analysis.evidence.push("車検の用件を説明（車種・時期は不足）");
+  }
+  if (answeredCustomerBookingAvailability && !analysis.passed) {
+    // AIお客様から「今、このまま予約できますか？」と確認した後の肯定回答は、
+    // 予約手続き時間の得点にはせず、会話だけ具体的な日時調整へ進める。
+    analysis.canAdvance = true;
+    analysis.blocked = false;
+    analysis.evidence.push("お客様の予約可否質問へ肯定（予約手続き時間の確認は未達）");
   }
   state.turn += 1;
 
@@ -3160,7 +3170,12 @@ function handleScriptedStaffReply(text) {
   delete state.scriptedPartialReplies[step.key];
 
   let responseStep = step;
-  let customerResponseOverride = appointmentCompletedWithTimeOnly
+  let customerResponseOverride = answeredCustomerBookingAvailability
+    ? {
+        text: "具体的な日時を教えてください。",
+        audioId: "inspection_proposed_appointment_retry"
+      }
+    : appointmentCompletedWithTimeOnly
     ? {
         text: "では、その時間でお願いします。",
         audioId: "inspection_appointment_single_time_customer"

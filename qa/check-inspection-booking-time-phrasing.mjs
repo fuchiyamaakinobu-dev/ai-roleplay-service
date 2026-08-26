@@ -4,6 +4,7 @@ import vm from "node:vm";
 
 const appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const scenarioSource = fs.readFileSync(new URL("../scenario.js", import.meta.url), "utf8");
+const audioDbSource = fs.readFileSync(new URL("../audio-db.js", import.meta.url), "utf8");
 
 const helperStart = appSource.indexOf("function normalizeScriptedText");
 const questionEnd = appSource.indexOf("function scriptedStepSpecificMatches", helperStart);
@@ -55,6 +56,32 @@ assert.match(
   appSource,
   /step\.key === "confirmed_booking_time"[\s\S]*?return hasBookingContinuationConfirmation\(normalized\)/,
   "Firestoreの旧必須語が残っていても予約続行確認を優先する処理が見つかりません"
+);
+
+assert.match(
+  appSource,
+  /answeredCustomerBookingAvailability = step\.key === "confirmed_booking_time"[\s\S]*?isAffirmativeScriptedReply\(text\)[\s\S]*?inspection-retry:confirmed_booking_time:general/,
+  "お客様の予約可否質問への肯定回答を認識できません"
+);
+assert.match(
+  appSource,
+  /answeredCustomerBookingAvailability[\s\S]*?!analysis\.passed[\s\S]*?analysis\.canAdvance = true[\s\S]*?予約手続き時間の確認は未達/,
+  "予約可否への肯定回答を未達のまま日時調整へ進められません"
+);
+assert.match(
+  appSource,
+  /answeredCustomerBookingAvailability[\s\S]*?text:\s*"具体的な日時を教えてください。"[\s\S]*?audioId:\s*"inspection_proposed_appointment_retry"/,
+  "予約可否への肯定回答後に具体的な日時だけを確認できません"
+);
+assert.match(
+  audioDbSource,
+  /inspection_proposed_appointment_retry",\s*"予約日時提案・聞き返し",\s*"具体的な日時を教えてください。"/,
+  "日時確認の表示文と音声登録文が一致していません"
+);
+assert.equal(
+  fs.existsSync(new URL("../audio-ondoku/inspection_proposed_appointment_retry.mp3", import.meta.url)),
+  true,
+  "具体的な日時確認のMP3が見つかりません"
 );
 
 console.log("予約手続き確認の言い換え判定テスト: OK");
