@@ -1935,6 +1935,15 @@ function hasCompleteInspectionAppointmentProposal(text) {
     && Boolean(inspectionAppointmentProposalMatch(normalized));
 }
 
+function isInspectionDeadlineDateCandidate(normalized, date) {
+  const precedingText = normalized.slice(Math.max(0, date.index - 18), date.index);
+  const followingText = normalized.slice(date.end, date.end + 14);
+  const hasDeadlineLabel = /(?:満了日?|車検期限|有効期限)[^月日]{0,8}$/.test(precedingText);
+  const hasVehicleDeadlineWording = /車検[^予約日程]{0,10}$/.test(precedingText)
+    && /^(?:まで|となり|となって)/.test(followingText);
+  return hasDeadlineLabel || hasVehicleDeadlineWording;
+}
+
 function inspectionAppointmentDateCandidates(text) {
   const normalized = normalizeScriptedText(text);
   const explicitDates = [...normalized.matchAll(/(\d{1,2})月(\d{1,2})日/g)]
@@ -1970,7 +1979,9 @@ function inspectionAppointmentDateCandidates(text) {
     })
     .filter(Boolean);
 
-  return [...explicitDates, ...contextualDates].sort((a, b) => a.index - b.index);
+  return [...explicitDates, ...contextualDates]
+    .filter((date) => !isInspectionDeadlineDateCandidate(normalized, date))
+    .sort((a, b) => a.index - b.index);
 }
 
 function inspectionAppointmentProposalMatch(text) {
@@ -2402,6 +2413,21 @@ function scriptedRetryForMissingDetails(text, step) {
     const hasTime = /\d{1,2}時/.test(normalized);
     const hasWeekday = /(?:月|火|水|木|金|土|日)(?:曜|曜日)/.test(normalized);
     const asksTimePreference = /(?:何時|午前|午後|時間帯)/.test(normalized);
+    const asksGeneralAvailability = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized)
+      && /(?:ご)?都合.{0,16}(?:いかが|よろしい|良い|いい)/.test(normalized);
+    const asksGeneralBooking = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized)
+      && /(?:ご)?予約.{0,12}(?:いかが|よろしい|良い|いい)/.test(normalized);
+    if (
+      !hasDate
+      && !hasTime
+      && (asksGeneralBooking || asksGeneralAvailability)
+    ) {
+      return {
+        text: "お願いしたいんですけど、いつできますか？",
+        audioId: "inspection_asked_availability_customer",
+        missingDetail: "appointmentDate"
+      };
+    }
     if (
       !hasDate
       && !hasTime

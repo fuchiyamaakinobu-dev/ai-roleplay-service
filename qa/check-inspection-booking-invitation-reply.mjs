@@ -108,6 +108,62 @@ assert.equal(
   "都合を尋ねていない車検案内へ日程回答を返しています"
 );
 
+const dateCandidateStart = appSource.indexOf("function isInspectionDeadlineDateCandidate");
+const dateCandidateEnd = appSource.indexOf("function inspectionAppointmentProposalMatch", dateCandidateStart);
+assert.notEqual(dateCandidateStart, -1, "車検満了日を予約候補から除外する判定が見つかりません");
+assert.notEqual(dateCandidateEnd, -1, "予約日候補判定を切り出せません");
+const dateContext = {
+  normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, "")
+};
+vm.createContext(dateContext);
+vm.runInContext(appSource.slice(dateCandidateStart, dateCandidateEnd), dateContext);
+assert.deepEqual(
+  Array.from(
+    dateContext.inspectionAppointmentDateCandidates(
+      "ヤリスの車検満了日が9月30日となりまして、ご都合はいかがでしょうか？"
+    )
+  ),
+  [],
+  "車検満了日の9月30日を予約候補日として誤認識しています"
+);
+assert.deepEqual(
+  Array.from(
+    dateContext.inspectionAppointmentDateCandidates(
+      "車検が9月30日となりました。9月1日の10時はいかがでしょうか？"
+    ),
+    (date) => `${date.month}月${date.day}日`
+  ),
+  ["9月1日"],
+  "満了日を除外した後の実際の予約候補日を保持できません"
+);
+assert.match(
+  appSource,
+  /asksGeneralAvailability[\s\S]*?お願いしたいんですけど、いつできますか？[\s\S]*?inspection_asked_availability_customer/,
+  "日時提示前の都合確認へ、登録済みの日程質問を返せません"
+);
+const retryStart = appSource.indexOf("function scriptedRetryForMissingDetails");
+const retryEnd = appSource.indexOf("function shouldUseInspectionTimeOnlyAppointmentResponse", retryStart);
+const retryContext = {
+  normalizeScriptedText: dateContext.normalizeScriptedText,
+  inspectionAppointmentDateCandidates: dateContext.inspectionAppointmentDateCandidates,
+  isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text),
+  hasInspectionBookingInvitation: () => false,
+  asksInspectionDayPreference: () => false,
+  hasInspectionScheduleQuestionIntent: () => false,
+  asksOpenInspectionDatePreference: () => false,
+  hasSupportedInspectionDuration: () => false,
+  hasInspectionReminderContactConfirmation: () => false
+};
+vm.createContext(retryContext);
+vm.runInContext(appSource.slice(retryStart, retryEnd), retryContext);
+const expiryAndAvailabilityReply = retryContext.scriptedRetryForMissingDetails(
+  "ヤリスの車検満了日が9月30日となりまして、ご都合はいかがでしょうか？",
+  { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }
+);
+assert.equal(expiryAndAvailabilityReply.text, "お願いしたいんですけど、いつできますか？");
+assert.equal(expiryAndAvailabilityReply.audioId, "inspection_asked_availability_customer");
+assert.equal(expiryAndAvailabilityReply.missingDetail, "appointmentDate");
+
 assert.match(scenarioSource, /requiredGroups:\s*\[\["ご都合",\s*"予定",\s*"日程",\s*"予約",\s*"決まり",\s*"決め"\]\]/);
 assert.match(appSource, /text:\s*"お願いします。"[\s\S]*?audioId:\s*"inspection_booking_invitation_accept_customer"/);
 assert.match(appSource, /text:\s*"お願いしようと思っていました。"[\s\S]*?audioId:\s*"inspection_booking_invitation_intent_customer"/);
