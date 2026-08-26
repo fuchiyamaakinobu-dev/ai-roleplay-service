@@ -1921,6 +1921,11 @@ function hasInspectionBookingInvitation(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
   if (/(?:車検).{0,16}(?:お?決まり|決めて|決められ)/.test(normalized)) return true;
+  const asksWhetherInspectionPlanIsDecided = /(?:ご)?予定.{0,12}(?:お?決まり|決めて|決められ)/.test(normalized);
+  const includesConcreteInspectionTiming = normalized.includes("車検")
+    && /\d{1,2}月\d{1,2}日/.test(normalized)
+    && /(?:満了|まで|となり|となって)/.test(normalized);
+  if (asksWhetherInspectionPlanIsDecided && includesConcreteInspectionTiming) return true;
   if (!normalized.includes("予約")) return false;
   if (/(?:代車.{0,10}予約|予約.{0,10}代車)/.test(normalized)) return false;
   return /(?:この電話|お電話).{0,16}(?:ご)?予約/.test(normalized)

@@ -38,6 +38,20 @@ assert.equal(
   "『決められましたか』を車検の予約意思確認として認識できません"
 );
 assert.equal(
+  context.hasInspectionBookingInvitation(
+    "お使いのヤリスの車検満了日は9月30日で、8月1日以降作業可能です。ご予定はお決まりでしたでしょうか？"
+  ),
+  true,
+  "車検時期と『ご予定はお決まり』をまとめた発話を予約意思確認として認識できません"
+);
+assert.equal(
+  context.hasInspectionBookingInvitation(
+    "お使いのヤリスの車検満了日は9月30日です。ご都合はいかがでしょうか？"
+  ),
+  false,
+  "通常の都合確認を予約意思確認として誤認識しています"
+);
+assert.equal(
   context.hasInspectionBookingInvitation("車検は決まりました"),
   false,
   "質問ではない決定の言及を都合確認として誤認識しています"
@@ -171,6 +185,11 @@ assert.match(
   appSource,
   /startingScriptStep[\s\S]*?advancedPastScriptedStep\([\s\S]*?"asked_availability"/,
   "複数ステップをまとめた予約提案で肯定返答を優先していません"
+);
+assert.match(
+  appSource,
+  /asksWhetherInspectionPlanIsDecided[\s\S]*?includesConcreteInspectionTiming[\s\S]*?return true/,
+  "車検時期と『ご予定はお決まり』をまとめた予約意思確認の優先判定がありません"
 );
 assert.match(
   appSource,
