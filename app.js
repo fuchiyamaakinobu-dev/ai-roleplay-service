@@ -47,6 +47,7 @@ const state = {
   inspectionExpiryEvidence: "",
   inspectionAvailabilityFollowUpPending: false,
   inspectionMileageAsked: false,
+  inspectionDurationQuestionAsked: false,
   inspectionWaitingRequested: false,
   inspectionLoanerRequested: false,
   inspectionLoanerConfirmed: false,
@@ -331,6 +332,7 @@ function selectScenario(scenarioId) {
   state.inspectionExpiryEvidence = "";
   state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionMileageAsked = false;
+  state.inspectionDurationQuestionAsked = false;
   state.inspectionWaitingRequested = false;
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
@@ -629,6 +631,13 @@ function commitMessage(role, text, options = {}) {
     && /代車.*(?:貸して|用意して|借りたい|お願い|ほしい)/.test(normalizeScriptedText(message.text))
   ) {
     state.inspectionLoanerRequested = true;
+  }
+  if (
+    role === "customer"
+    && scenario.id === "vehicle-inspection-phone-followup"
+    && /どれ(?:くらい|ぐらい).*時間.*かか/.test(normalizeScriptedText(message.text))
+  ) {
+    state.inspectionDurationQuestionAsked = true;
   }
   renderConversation();
   renderProgress();
@@ -965,6 +974,7 @@ function startRoleplay() {
   state.inspectionExpiryEvidence = "";
   state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionMileageAsked = false;
+  state.inspectionDurationQuestionAsked = false;
   state.inspectionWaitingRequested = false;
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
@@ -2770,8 +2780,8 @@ function handleScriptedStaffReply(text) {
   rememberFutureScriptedAchievements(text, state.scriptStep);
 
   // 走行距離は作業時間を判断するための質問なので、予約日時の確定後など
-  // どの工程で尋ねられても実際の質問を優先して回答する。回答後はそのまま
-  // 作業時間の質問も行い、スタッフが時間と店内待ちを案内しやすくする。
+  // どの工程で尋ねられても実際の質問を優先して回答する。お客様がすでに
+  // 作業時間を質問済みなら距離だけを答え、未質問なら続けて時間も尋ねる。
   if (asksCurrentMileage(text)) {
     state.inspectionMileageAsked = true;
     if (step.key === "explained_duration_and_wait") {
@@ -2780,12 +2790,18 @@ function handleScriptedStaffReply(text) {
         missingDetail: "mileageAnswered"
       };
     }
+    const askedDurationAlready = state.inspectionDurationQuestionAsked;
+    const customerReply = askedDurationAlready
+      ? {
+          text: "今、3万キロくらいです。",
+          audioId: "inspection_current_mileage_customer"
+        }
+      : {
+          text: "今、3万キロくらいです。どれくらい時間がかかるのですか？",
+          audioId: "inspection_current_mileage_and_duration_customer"
+        };
     state.turn += 1;
-    addMessage(
-      "customer",
-      "今、3万キロくらいです。どれくらい時間がかかるのですか？",
-      { audioId: "inspection_current_mileage_and_duration_customer" }
-    );
+    addMessage("customer", customerReply.text, { audioId: customerReply.audioId });
     els.speechNote.textContent = "走行距離は約3万kmです。続けて、作業時間と店内で待てるかをご案内ください。";
     renderProgress();
     return;

@@ -117,8 +117,23 @@ assert.match(
 );
 assert.match(
   appSource,
-  /if \(asksCurrentMileage\(text\)\)[\s\S]*?今、3万キロくらいです。どれくらい時間がかかるのですか？[\s\S]*?inspection_current_mileage_and_duration_customer/,
-  "走行距離質問後の作業時間質問付きお客様回答分岐がありません"
+  /if \(asksCurrentMileage\(text\)\)[\s\S]*?askedDurationAlready = state\.inspectionDurationQuestionAsked[\s\S]*?inspection_current_mileage_customer[\s\S]*?inspection_current_mileage_and_duration_customer/,
+  "作業時間の質問済み状態に応じた走行距離回答分岐がありません"
+);
+assert.match(
+  appSource,
+  /どれ\(\?:くらい\|ぐらい\).*時間.*かか[\s\S]*?state\.inspectionDurationQuestionAsked = true/,
+  "お客様が先に行った作業時間質問を記憶できません"
+);
+assert.equal(
+  (appSource.match(/inspectionDurationQuestionAsked\s*=\s*false/g) || []).length,
+  2,
+  "やり直し・開始時の作業時間質問状態を初期化できません"
+);
+assert.match(
+  appSource,
+  /inspectionDurationQuestionAsked:\s*false/,
+  "初期状態に作業時間質問済みフラグがありません"
 );
 const mileageReplyIndex = appSource.indexOf("if (asksCurrentMileage(text))");
 const appointmentShortcutIndex = appSource.indexOf("const appointmentIndex = scenario.steps.findIndex");
@@ -143,6 +158,11 @@ assert.match(
 );
 assert.match(scenarioSource, /inspectionCycle:\s*"初回車検"/);
 assert.match(scenarioSource, /assumedMileageKm:\s*30000/);
+assert.match(
+  scenarioSource,
+  /key:\s*"explained_available_period"[\s\S]*?customerResponse:\s*"どれくらい時間がかかるのですか？"[\s\S]*?key:\s*"explained_duration_and_wait"/,
+  "走行距離確認工程より前にお客様が作業時間を質問する標準フローになっていません"
+);
 assert.match(
   scenarioSource,
   /label:\s*"走行距離・時間・店内待ち"[\s\S]*?requiresMileageConfirmation:\s*true/,
