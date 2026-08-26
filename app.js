@@ -1738,7 +1738,7 @@ function selectContextualCustomerResponse(analysis) {
 }
 
 function normalizeLoanerHomophone(text) {
-  return String(text || "").replace(/台車/g, "代車");
+  return String(text || "").replace(/(?:台車|代償)/g, "代車");
 }
 
 function normalizeScriptedText(text) {
@@ -1750,7 +1750,7 @@ function normalizeScriptedText(text) {
     // 月の直後だけを予約日の1日として扱う。「作業に一日かかる」は変換しない。
     .replace(/(\d{1,2}月)の?一日(?!間)/g, (match, month) => `${month}1日`)
     .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1")
-    .replace(/台車/g, "代車")
+    .replace(/(?:台車|代償)/g, "代車")
     .replace(/\s+/g, "");
 
   // 日付で使われる固有の読みを先に数値へ変換する。
@@ -1821,7 +1821,7 @@ function normalizeScriptedText(text) {
     [/さぎょう/g, "作業"], [/にゅうこ/g, "入庫"], [/かのう/g, "可能"], [/だいしゃ/g, "代車"],
     [/ごりよう/g, "ご利用"], [/ごあいこ/g, "ご愛顧"], [/かんしゃ/g, "感謝"],
     [/ごつごう/g, "ご都合"], [/つごう/g, "都合"], [/よてい/g, "予定"],
-    [/にってい/g, "日程"], [/よやく/g, "予約"], [/てつづき/g, "手続き"],
+    [/にってい/g, "日程"], [/(?:よやく|ご役)/g, "予約"], [/てつづき/g, "手続き"],
     [/ごきぼう/g, "ご希望"], [/きぼう/g, "希望"], [/ひにち/g, "日にち"],
     [/そうこうきょり/g, "走行距離"], [/きょりすう/g, "距離数"], [/なんきろ/g, "何キロ"],
     [/おいるこうかん/g, "オイル交換"], [/ついかせいび/g, "追加整備"], [/ごようめい/g, "ご用命"],

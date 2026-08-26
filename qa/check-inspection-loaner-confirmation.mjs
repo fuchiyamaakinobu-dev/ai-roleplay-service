@@ -26,6 +26,7 @@ for (const text of [
   "代車を準備しておきます。",
   "代車を手配いたします。",
   "台車をご用意できます。",
+  "代償もご用意できます。",
   "代わりの車をご用意いたします。"
 ]) {
   assert.equal(
@@ -34,6 +35,12 @@ for (const text of [
     `代車手配の承諾を認識できません: ${text}`
   );
 }
+
+assert.equal(
+  helperContext.normalizeLoanerHomophone("ご予約いただければ、代償もご用意できます。"),
+  "ご予約いただければ、代車もご用意できます。",
+  "音声認識の『代償』を『代車』へ補正できません"
+);
 
 for (const text of [
   "代わりの車をご用意いたします。",
