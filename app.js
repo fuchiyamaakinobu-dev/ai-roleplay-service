@@ -50,6 +50,7 @@ const state = {
   inspectionWaitingRequested: false,
   inspectionLoanerRequested: false,
   inspectionLoanerConfirmed: false,
+  inspectionButtonChecks: {},
   usedVariants: {},
   questionRepeats: {},
   customerReplyPending: false
@@ -71,7 +72,6 @@ const els = {
   customerSpeechPanel: document.querySelector("#customerSpeechPanel"),
   customerSpeechSummary: document.querySelector("#customerSpeechSummary"),
   requiredCustomerSpeech: document.querySelector("#requiredCustomerSpeech"),
-  inspectionTestResponse: document.querySelector("#inspectionTestResponse"),
   confirmedCustomerSpeech: document.querySelector("#confirmedCustomerSpeech"),
   progressPanel: document.querySelector("#progressPanel"),
   employeeCode: document.querySelector("#employeeCode"),
@@ -337,6 +337,7 @@ function selectScenario(scenarioId) {
   state.inspectionWaitingRequested = false;
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
+  state.inspectionButtonChecks = {};
   state.usedVariants = {};
   state.questionRepeats = {};
   state.startedAt = null;
@@ -345,10 +346,6 @@ function selectScenario(scenarioId) {
   if (els.resultSaveStatus) {
     els.resultSaveStatus.textContent = "採点後、社員コードと結果を履歴へ保存します。";
     els.resultSaveStatus.className = "result-save-status";
-  }
-  if (els.inspectionTestResponse) {
-    els.inspectionTestResponse.hidden = true;
-    els.inspectionTestResponse.textContent = "";
   }
   clearStaffInput();
   resetResults();
@@ -511,39 +508,25 @@ function renderCustomerSpeechIndicator(progressVisible) {
     );
 
   const checkpoints = [
-    { label: "開始挨拶", keys: ["confirmed_identity"], done: staffTexts.length > 0, testText: "はい、もしもし。", testAudioId: "inspection_phone_greeting_customer" },
-    { label: "本人確認", keys: ["confirmed_identity"], done: passed("confirmed_identity"), na: notApplicable("confirmed_identity"), testText: "そうです。", testAudioId: "inspection_confirmed_identity_customer" },
-    { label: "店舗・担当者名", keys: ["introduced_self"], done: passed("introduced_self"), na: notApplicable("introduced_self"), testText: "お世話になっております。", testAudioId: "inspection_introduced_self_customer" },
-    { label: "日頃のお礼", keys: ["thanked_customer"], done: passed("thanked_customer"), na: notApplicable("thanked_customer"), testText: "こちらこそ。", testAudioId: "inspection_thanked_customer_customer" },
-    {
-      label: "車検期日案内",
-      keys: ["explained_inspection_notice", "explained_available_period"],
-      done: passed("explained_inspection_notice") && passed("explained_available_period"),
-      na: notApplicable("explained_inspection_notice") && notApplicable("explained_available_period"),
-      testText: "案内のはがきが来ていましたよ。",
-      testAudioId: "inspection_explained_inspection_notice_customer"
-    },
-    { label: "ご都合確認", keys: ["asked_availability"], done: passed("asked_availability"), na: notApplicable("asked_availability"), testText: "お願いしたいんですけど、いつできますか？", testAudioId: "inspection_asked_availability_customer" },
-    { label: "調子確認", keys: ["asked_vehicle_concerns"], done: anyStaffText(asksVehicleCondition), na: notApplicable("asked_vehicle_concerns"), testText: "オイル交換もお願いしたいです。", testAudioId: "inspection_asked_vehicle_concerns_customer" },
-    { label: "追加作業確認", keys: ["asked_vehicle_concerns"], done: anyStaffText(asksAdditionalWork), na: notApplicable("asked_vehicle_concerns"), testText: "そのほかは大丈夫です。", testAudioId: "inspection_additional_service_none_customer" },
-    { label: "走行距離確認", keys: ["explained_duration_and_wait"], done: state.inspectionMileageAsked, na: notApplicable("explained_duration_and_wait"), testText: "今、3万キロくらいです。", testAudioId: "inspection_current_mileage_customer" },
-    { label: "作業時間案内", keys: ["explained_duration_and_wait"], done: anyStaffText((normalized, originalText) => hasSupportedInspectionDuration(originalText)), na: notApplicable("explained_duration_and_wait"), testText: "お店で待つことはできますか？", testAudioId: "inspection_duration_wait_missing_retry" },
-    {
-      label: "店内待ち確認",
-      keys: ["explained_duration_and_wait", "confirmed_waiting"],
-      done: passed("explained_duration_and_wait") || passed("confirmed_waiting") || anyStaffText(explainsWaiting),
-      na: notApplicable("explained_duration_and_wait") && notApplicable("confirmed_waiting"),
-      testText: "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？",
-      testAudioId: "inspection_waiting_followup_loaner_request"
-    },
-    { label: "代車案内", keys: ["explained_loaner"], done: passed("explained_loaner"), na: notApplicable("explained_loaner"), testText: "予約しようかな。", testAudioId: "inspection_explained_loaner_customer" },
-    { label: "予約手続き時間", keys: ["confirmed_booking_time"], done: passed("confirmed_booking_time"), na: notApplicable("confirmed_booking_time"), testText: "大丈夫ですよ。", testAudioId: "inspection_confirmed_booking_time_customer" },
-    { label: "入庫日時確定", keys: ["proposed_appointment"], done: passed("proposed_appointment"), na: notApplicable("proposed_appointment"), testText: "では、その日でお願いします。", testAudioId: "inspection_proposed_appointment_customer" },
-    { label: "荷物・必要書類", keys: ["explained_documents"], done: passed("explained_documents"), na: notApplicable("explained_documents"), testText: "はい。", testAudioId: "inspection_explained_documents_customer" },
-    { label: "ロックナット・15分前", keys: ["explained_lock_and_arrival"], done: passed("explained_lock_and_arrival"), na: notApplicable("explained_lock_and_arrival"), testText: "分かりました。", testAudioId: "inspection_explained_lock_and_arrival_customer" },
-    { label: "3日前確認連絡", keys: ["confirmed_reminder_contact"], done: passed("confirmed_reminder_contact"), na: notApplicable("confirmed_reminder_contact"), testText: "この携帯にお願いします。", testAudioId: "inspection_confirmed_reminder_contact_customer" },
-    { label: "予約内容復唱", keys: ["recapped_appointment"], done: passed("recapped_appointment"), na: notApplicable("recapped_appointment"), testText: "お願いします。", testAudioId: "inspection_recapped_appointment_customer" },
-    { label: "終了挨拶", keys: ["closed_politely"], done: passed("closed_politely"), na: notApplicable("closed_politely"), testText: "ありがとうございました。", testAudioId: "inspection_closed_politely_customer" }
+    { buttonKey: "opening", label: "開始挨拶", keys: ["confirmed_identity"], done: staffTexts.length > 0, staffText: "もしもし。", responseText: "はい、もしもし。", audioId: "inspection_phone_greeting_customer" },
+    { buttonKey: "identity", label: "本人確認", keys: ["confirmed_identity"], done: passed("confirmed_identity"), na: notApplicable("confirmed_identity"), staffText: "佐藤様でしょうか。", responseText: "そうです。", audioId: "inspection_confirmed_identity_customer" },
+    { buttonKey: "introduction", label: "店舗・担当者名", keys: ["introduced_self"], done: passed("introduced_self"), na: notApplicable("introduced_self"), staffText: "私、トヨタモビリティ帯広の山田と申します。", responseText: "お世話になっております。", audioId: "inspection_introduced_self_customer" },
+    { buttonKey: "thanks", label: "日頃のお礼", keys: ["thanked_customer"], done: passed("thanked_customer"), na: notApplicable("thanked_customer"), staffText: "日頃は大変お世話になり、誠にありがとうございます。", responseText: "こちらこそ。", audioId: "inspection_thanked_customer_customer" },
+    { buttonKey: "inspectionNotice", label: "車検期日案内", keys: ["explained_inspection_notice", "explained_available_period"], done: passed("explained_inspection_notice") && passed("explained_available_period"), na: notApplicable("explained_inspection_notice") && notApplicable("explained_available_period"), staffText: "お使いのヤリスの車検満了日は9月30日で、8月1日以降作業可能です。", responseText: "案内のはがきが来ていましたよ。", audioId: "inspection_explained_inspection_notice_customer" },
+    { buttonKey: "availability", label: "ご都合確認", keys: ["asked_availability"], done: passed("asked_availability"), na: notApplicable("asked_availability"), staffText: "ご予定はお決まりでしたでしょうか。", responseText: "お願いしたいんですけど、いつできますか？", audioId: "inspection_asked_availability_customer" },
+    { buttonKey: "concerns", label: "調子確認", keys: ["asked_vehicle_concerns"], done: anyStaffText(asksVehicleCondition), na: notApplicable("asked_vehicle_concerns"), staffText: "お車の調子や気になる点はございますか。", responseText: "オイル交換もお願いしたいです。", audioId: "inspection_asked_vehicle_concerns_customer" },
+    { buttonKey: "additionalWork", label: "追加作業確認", keys: ["asked_vehicle_concerns"], done: anyStaffText(asksAdditionalWork), na: notApplicable("asked_vehicle_concerns"), staffText: "オイル交換など、ほかに追加作業のご希望はございますか。", responseText: "そのほかは大丈夫です。", audioId: "inspection_additional_service_none_customer" },
+    { buttonKey: "mileage", label: "走行距離確認", keys: ["explained_duration_and_wait"], done: state.inspectionMileageAsked, na: notApplicable("explained_duration_and_wait"), staffText: "現在の走行距離は何キロくらいでしょうか。", responseText: "今、3万キロくらいです。", audioId: "inspection_current_mileage_customer" },
+    { buttonKey: "duration", label: "作業時間案内", keys: ["explained_duration_and_wait"], done: anyStaffText((normalized, originalText) => hasSupportedInspectionDuration(originalText)), na: notApplicable("explained_duration_and_wait"), staffText: "基本作業は90分程度です。", responseText: "お店で待つことはできますか？", audioId: "inspection_duration_wait_missing_retry" },
+    { buttonKey: "waiting", label: "店内待ち確認", keys: ["explained_duration_and_wait", "confirmed_waiting"], done: passed("explained_duration_and_wait") || passed("confirmed_waiting") || anyStaffText(explainsWaiting), na: notApplicable("explained_duration_and_wait") && notApplicable("confirmed_waiting"), staffText: "店内でお待ちになりますか。", responseText: "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？", audioId: "inspection_waiting_followup_loaner_request" },
+    { buttonKey: "loaner", label: "代車案内", keys: ["explained_loaner"], done: passed("explained_loaner"), na: notApplicable("explained_loaner"), staffText: "早めのご予約ですので、代車をご用意できます。", responseText: "予約しようかな。", audioId: "inspection_explained_loaner_customer" },
+    { buttonKey: "bookingTime", label: "予約手続き時間", keys: ["confirmed_booking_time"], done: passed("confirmed_booking_time"), na: notApplicable("confirmed_booking_time"), staffText: "このまま予約手続きを進めます。10分程度お時間をいただきますが、よろしいでしょうか。", responseText: "大丈夫ですよ。", audioId: "inspection_confirmed_booking_time_customer" },
+    { buttonKey: "appointment", label: "入庫日時確定", keys: ["proposed_appointment"], done: passed("proposed_appointment"), na: notApplicable("proposed_appointment"), staffText: "8月30日午前10時はいかがでしょうか。", responseText: "では、その日でお願いします。", audioId: "inspection_proposed_appointment_customer" },
+    { buttonKey: "documents", label: "荷物・必要書類", keys: ["explained_documents"], done: passed("explained_documents"), na: notApplicable("explained_documents"), staffText: "当日は車内と荷室の荷物を降ろし、車検証、自賠責保険証明書、納税証明書をお持ちください。", responseText: "はい。", audioId: "inspection_explained_documents_customer" },
+    { buttonKey: "lockArrival", label: "ロックナット・15分前", keys: ["explained_lock_and_arrival"], done: passed("explained_lock_and_arrival"), na: notApplicable("explained_lock_and_arrival"), staffText: "ロックナットを使用している場合はキーまたはアダプターをお持ちいただき、受付の15分前にご来店ください。", responseText: "分かりました。", audioId: "inspection_explained_lock_and_arrival_customer" },
+    { buttonKey: "reminder", label: "3日前確認連絡", keys: ["confirmed_reminder_contact"], done: passed("confirmed_reminder_contact"), na: notApplicable("confirmed_reminder_contact"), staffText: "入庫日の3日前に確認のお電話をいたします。この携帯へのご連絡でよろしいでしょうか。", responseText: "この携帯にお願いします。", audioId: "inspection_confirmed_reminder_contact_customer" },
+    { buttonKey: "recap", label: "予約内容復唱", keys: ["recapped_appointment"], done: passed("recapped_appointment"), na: notApplicable("recapped_appointment"), staffText: "佐藤様、8月30日午前10時、代車をご用意してお待ちしております。", responseText: "お願いします。", audioId: "inspection_recapped_appointment_customer" },
+    { buttonKey: "closing", label: "終了挨拶", keys: ["closed_politely"], done: passed("closed_politely"), na: notApplicable("closed_politely"), staffText: "本日はありがとうございました。当日はよろしくお願いいたします。", responseText: "ありがとうございました。", audioId: "inspection_closed_politely_customer" }
   ];
   const currentStepKey = scenario.steps?.[state.scriptStep]?.key;
   const activeIndex = state.started && !state.ended
@@ -566,9 +549,11 @@ function renderCustomerSpeechIndicator(progressVisible) {
       const marker = item.done ? "✓" : String(index + 1);
       const disabled = !state.started || state.ended || state.customerReplyPending ? " disabled" : "";
       return `<button class="inspection-checkpoint is-${status}" type="button"
-        data-inspection-test-response="${escapeHtml(item.testText)}"
-        data-inspection-test-audio-id="${escapeHtml(item.testAudioId)}"
-        aria-label="${escapeHtml(item.label)}: ${statusLabel}。押すとAIお客様の返答を試聴"${disabled}>
+        data-inspection-button-key="${escapeHtml(item.buttonKey)}"
+        data-inspection-staff-text="${escapeHtml(item.staffText)}"
+        data-inspection-response="${escapeHtml(item.responseText)}"
+        data-inspection-audio-id="${escapeHtml(item.audioId)}"
+        aria-label="${escapeHtml(item.label)}: ${statusLabel}。スタッフ発話の代わりに押す"${disabled}>
         <span class="inspection-checkpoint-number">${marker}</span>
         <strong>${escapeHtml(item.label)}</strong>
         <span class="inspection-checkpoint-state">${statusLabel}</span>
@@ -581,7 +566,7 @@ function renderCustomerSpeechIndicator(progressVisible) {
 }
 
 function handleInspectionCheckpointTest(event) {
-  const button = event.target.closest("[data-inspection-test-response]");
+  const button = event.target.closest("[data-inspection-button-key]");
   if (
     !button
     || scenario.id !== "vehicle-inspection-phone-followup"
@@ -590,29 +575,73 @@ function handleInspectionCheckpointTest(event) {
     || state.customerReplyPending
   ) return;
 
-  const text = button.dataset.inspectionTestResponse || "";
-  const audioId = button.dataset.inspectionTestAudioId || "";
-  if (!text) return;
+  const buttonKey = button.dataset.inspectionButtonKey || "";
+  const staffText = button.dataset.inspectionStaffText || "";
+  const responseText = button.dataset.inspectionResponse || "";
+  const audioId = button.dataset.inspectionAudioId || "";
+  if (!buttonKey || !staffText || !responseText) return;
 
   stopSpeechInput();
   stopCustomerPlayback();
-  if (els.inspectionTestResponse) {
-    els.inspectionTestResponse.hidden = false;
-    els.inspectionTestResponse.textContent = `模擬AIお客様：${text}`;
+  addMessage("staff", staffText, { immediate: true, hiddenFromConversation: true });
+  state.inspectionButtonChecks[buttonKey] = true;
+
+  const markPassed = (key) => {
+    const step = scenario.steps.find((item) => item.key === key);
+    if (step) markScriptedStepPassed(step, `進行ボタン: ${buttonKey}`);
+  };
+  const directStepKeys = {
+    identity: ["confirmed_identity"],
+    introduction: ["introduced_self"],
+    thanks: ["thanked_customer"],
+    inspectionNotice: ["explained_inspection_notice", "explained_available_period"],
+    availability: ["asked_availability"],
+    concerns: ["asked_vehicle_concerns"],
+    loaner: ["explained_loaner"],
+    bookingTime: ["confirmed_booking_time"],
+    documents: ["explained_documents"],
+    lockArrival: ["explained_lock_and_arrival"],
+    reminder: ["confirmed_reminder_contact"],
+    recap: ["recapped_appointment"],
+    closing: ["closed_politely"]
+  };
+  (directStepKeys[buttonKey] || []).forEach(markPassed);
+  if (buttonKey === "mileage") state.inspectionMileageAsked = true;
+  if (["mileage", "duration", "waiting"].every((key) => state.inspectionButtonChecks[key])) {
+    markPassed("explained_duration_and_wait");
   }
-  if (els.speechNote) {
-    els.speechNote.textContent = "模擬テストの返答です。会話ログ・進行・採点には反映されません。";
+  if (buttonKey === "waiting") markPassed("confirmed_waiting");
+  if (buttonKey === "appointment") {
+    state.proposedAppointment = { month: 8, day: 30, hour: 10 };
+    markPassed("proposed_appointment");
   }
 
-  const onFinished = state.started && !state.ended ? startSpeechInputAfterCustomer : null;
-  const src = audioPath(audioId);
-  if (els.audioEnabled?.checked && src) {
-    playAudio(src, text, true, onFinished);
-  } else if (els.audioEnabled?.checked) {
-    speakCustomerText(text, onFinished);
-  } else if (onFinished) {
-    onFinished();
+  while (
+    scenario.steps[state.scriptStep]
+    && state.analyses.some((analysis) =>
+      analysis.stepKey === scenario.steps[state.scriptStep].key
+      && (analysis.passed || analysis.notApplicable)
+    )
+  ) {
+    state.scriptStep += 1;
   }
+  if (scenario.steps[state.scriptStep]) {
+    state.currentState = scenario.steps[state.scriptStep].state;
+  }
+  state.turn += 1;
+  if (els.speechNote) {
+    els.speechNote.textContent = "ボタンをスタッフ発話として反映しました。AIお客様の音声終了後に次の項目を選べます。";
+  }
+  const finished = buttonKey === "closing" && Boolean(state.proposedAppointment);
+  addMessage("customer", responseText, {
+    audioId,
+    immediate: true,
+    skipSpeechInputRestart: true,
+    onCommitted: finished
+      ? () => finishRoleplay({ keepCustomerPlayback: true })
+      : null
+  });
+  renderProgress();
 }
 
 function renderProgress() {
@@ -726,7 +755,8 @@ function commitMessage(role, text, options = {}) {
     text: registeredCustomerMessage.text,
     at: new Date().toISOString(),
     audioId: registeredCustomerMessage.audioId,
-    audioSrc: audioPath(registeredCustomerMessage.audioId)
+    audioSrc: audioPath(registeredCustomerMessage.audioId),
+    hiddenFromConversation: options.hiddenFromConversation === true
   };
   state.transcript.push(message);
   if (
@@ -746,15 +776,18 @@ function commitMessage(role, text, options = {}) {
   renderConversation();
   renderProgress();
   if (role === "customer") {
+    const onCustomerFinished = options.skipSpeechInputRestart === true
+      ? null
+      : startSpeechInputAfterCustomer;
     if (els.audioEnabled.checked && message.audioSrc) {
-      playAudio(message.audioSrc, message.text, false, startSpeechInputAfterCustomer);
+      playAudio(message.audioSrc, message.text, false, onCustomerFinished);
     } else if (
       els.audioEnabled.checked
       && scenario.id !== "service-12month-visit-promotion"
     ) {
-      speakCustomerText(message.text, startSpeechInputAfterCustomer);
-    } else {
-      startSpeechInputAfterCustomer();
+      speakCustomerText(message.text, onCustomerFinished);
+    } else if (onCustomerFinished) {
+      onCustomerFinished();
     }
   } else if (role !== "staff" && message.audioSrc && els.audioEnabled.checked) {
     playAudio(message.audioSrc, message.text, false);
@@ -796,7 +829,9 @@ function renderConversation() {
   }
 
   els.conversation.innerHTML = state.transcript
-    .map((message, index) => {
+    .map((message, index) => ({ message, index }))
+    .filter(({ message }) => !message.hiddenFromConversation)
+    .map(({ message, index }) => {
       const roleClass = message.role === "customer" ? "customer" : message.role === "staff" ? "staff" : "system";
       const speaker = message.role === "customer" ? "AIお客様" : message.role === "staff" ? "スタッフ" : "判定メモ";
       const audioButton = message.role === "customer"
@@ -1044,16 +1079,13 @@ function startRoleplay() {
   state.inspectionWaitingRequested = false;
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
+  state.inspectionButtonChecks = {};
   state.usedVariants = {};
   state.questionRepeats = {};
   state.employeeCode = employeeCode;
   state.startedAt = new Date().toISOString();
   state.resultSaved = false;
   setCustomerReplyPending(false);
-  if (els.inspectionTestResponse) {
-    els.inspectionTestResponse.hidden = true;
-    els.inspectionTestResponse.textContent = "";
-  }
   if (els.employeeCode) els.employeeCode.disabled = true;
   resetResults();
   if (isValidEmployeeCode(employeeCode)) {
