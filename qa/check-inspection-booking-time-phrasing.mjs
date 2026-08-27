@@ -74,9 +74,19 @@ assert.match(
   "予約可否への肯定回答後に具体的な日時だけを確認できません"
 );
 assert.match(
+  appSource,
+  /step\.key === "proposed_appointment"[\s\S]*?hasExplicitBookingContinuationConfirmation\(text\)[\s\S]*?markScriptedStepPassed\(bookingTimeStep, text\)[\s\S]*?addMessage\("customer", "大丈夫ですよ。"[\s\S]*?audioId: "inspection_confirmed_booking_time_customer"[\s\S]*?return;/,
+  "日時提案待ちで予約手続き時間を確認した場合に『大丈夫ですよ。』へ回収する処理が見つかりません"
+);
+assert.match(
   audioDbSource,
   /inspection_proposed_appointment_retry",\s*"予約日時提案・聞き返し",\s*"具体的な日時を教えてください。"/,
   "日時確認の表示文と音声登録文が一致していません"
+);
+assert.match(
+  audioDbSource,
+  /inspection_confirmed_booking_time_customer",\s*"予約時間確認・お客様回答",\s*"大丈夫ですよ。"/,
+  "予約手続き時間了承の表示文と音声登録文が一致していません"
 );
 assert.equal(
   fs.existsSync(new URL("../audio-ondoku/inspection_proposed_appointment_retry.mp3", import.meta.url)),

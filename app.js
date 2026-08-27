@@ -3093,6 +3093,26 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // すでに具体的な日時を待つ工程へ進んでいても、スタッフが先に
+  // 予約手続き時間の了承確認を行った場合は、その実際の質問を優先する。
+  // 日時不足の聞き返しにはせず「大丈夫ですよ。」と回答し、次の発話で
+  // 具体的な月日・時刻を提案してもらう。
+  if (
+    step.key === "proposed_appointment"
+    && hasExplicitBookingContinuationConfirmation(text)
+  ) {
+    const bookingTimeStep = scenario.steps[bookingTimeIndex];
+    markScriptedStepPassed(bookingTimeStep, text);
+    delete state.scriptedPartialReplies[step.key];
+    state.turn += 1;
+    addMessage("customer", "大丈夫ですよ。", {
+      audioId: "inspection_confirmed_booking_time_customer"
+    });
+    els.speechNote.textContent = "予約手続き時間を了承しました。続けて、具体的な入庫日と時刻を提案してください。";
+    renderProgress();
+    return;
+  }
+
   // 入庫日時の確定後は、未確認の任意項目へ戻らない。
   // スタッフが先の任意項目を説明した場合は、間の未確認項目を未達のまま通過し、
   // 同じ発話内で実際に確認できた持参品・ロックナット・事前連絡などを記録する。
