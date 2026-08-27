@@ -533,6 +533,13 @@ h1 {
   font-weight: 800;
 }
 
+.inspection-checkpoint-note {
+  margin: 0;
+  color: #5c6b80;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
 .customer-speech-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -597,6 +604,122 @@ h1 {
   color: #7b8492;
   background: #fff;
   font-size: 10px;
+}
+
+.inspection-checkpoint-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  max-height: 150px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.inspection-checkpoint {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid #d7e2f3;
+  border-radius: 7px;
+  color: #33435a;
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.inspection-checkpoint:hover:not(:disabled),
+.inspection-checkpoint:focus-visible {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(16, 95, 194, 0.14);
+  outline: none;
+}
+
+.inspection-checkpoint:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.25);
+  opacity: 0.5;
+}
+
+.inspection-checkpoint-number {
+  display: grid;
+  grid-row: 1 / span 2;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: #fff;
+  background: #7b8798;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.inspection-checkpoint strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.inspection-checkpoint-state {
+  color: #7b8492;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.inspection-checkpoint.is-active {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: #eef5ff;
+  box-shadow: inset 0 0 0 1px rgba(16, 95, 194, 0.12);
+}
+
+.inspection-checkpoint.is-active .inspection-checkpoint-number {
+  background: var(--blue);
+}
+
+.inspection-checkpoint.is-active .inspection-checkpoint-state {
+  color: var(--blue);
+}
+
+.inspection-checkpoint.is-done {
+  border-color: #d4d9e0;
+  color: #7b8492;
+  background: #e9edf2;
+  opacity: 0.62;
+}
+
+.inspection-checkpoint.is-done .inspection-checkpoint-number {
+  background: #8d97a5;
+}
+
+.inspection-checkpoint.is-na {
+  border-style: dashed;
+  color: #929aa6;
+  background: #f3f4f6;
+  opacity: 0.68;
+}
+
+.inspection-test-response {
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(8, 120, 74, 0.25);
+  border-radius: 7px;
+  color: #07583a;
+  background: #effaf4;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.inspection-test-response[hidden] {
+  display: none;
 }
 
 .progress-panel {
@@ -958,6 +1081,10 @@ textarea:focus {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .inspection-checkpoint-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .conversation {
     height: 460px;
   }
@@ -987,6 +1114,11 @@ textarea:focus {
 
   .customer-speech-columns {
     grid-template-columns: 1fr;
+  }
+
+  .inspection-checkpoint-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 190px;
   }
 
   .input-row {

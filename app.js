@@ -71,6 +71,7 @@ const els = {
   customerSpeechPanel: document.querySelector("#customerSpeechPanel"),
   customerSpeechSummary: document.querySelector("#customerSpeechSummary"),
   requiredCustomerSpeech: document.querySelector("#requiredCustomerSpeech"),
+  inspectionTestResponse: document.querySelector("#inspectionTestResponse"),
   confirmedCustomerSpeech: document.querySelector("#confirmedCustomerSpeech"),
   progressPanel: document.querySelector("#progressPanel"),
   employeeCode: document.querySelector("#employeeCode"),
@@ -345,6 +346,10 @@ function selectScenario(scenarioId) {
     els.resultSaveStatus.textContent = "採点後、社員コードと結果を履歴へ保存します。";
     els.resultSaveStatus.className = "result-save-status";
   }
+  if (els.inspectionTestResponse) {
+    els.inspectionTestResponse.hidden = true;
+    els.inspectionTestResponse.textContent = "";
+  }
   clearStaffInput();
   resetResults();
   updateVoiceSelection();
@@ -478,47 +483,144 @@ function renderCustomerSpeechIndicator(progressVisible) {
   if (els.customerSpeechPanel) els.customerSpeechPanel.hidden = !visible;
   if (!visible) return;
 
-  const scoringByKey = new Map((scenario.scoring || []).map((item) => [item.key, item]));
-  const completedStepKeys = new Set(
-    (state.analyses || [])
-      .filter((analysis) => analysis.passed || analysis.notApplicable)
-      .map((analysis) => analysis.stepKey),
+  const analyses = state.analyses || [];
+  const staffTexts = state.transcript
+    .filter((message) => message.role === "staff")
+    .map((message) => message.text);
+  const passed = (key) => analyses.some((analysis) =>
+    analysis.stepKey === key && analysis.passed === true
   );
-  const remainingSteps = (scenario.steps || [])
-    .slice(Math.min(state.scriptStep, scenario.steps.length))
-    .filter((step) => !completedStepKeys.has(step.key));
-  const confirmedMessages = state.transcript.filter((message) => message.role === "customer");
+  const notApplicable = (key) => analyses.some((analysis) =>
+    analysis.stepKey === key && analysis.notApplicable === true
+  );
+  const anyStaffText = (matcher) => staffTexts.some((text) => matcher(normalizeScriptedText(text), text));
+  const asksVehicleCondition = (normalized) =>
+    isScriptedQuestion(normalized)
+    && /(?:気になる|不具合|調子|具合|症状|異音|違和感)/.test(normalized);
+  const asksAdditionalWork = (normalized, originalText) =>
+    asksInspectionAdditionalServiceFollowUp(originalText)
+    || (
+      isScriptedQuestion(normalized)
+      && /(?:オイル交換|追加作業|追加整備|ご用命)/.test(normalized)
+    );
+  const explainsWaiting = (normalized, originalText) =>
+    /(?:待|店内)/.test(normalized)
+    && (
+      asksInspectionWaitingMethodConfirmation(originalText)
+      || /(?:可能|できます|できる|大丈夫|構いません)/.test(normalized)
+    );
+
+  const checkpoints = [
+    { label: "開始挨拶", keys: ["confirmed_identity"], done: staffTexts.length > 0, testText: "はい、もしもし。", testAudioId: "inspection_phone_greeting_customer" },
+    { label: "本人確認", keys: ["confirmed_identity"], done: passed("confirmed_identity"), na: notApplicable("confirmed_identity"), testText: "そうです。", testAudioId: "inspection_confirmed_identity_customer" },
+    { label: "店舗・担当者名", keys: ["introduced_self"], done: passed("introduced_self"), na: notApplicable("introduced_self"), testText: "お世話になっております。", testAudioId: "inspection_introduced_self_customer" },
+    { label: "日頃のお礼", keys: ["thanked_customer"], done: passed("thanked_customer"), na: notApplicable("thanked_customer"), testText: "こちらこそ。", testAudioId: "inspection_thanked_customer_customer" },
+    {
+      label: "車検期日案内",
+      keys: ["explained_inspection_notice", "explained_available_period"],
+      done: passed("explained_inspection_notice") && passed("explained_available_period"),
+      na: notApplicable("explained_inspection_notice") && notApplicable("explained_available_period"),
+      testText: "案内のはがきが来ていましたよ。",
+      testAudioId: "inspection_explained_inspection_notice_customer"
+    },
+    { label: "ご都合確認", keys: ["asked_availability"], done: passed("asked_availability"), na: notApplicable("asked_availability"), testText: "お願いしたいんですけど、いつできますか？", testAudioId: "inspection_asked_availability_customer" },
+    { label: "調子確認", keys: ["asked_vehicle_concerns"], done: anyStaffText(asksVehicleCondition), na: notApplicable("asked_vehicle_concerns"), testText: "オイル交換もお願いしたいです。", testAudioId: "inspection_asked_vehicle_concerns_customer" },
+    { label: "追加作業確認", keys: ["asked_vehicle_concerns"], done: anyStaffText(asksAdditionalWork), na: notApplicable("asked_vehicle_concerns"), testText: "そのほかは大丈夫です。", testAudioId: "inspection_additional_service_none_customer" },
+    { label: "走行距離確認", keys: ["explained_duration_and_wait"], done: state.inspectionMileageAsked, na: notApplicable("explained_duration_and_wait"), testText: "今、3万キロくらいです。", testAudioId: "inspection_current_mileage_customer" },
+    { label: "作業時間案内", keys: ["explained_duration_and_wait"], done: anyStaffText((normalized, originalText) => hasSupportedInspectionDuration(originalText)), na: notApplicable("explained_duration_and_wait"), testText: "お店で待つことはできますか？", testAudioId: "inspection_duration_wait_missing_retry" },
+    {
+      label: "店内待ち確認",
+      keys: ["explained_duration_and_wait", "confirmed_waiting"],
+      done: passed("explained_duration_and_wait") || passed("confirmed_waiting") || anyStaffText(explainsWaiting),
+      na: notApplicable("explained_duration_and_wait") && notApplicable("confirmed_waiting"),
+      testText: "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？",
+      testAudioId: "inspection_waiting_followup_loaner_request"
+    },
+    { label: "代車案内", keys: ["explained_loaner"], done: passed("explained_loaner"), na: notApplicable("explained_loaner"), testText: "予約しようかな。", testAudioId: "inspection_explained_loaner_customer" },
+    { label: "予約手続き時間", keys: ["confirmed_booking_time"], done: passed("confirmed_booking_time"), na: notApplicable("confirmed_booking_time"), testText: "大丈夫ですよ。", testAudioId: "inspection_confirmed_booking_time_customer" },
+    { label: "入庫日時確定", keys: ["proposed_appointment"], done: passed("proposed_appointment"), na: notApplicable("proposed_appointment"), testText: "では、その日でお願いします。", testAudioId: "inspection_proposed_appointment_customer" },
+    { label: "荷物・必要書類", keys: ["explained_documents"], done: passed("explained_documents"), na: notApplicable("explained_documents"), testText: "はい。", testAudioId: "inspection_explained_documents_customer" },
+    { label: "ロックナット・15分前", keys: ["explained_lock_and_arrival"], done: passed("explained_lock_and_arrival"), na: notApplicable("explained_lock_and_arrival"), testText: "分かりました。", testAudioId: "inspection_explained_lock_and_arrival_customer" },
+    { label: "3日前確認連絡", keys: ["confirmed_reminder_contact"], done: passed("confirmed_reminder_contact"), na: notApplicable("confirmed_reminder_contact"), testText: "この携帯にお願いします。", testAudioId: "inspection_confirmed_reminder_contact_customer" },
+    { label: "予約内容復唱", keys: ["recapped_appointment"], done: passed("recapped_appointment"), na: notApplicable("recapped_appointment"), testText: "お願いします。", testAudioId: "inspection_recapped_appointment_customer" },
+    { label: "終了挨拶", keys: ["closed_politely"], done: passed("closed_politely"), na: notApplicable("closed_politely"), testText: "ありがとうございました。", testAudioId: "inspection_closed_politely_customer" }
+  ];
+  const currentStepKey = scenario.steps?.[state.scriptStep]?.key;
+  const activeIndex = state.started && !state.ended
+    ? checkpoints.findIndex((item) => !item.done && !item.na && item.keys.includes(currentStepKey))
+    : -1;
+  const fallbackActiveIndex = state.started && !state.ended && activeIndex < 0
+    ? checkpoints.findIndex((item) => !item.done && !item.na)
+    : activeIndex;
+  const completedCount = checkpoints.filter((item) => item.done).length;
 
   if (els.customerSpeechSummary) {
-    els.customerSpeechSummary.textContent = `必要 ${remainingSteps.length}件／確認済み ${confirmedMessages.length}件`;
+    els.customerSpeechSummary.textContent = !state.started
+      ? `開始前／全${checkpoints.length}項目`
+      : `完了 ${completedCount}／${checkpoints.length}`;
   }
   if (els.requiredCustomerSpeech) {
-    els.requiredCustomerSpeech.innerHTML = remainingSteps.length
-      ? remainingSteps.map((step) => {
-          const label = scoringByKey.get(step.key)?.label || step.expected || step.key;
-          return `<div class="customer-speech-item is-required">
-            <span>${escapeHtml(label)}</span>
-            <strong>${escapeHtml(step.customerResponse || step.retryResponse || "確認待ち")}</strong>
-          </div>`;
-        }).join("")
-      : '<p class="customer-speech-empty">必要な基本発話はありません。</p>';
+    els.requiredCustomerSpeech.innerHTML = checkpoints.map((item, index) => {
+      const status = item.done ? "done" : item.na ? "na" : index === fallbackActiveIndex ? "active" : "pending";
+      const statusLabel = item.done ? "確認済み" : item.na ? "対象外" : status === "active" ? "対応中" : "未確認";
+      const marker = item.done ? "✓" : String(index + 1);
+      const disabled = !state.started || state.ended || state.customerReplyPending ? " disabled" : "";
+      return `<button class="inspection-checkpoint is-${status}" type="button"
+        data-inspection-test-response="${escapeHtml(item.testText)}"
+        data-inspection-test-audio-id="${escapeHtml(item.testAudioId)}"
+        aria-label="${escapeHtml(item.label)}: ${statusLabel}。押すとAIお客様の返答を試聴"${disabled}>
+        <span class="inspection-checkpoint-number">${marker}</span>
+        <strong>${escapeHtml(item.label)}</strong>
+        <span class="inspection-checkpoint-state">${statusLabel}</span>
+      </button>`;
+    }).join("");
   }
   if (els.confirmedCustomerSpeech) {
-    els.confirmedCustomerSpeech.innerHTML = confirmedMessages.length
-      ? confirmedMessages.map((message, index) => `<div class="customer-speech-item is-confirmed">
-          <span>発話 ${index + 1}</span>
-          <strong>${escapeHtml(message.text)}</strong>
-        </div>`).join("")
-      : '<p class="customer-speech-empty">まだお客様発話はありません。</p>';
-    els.confirmedCustomerSpeech.scrollTop = els.confirmedCustomerSpeech.scrollHeight;
+    els.confirmedCustomerSpeech.innerHTML = "";
+  }
+}
+
+function handleInspectionCheckpointTest(event) {
+  const button = event.target.closest("[data-inspection-test-response]");
+  if (
+    !button
+    || scenario.id !== "vehicle-inspection-phone-followup"
+    || !state.started
+    || state.ended
+    || state.customerReplyPending
+  ) return;
+
+  const text = button.dataset.inspectionTestResponse || "";
+  const audioId = button.dataset.inspectionTestAudioId || "";
+  if (!text) return;
+
+  stopSpeechInput();
+  stopCustomerPlayback();
+  if (els.inspectionTestResponse) {
+    els.inspectionTestResponse.hidden = false;
+    els.inspectionTestResponse.textContent = `模擬AIお客様：${text}`;
+  }
+  if (els.speechNote) {
+    els.speechNote.textContent = "模擬テストの返答です。会話ログ・進行・採点には反映されません。";
+  }
+
+  const onFinished = state.started && !state.ended ? startSpeechInputAfterCustomer : null;
+  const src = audioPath(audioId);
+  if (els.audioEnabled?.checked && src) {
+    playAudio(src, text, true, onFinished);
+  } else if (els.audioEnabled?.checked) {
+    speakCustomerText(text, onFinished);
+  } else if (onFinished) {
+    onFinished();
   }
 }
 
 function renderProgress() {
   const visible = els.progressEnabled?.checked !== false;
   const customerVisible = renderCustomerInfo();
+  const usesInspectionCheckpoints = scenario.id === "vehicle-inspection-phone-followup";
   if (els.stickyContext) els.stickyContext.hidden = !customerVisible && !visible;
-  if (els.progressPanel) els.progressPanel.hidden = !visible;
+  if (els.progressPanel) els.progressPanel.hidden = !visible || usesInspectionCheckpoints;
   if (els.stateLabel) els.stateLabel.hidden = !visible;
   if (els.progressToggleState) els.progressToggleState.textContent = visible ? "ON" : "OFF";
   renderCustomerSpeechIndicator(visible);
@@ -532,19 +634,21 @@ function renderProgress() {
     na: "対象外",
     "": "未確認"
   };
-  els.progressStrip.innerHTML = scenario.progress
-    .map((item) => {
-      const status = scenario.mode === "staff-led-scripted"
-        ? scriptedProgressStatus(item)
-        : serviceProgressStatus(item, merged);
-      const klass = status ? `is-${status}` : "";
-      const statusLabel = statusLabels[status];
-      return `<div class="progress-item ${klass}" aria-label="${escapeHtml(item.label)}: ${statusLabel}">
-        ${escapeHtml(item.label)}
-        <span class="progress-status">${statusLabel}</span>
-      </div>`;
-    })
-    .join("");
+  if (!usesInspectionCheckpoints) {
+    els.progressStrip.innerHTML = scenario.progress
+      .map((item) => {
+        const status = scenario.mode === "staff-led-scripted"
+          ? scriptedProgressStatus(item)
+          : serviceProgressStatus(item, merged);
+        const klass = status ? `is-${status}` : "";
+        const statusLabel = statusLabels[status];
+        return `<div class="progress-item ${klass}" aria-label="${escapeHtml(item.label)}: ${statusLabel}">
+          ${escapeHtml(item.label)}
+          <span class="progress-status">${statusLabel}</span>
+        </div>`;
+      })
+      .join("");
+  }
   const active = scenario.progress.find((item) => item.state === state.currentState);
   els.stateLabel.textContent = !state.started ? "開始前" : active ? active.label : "進行中";
 }
@@ -946,6 +1050,10 @@ function startRoleplay() {
   state.startedAt = new Date().toISOString();
   state.resultSaved = false;
   setCustomerReplyPending(false);
+  if (els.inspectionTestResponse) {
+    els.inspectionTestResponse.hidden = true;
+    els.inspectionTestResponse.textContent = "";
+  }
   if (els.employeeCode) els.employeeCode.disabled = true;
   resetResults();
   if (isValidEmployeeCode(employeeCode)) {
@@ -2663,6 +2771,25 @@ function recoverEarlierInspectionOpeningStep(text, currentIndex) {
     || null;
 }
 
+function recoverEarlierInspectionStep(text, currentIndex) {
+  const excludedKeys = new Set([
+    "confirmed_identity",
+    "introduced_self",
+    "proposed_appointment",
+    "closed_politely"
+  ]);
+  const matchedSteps = scenario.steps.slice(0, currentIndex).filter((candidate) =>
+    !excludedKeys.has(candidate.key)
+    && !state.analyses.some((analysis) =>
+      analysis.stepKey === candidate.key && analysis.passed === true
+    )
+    && scriptedStepMatches(text, candidate)
+  );
+
+  matchedSteps.forEach((candidate) => markScriptedStepPassed(candidate, text));
+  return matchedSteps[matchedSteps.length - 1] || null;
+}
+
 function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
   const normalized = text.replace(/\s+/g, "");
   const appointment = state.proposedAppointment;
@@ -2735,6 +2862,9 @@ function recordSkippedStepsBeforeAppointment(text, startIndex, appointmentIndex)
 
 function advancePastPassedScriptedSteps(responseStep, options = {}) {
   let latestResponseStep = responseStep;
+  const normalizedCurrentEvidence = options.currentEvidence
+    ? normalizeScriptedText(options.currentEvidence)
+    : "";
   while (
     state.scriptStep < scenario.steps.length
     && state.analyses.some((item) =>
@@ -2742,8 +2872,17 @@ function advancePastPassedScriptedSteps(responseStep, options = {}) {
     )
   ) {
     // 同じ発話で先の工程も達成済みなら、実際に最後に達成した工程の
-    // お客様返答を選ぶ。本人確認を省略した名乗りに「そうです。」を返さない。
-    if (!options.preserveResponseStep) {
+    // お客様返答を選ぶ。以前の別ターンで先に達成していた工程は通過だけにし、
+    // 無関係なタイミングで古い返答を遅れて発話しない。
+    const passedInCurrentTurn = !normalizedCurrentEvidence
+      || state.analyses.some((item) =>
+        item.stepKey === scenario.steps[state.scriptStep].key
+        && item.passed
+        && item.evidence?.some((evidence) =>
+          normalizeScriptedText(evidence) === normalizedCurrentEvidence
+        )
+      );
+    if (!options.preserveResponseStep && passedInCurrentTurn) {
       latestResponseStep = scenario.steps[state.scriptStep];
     }
     state.scriptStep += 1;
@@ -2850,6 +2989,41 @@ function handleScriptedStaffReply(text) {
     els.speechNote.textContent = recoveredOpeningStep.key === "introduced_self"
       ? "店舗名・担当者名の名乗りを確認しました。続けて会話を進めてください。"
       : "お客様のお名前を確認できました。続けて会話を進めてください。";
+    renderProgress();
+    return;
+  }
+
+  // スタッフの案内順が前後して、現在位置より前の未達項目を後から説明した場合も、
+  // 会話全体からその項目を回収する。現在工程は後戻りさせず、実際に説明された
+  // 内容へ自然に返答してから現在位置の続きを待つ。
+  const recoveredEarlierStep = recoverEarlierInspectionStep(text, state.scriptStep);
+  if (recoveredEarlierStep) {
+    state.turn += 1;
+    const recoveredEarlierIndex = scenario.steps.findIndex(
+      (candidate) => candidate.key === recoveredEarlierStep.key
+    );
+    const appointmentIndexForRecovery = scenario.steps.findIndex(
+      (candidate) => candidate.key === "proposed_appointment"
+    );
+    const recoveredCoreStepAfterAppointment = Boolean(
+      state.proposedAppointment
+      && recoveredEarlierIndex >= 0
+      && recoveredEarlierIndex < appointmentIndexForRecovery
+    );
+    const loanerAlreadyChosen = recoveredEarlierStep.key === "confirmed_waiting"
+      && state.inspectionLoanerConfirmed;
+    addMessage("customer", recoveredCoreStepAfterAppointment
+      ? "はい。"
+      : loanerAlreadyChosen
+        ? "分かりました。"
+        : recoveredEarlierStep.customerResponse, {
+      audioId: recoveredCoreStepAfterAppointment
+        ? "inspection_thanked_customer_retry"
+        : loanerAlreadyChosen
+          ? "inspection_explained_lock_and_arrival_customer"
+          : `inspection_${recoveredEarlierStep.key}_customer`
+    });
+    els.speechNote.textContent = "順序が前後した案内を確認しました。確認済みの内容へ戻らず、現在の会話位置から続けてください。";
     renderProgress();
     return;
   }
@@ -3232,7 +3406,8 @@ function handleScriptedStaffReply(text) {
     // 日時提案への承諾は、その後の店内待ち・車両状態が先に確認済みでも
     // 必ずこのターンで返す。確認済み工程は通過するだけにして、
     // 「オイル交換もお願いしたいです。」など過去の返答へ戻さない。
-    preserveResponseStep: step.key === "proposed_appointment" && analysis.passed
+    preserveResponseStep: step.key === "proposed_appointment" && analysis.passed,
+    currentEvidence: text
   });
 
   // スタッフが店内待ちを選択肢として積極的に提案した場合は、
@@ -3813,6 +3988,7 @@ els.progressEnabled?.addEventListener("change", () => {
   localStorage.setItem("roleplayProgressVisible", String(els.progressEnabled.checked));
   renderProgress();
 });
+els.requiredCustomerSpeech?.addEventListener("click", handleInspectionCheckpointTest);
 els.voiceSelect?.addEventListener("change", updateVoiceSelection);
 els.interactionDelaySelect?.addEventListener("change", () => {
   localStorage.setItem("roleplayInteractionDelayMs", String(interactionDelayMs()));

@@ -14,8 +14,17 @@ assert.match(html, /id="progressEnabled"/);
 assert.match(html, /id="progressPanel"/);
 assert.match(html, /id="stickyContext"/);
 assert.match(html, /id="customerInfoPanel"[\s\S]*?id="customerInfoText"/);
+assert.match(html, /進行チェックポイント/);
+assert.match(html, /class="inspection-checkpoint-list" id="requiredCustomerSpeech"/);
+assert.doesNotMatch(html, /必要な発話（今後の基本発話）/);
+assert.doesNotMatch(html, /確認できた発話（実際の発話）/);
 assert.match(styles, /\.progress-item\.is-warning/);
 assert.match(styles, /\.progress-item\.is-na/);
+assert.match(
+  styles,
+  /\.inspection-checkpoint\.is-done\s*\{[^}]*background:\s*#e9edf2;[^}]*opacity:\s*0\.62;/s,
+  "達成済みチェックポイントがグレーアウトされません"
+);
 assert.match(
   styles,
   /\.sticky-context\s*\{[^}]*position:\s*sticky;[^}]*top:\s*8px;/s,
@@ -32,6 +41,30 @@ assert.match(
   /els\.stickyContext\.hidden = !customerVisible && !visible/,
   "進行チェックOFF時に車検のお客様情報まで非表示になります"
 );
+assert.match(
+  source,
+  /els\.progressPanel\.hidden = !visible \|\| usesInspectionCheckpoints/,
+  "車検誘致で従来の6段階進行カードが非表示になりません"
+);
+
+const checkpointLabels = [
+  "開始挨拶", "本人確認", "店舗・担当者名", "日頃のお礼", "車検期日案内",
+  "ご都合確認", "調子確認", "追加作業確認", "走行距離確認", "作業時間案内",
+  "店内待ち確認", "代車案内", "予約手続き時間", "入庫日時確定", "荷物・必要書類",
+  "ロックナット・15分前", "3日前確認連絡", "予約内容復唱", "終了挨拶"
+];
+checkpointLabels.forEach((label) => {
+  assert.match(source, new RegExp(`label: "${label}"`), `チェック項目「${label}」がありません`);
+});
+const indicatorStart = source.indexOf("function renderCustomerSpeechIndicator(");
+const indicatorEnd = source.indexOf("function renderProgress(", indicatorStart);
+const indicatorSource = source.slice(indicatorStart, indicatorEnd);
+assert.doesNotMatch(
+  indicatorSource,
+  /customerResponse|retryResponse|confirmedMessages/,
+  "進行チェックに長いお客様セリフが残っています"
+);
+assert.match(indicatorSource, /完了 \$\{completedCount\}／\$\{checkpoints\.length\}/);
 
 const state = {
   started: true,
