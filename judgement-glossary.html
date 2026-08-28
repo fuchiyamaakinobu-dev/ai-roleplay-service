@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>車検誘致 判定単語帳</title>
+  <link rel="stylesheet" href="./judgement-glossary.css?v=20260829-1">
+</head>
+<body>
+  <main class="glossary-shell">
+    <header class="glossary-header">
+      <div>
+        <p class="eyebrow">車検誘致・電話フォロー</p>
+        <h1>判定単語帳</h1>
+        <p class="lead">採点で認識する言葉、似た表現、音声認識の補正、不足になる例を確認できます。</p>
+      </div>
+      <a class="back-link" href="./index.html">ロープレへ戻る</a>
+    </header>
+
+    <section class="notice" aria-label="使い方">
+      <strong>単語1つだけでは達成になりません</strong>
+      <p>各カードの「達成条件」を会話全体で満たしたかを判定します。発話順は問いません。質問・確認が必要な項目は、対象語を言うだけでは未達です。</p>
+    </section>
+
+    <section class="toolbar" aria-label="単語帳の絞り込み">
+      <label class="search-field">
+        <span>単語・項目を検索</span>
+        <input id="glossarySearch" type="search" placeholder="例：代車、何キロ、ロックナット" autocomplete="off">
+      </label>
+      <div class="filter-buttons" role="group" aria-label="表示内容">
+        <button type="button" class="is-active" data-filter="all">すべて</button>
+        <button type="button" data-filter="score">採点17項目</button>
+        <button type="button" data-filter="alias">音声認識補正</button>
+      </div>
+      <p id="resultCount" class="result-count" aria-live="polite"></p>
+    </section>
+
+    <section id="scoreSection" class="glossary-section" data-section="score">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">確認・説明できたか</p>
+          <h2>採点17項目</h2>
+        </div>
+        <span>合計100点</span>
+      </div>
+      <div id="scoreGlossary" class="card-grid"></div>
+    </section>
+
+    <section id="aliasSection" class="glossary-section" data-section="alias">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">ひらがな・誤変換</p>
+          <h2>音声認識の補正語</h2>
+        </div>
+        <span>表示・保存原文は変更しません</span>
+      </div>
+      <p class="section-note">補正は判定時だけ行います。補正後も、ほかの必須条件が不足していれば達成にはなりません。</p>
+      <div id="aliasGlossary" class="alias-grid"></div>
+    </section>
+
+    <p id="emptyMessage" class="empty-message" hidden>該当する単語・項目はありません。</p>
+  </main>
+
+  <script src="./scenario.js?v=20260828-3"></script>
+  <script src="./judgement-glossary.js?v=20260829-1"></script>
+</body>
+</html>
