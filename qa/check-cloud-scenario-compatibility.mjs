@@ -170,6 +170,11 @@ assert.equal(normalized.recommendedTalks.distance, localScenario.recommendedTalk
 assert.equal(normalized.scoring[0].label, "引取事情を受け止めた");
 assert.equal(normalized.scoring[0].action, "引取希望の事情を受け止める");
 assert.equal(appendedScripts.length, 1, "互換補正後にapp.jsが起動していません");
+assert.equal(
+  appendedScripts[0].src,
+  "./app.js?v=20260828-3",
+  "公開更新後もブラウザーキャッシュから古いapp.jsを読み込む可能性があります"
+);
 
 const normalizedInspection = context.window.ROLEPLAY_SCENARIOS[1];
 assert.equal(

@@ -2591,7 +2591,9 @@ function scriptedStepSpecificMatches(normalized, step) {
   }
 
   if (step.key === "explained_lock_and_arrival") {
-    return hasLockNutToolExpression(normalized);
+    return hasLockNutToolExpression(
+      inspectionStaffConversationEvidence(normalized, step.key)
+    );
   }
 
   return true;

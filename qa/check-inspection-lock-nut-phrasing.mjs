@@ -81,4 +81,20 @@ assert.equal(
   "途中にお客様の『はい』を挟んだロックナット用具と15分前来店を会話全体から合算できません"
 );
 
+const specificStart = appSource.indexOf("function scriptedStepSpecificMatches");
+const specificEnd = appSource.indexOf("function hasCourtesyExpression", specificStart);
+assert.notEqual(specificStart, -1);
+assert.notEqual(specificEnd, -1);
+const specificContext = {
+  inspectionStaffConversationEvidence: context.inspectionStaffConversationEvidence,
+  hasLockNutToolExpression: context.hasLockNutToolExpression
+};
+vm.createContext(specificContext);
+vm.runInContext(appSource.slice(specificStart, specificEnd), specificContext);
+assert.equal(
+  specificContext.scriptedStepSpecificMatches("", arrivalStep),
+  true,
+  "分割案内を必須語句で合算した後、用具の個別判定が現在の発話だけへ戻っています"
+);
+
 console.log("ロックナット用具の言い換え判定テスト: OK");
