@@ -2241,7 +2241,9 @@ function hasClearInspectionPurposeNotice(text) {
 
 function hasInspectionSelfIntroduction(text) {
   const normalized = normalizeScriptedText(text);
-  return /(?:(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)?|(?:トヨタ|とよた|豊田)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|と(?:申|もう)します)/.test(normalized);
+  // 担当者名は特定の個人名へ固定せず、店舗名に続く任意の氏名と
+  // 「と申します／でございます／と言います」等の名乗り語尾で確認する。
+  return /(?:(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)?|(?:トヨタ|とよた|豊田)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|で[、,]?ございます|と[、,]?(?:申|もう)します|と[、,]?(?:言|い)います)/.test(normalized);
 }
 
 function hasInspectionDocumentGuidance(text) {

@@ -33,5 +33,9 @@ assert.match(source, /別々の発話でも会話全体で合算/, "順不同・
 assert.match(source, /ありがとうございます（現在形）と区別/, "終話のお礼の現在形・過去形が区別されていません");
 assert.match(source, /ヤルシス → ヤリス/, "既知の車種誤変換が単語帳にありません");
 assert.match(source, /代償 → 代車/, "既知の代車誤変換が単語帳にありません");
+assert.match(source, /○○と申します/, "担当者名を集約した『○○と申します』が単語帳にありません");
+assert.match(source, /○○でございます/, "『○○でございます』が単語帳にありません");
+assert.match(source, /○○と言います/, "『○○と言います』が単語帳にありません");
+assert.doesNotMatch(source, /渕山と申します|後藤ともうします/, "単語帳の担当者名が特定の個人名へ固定されています");
 
 console.log("車検誘致・判定単語帳テスト: OK");
