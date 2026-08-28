@@ -10,7 +10,7 @@ const helperEnd = appSource.indexOf("function analyzeScriptedStaff", helperStart
 assert.notEqual(helperStart, -1, "車検誘致用の正規化関数が見つかりません");
 assert.notEqual(helperEnd, -1, "ロックナット用具判定関数の終端が見つかりません");
 
-const context = {};
+const context = { state: { transcript: [] } };
 vm.createContext(context);
 vm.runInContext(appSource.slice(helperStart, helperEnd), context);
 
@@ -57,6 +57,28 @@ assert.equal(
   ),
   false,
   "来店前時間の案内なしで項目を達成しています"
+);
+
+context.state.transcript = [
+  { role: "staff", text: "予約手続きに10分程度お時間をいただきます。" },
+  { role: "staff", text: "8月30日午前10時でございます。" },
+  { role: "staff", text: "ロックナットを外す専用工具をお持ちください。" }
+];
+assert.equal(
+  context.scriptedRequiredGroupsMatch("", arrivalStep, []),
+  false,
+  "予約手続きの10分と午前10時を、10分前来店として誤って合算しています"
+);
+
+context.state.transcript = [
+  { role: "staff", text: "ロックナットを外す専用工具をお持ちください。" },
+  { role: "customer", text: "はい。" },
+  { role: "staff", text: "受付のため予約時間の15分前にご来店ください。" }
+];
+assert.equal(
+  context.scriptedRequiredGroupsMatch("", arrivalStep, []),
+  true,
+  "途中にお客様の『はい』を挟んだロックナット用具と15分前来店を会話全体から合算できません"
 );
 
 console.log("ロックナット用具の言い換え判定テスト: OK");

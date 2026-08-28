@@ -15,6 +15,24 @@ vm.createContext(helperContext);
 vm.runInContext(appSource.slice(normalizeStart, helperEnd), helperContext);
 
 for (const text of [
+  "作業中は代わりのお車は必要でしょうか？",
+  "代車はお使いになりますか？",
+  "代車はいかがいたしましょう",
+  "代わりのお車は必要でしょうか"
+]) {
+  assert.equal(
+    helperContext.asksInspectionLoanerNeed(text),
+    true,
+    `代車利用希望の質問として認識できません: ${text}`
+  );
+}
+assert.equal(
+  helperContext.asksInspectionLoanerNeed("代車をご用意いたします。"),
+  false,
+  "代車手配の確定案内を利用希望の質問として誤認識しています"
+);
+
+for (const text of [
   "代車をご用意します。",
   "代車の方もご用意させていただくような形になりますね。",
   "代車も問題なくご用意できるかと思います。",
@@ -73,6 +91,14 @@ assert.equal(
   helperContext.hasInspectionLoanerConfirmation("大丈夫です。", true),
   true,
   "代車希望直後の『大丈夫です』を手配可能の返答として認識できません"
+);
+assert.equal(
+  helperContext.hasInspectionLoanerConfirmation(
+    "ご予約いただければ、代車の方はご用意できる？できます。",
+    true
+  ),
+  true,
+  "代車案内の言い直し後にある『できます』を手配承諾として認識できません"
 );
 for (const text of ["大丈夫。", "だいじょうぶ。", "だいじょうぶです。"]) {
   assert.equal(
@@ -243,6 +269,11 @@ assert.match(
   appSource,
   /role === "customer"[\s\S]*?inspectionLoanerRequested = true/,
   "お客様の代車希望を会話履歴から保持できません"
+);
+assert.match(
+  appSource,
+  /asksInspectionLoanerNeed\(text\)[\s\S]*?inspectionLoanerRequested = true[\s\S]*?markScriptedStepPassed\(waitingStep[\s\S]*?addMessage\("customer", "お願いします。"/,
+  "代車利用の直接質問へ『お願いします。』と答えて希望を記憶する処理が見つかりません"
 );
 assert.match(
   appSource,

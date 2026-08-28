@@ -41,7 +41,8 @@ for (const phrase of [
   "予約手続きには10分かかります。",
   "もう少しです。",
   "お時間です。",
-  "大丈夫です。"
+  "大丈夫です。",
+  "ご予約いただければ、代車の方はご用意できる？できます。"
 ]) {
   assert.equal(context.hasBookingContinuationConfirmation(phrase), false, `${phrase}を了承確認として誤認識しています`);
 }

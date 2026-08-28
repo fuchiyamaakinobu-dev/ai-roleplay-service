@@ -998,6 +998,16 @@ function clearStaffInput() {
   speechBaseText = "";
 }
 
+function continueSpeechInputWithoutCustomerReply(noteText) {
+  if (speechInputStartTimer) {
+    window.clearTimeout(speechInputStartTimer);
+  }
+  speechInputStartTimer = window.setTimeout(() => {
+    speechInputStartTimer = null;
+    beginAutomaticSpeechInput(noteText);
+  }, 180);
+}
+
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -1977,6 +1987,15 @@ function asksInspectionWaitingMethodConfirmation(text) {
   return hasWaitingContext && asksCustomerToWait;
 }
 
+function asksInspectionLoanerNeed(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasLoanerContext = /(?:代車|代わりのお車|代わりの車|代替車)/.test(normalized);
+  const asksNeedOrUse = /(?:必要|使い|お使い|利用|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
+  const isChoiceQuestion = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized)
+    || /(?:いかがいたしましょう|どうされます|どうします)/.test(normalized);
+  return hasLoanerContext && asksNeedOrUse && isChoiceQuestion;
+}
+
 function hasInspectionLoanerConfirmation(text, allowImplicitLoaner = false) {
   const normalized = normalizeScriptedText(text);
   const clauses = [...normalized.matchAll(/([^。.!！?？]+)([。.!！?？]+|$)/g)]
@@ -2011,7 +2030,7 @@ function hasInspectionLoanerConfirmation(text, allowImplicitLoaner = false) {
       && /(?:空いて(?:ます|います|る)|空き(?:が)?あります)/.test(clause)
       && !isQuestion;
     const hasContextualAffirmation = allowImplicitLoaner
-      && /(?:大丈夫|だいじょうぶ)(?:です(?:よ)?)?$/.test(clause)
+      && /(?:(?:大丈夫|だいじょうぶ)(?:です(?:よ)?)?|できます|出来ます|可能です)$/.test(clause)
       && !isQuestion;
     const confirmsArrangement = hasArrangement && hasCommitment;
     return hasLoaner
@@ -2047,7 +2066,8 @@ function asksCurrentMileage(text) {
 function hasBookingContinuationConfirmation(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
-  const asksPermission = /(?:よろしい|大丈夫|ありますか|ございます|いただけ|構いません|構わない)/.test(normalized);
+  const asksPermission = /(?:よろしい|大丈夫|ありますか|ございます|いただけ(?:ます|る)|構いません|構わない)/.test(normalized)
+    || /(?:予約|手続き).{0,24}いかが(?:でしょうか|ですか)/.test(normalized);
   if (!asksPermission) return false;
   const hasTimeContext = /(?:10分|十分|もう少し|少し|お時間|時間)/.test(normalized);
   const hasBookingContext = /(?:予約|手続き|このまま|進め|続け)/.test(normalized);
@@ -2234,6 +2254,63 @@ function hasInspectionDocumentGuidance(text) {
     && normalized.includes("自賠責");
 }
 
+function inspectionTextHasSplitGuidanceKey(text, stepKey) {
+  const normalized = normalizeScriptedText(text);
+  if (stepKey === "explained_documents") {
+    return /(?:荷物|荷室|トランク|空荷|車検証|自賠責|納税証明|持ち物)/.test(normalized);
+  }
+  if (stepKey === "explained_lock_and_arrival") {
+    return /(?:ロック|ナット|アダプター|専用工具|外す工具|受付|10分前|十分前|15分前|十五分前)/.test(normalized);
+  }
+  return false;
+}
+
+function inspectionStaffConversationEvidence(text = "", stepKey = "") {
+  const transcript = typeof state !== "undefined" && Array.isArray(state.transcript)
+    ? state.transcript
+    : [];
+  const staffTexts = transcript
+    .filter((message) => message.role === "staff")
+    .map((message) => message.text)
+    .filter((staffText) => !stepKey || inspectionTextHasSplitGuidanceKey(staffText, stepKey));
+  const currentText = !stepKey || inspectionTextHasSplitGuidanceKey(text, stepKey)
+    ? text
+    : "";
+  return normalizeScriptedText([...staffTexts, currentText].filter(Boolean).join(" "));
+}
+
+function inspectionSplitGuidanceFragmentKey(text) {
+  if (inspectionTextHasSplitGuidanceKey(text, "explained_documents")) {
+    return "explained_documents";
+  }
+  if (inspectionTextHasSplitGuidanceKey(text, "explained_lock_and_arrival")) {
+    return "explained_lock_and_arrival";
+  }
+  return "";
+}
+
+function isInspectionGuidancePrefaceOrIncompleteFragment(text) {
+  const normalized = normalizeScriptedText(text);
+  if (!normalized || isScriptedQuestion(normalized)) return false;
+  return /(?:当日の)?(?:持ち物|お願い).{0,18}(?:確認|説明)させてください/.test(normalized)
+    || /(?:恐れ入りますが)?当日お持ち(?:ください)?[。.!！]*$/.test(normalized)
+    || /(?:それから|また)?受付に[。.!！]*$/.test(normalized)
+    || /^(?:それから|また|続いて)[。.!！]*$/.test(normalized);
+}
+
+function isInspectionAcknowledgementOnlyAfterAppointment(text) {
+  const normalized = normalizeScriptedText(text);
+  return /^(?:かしこまりました|承知しました|分かりました|わかりました)[。.!！]*$/.test(normalized);
+}
+
+function asksInspectionAvailabilityAgainAfterAppointment(text) {
+  const normalized = normalizeScriptedText(text);
+  return isScriptedQuestion(normalized)
+    && /(?:日時|日程|予定|都合)/.test(normalized)
+    && /(?:いかが|よろしい|決まり)/.test(normalized)
+    && !hasInspectionAppointmentProposalEvidence(normalized);
+}
+
 function hasInspectionReminderContactConfirmation(text) {
   const normalized = normalizeScriptedText(text);
   const hasThreeDayReminder = /(?:3日前|三日前)/.test(normalized)
@@ -2290,7 +2367,9 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // Firestoreの公開シナリオとローカル標準シナリオの差にかかわらず、
   // 必要書類と空荷を複数発話に分けて案内した場合も合算して確認する。
   if (step.key === "explained_documents") {
-    return hasInspectionDocumentGuidance(normalized);
+    return hasInspectionDocumentGuidance(
+      inspectionStaffConversationEvidence(normalized, step.key)
+    );
   }
 
   // お客様がすでに代車を希望した分岐では、スタッフが手配を明確に承諾すれば完了とする。
@@ -2311,9 +2390,11 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
 
   // Firestoreに15分前のみの旧条件が残っていても、10分前・15分前の両方を有効にする。
   if (step.key === "explained_lock_and_arrival") {
-    const hasArrivalLeadTime = /(?:10分|十分|15分|十五分)/.test(normalized)
-      && /(?:早め|前)/.test(normalized);
-    return hasLockNutToolExpression(normalized) && hasArrivalLeadTime;
+    const conversationEvidence = inspectionStaffConversationEvidence(normalized, step.key);
+    const hasArrivalLeadTime = /(?:10分|十分|15分|十五分)/.test(conversationEvidence)
+      && /(?:早め|前)/.test(conversationEvidence);
+    return hasLockNutToolExpression(conversationEvidence)
+      && hasArrivalLeadTime;
   }
 
   // 「この電話」「この連絡先でよろしいですか」も、3日前確認の
@@ -2967,6 +3048,22 @@ function handleScriptedStaffReply(text) {
   // この時点で会話順序を強制的に進めるものではない。
   rememberFutureScriptedAchievements(text, state.scriptStep);
 
+  // 「代車は必要ですか」「代車はお使いになりますか」のように利用希望を
+  // 直接尋ねられた場合は、「はい」ではなく明確に「お願いします。」と答える。
+  // この希望は会話状態へ保存し、後続の「ご用意します」で代車手配を確定する。
+  if (asksInspectionLoanerNeed(text)) {
+    state.inspectionLoanerRequested = true;
+    const waitingStep = scenario.steps.find((candidate) => candidate.key === "confirmed_waiting");
+    markScriptedStepPassed(waitingStep, "お客様が代車利用を希望");
+    state.turn += 1;
+    addMessage("customer", "お願いします。", {
+      audioId: "inspection_booking_invitation_accept_customer"
+    });
+    els.speechNote.textContent = "代車の利用希望を記憶しました。代車を用意できることを案内してください。";
+    renderProgress();
+    return;
+  }
+
   // 走行距離は作業時間を判断するための質問なので、予約日時の確定後など
   // どの工程で尋ねられても実際の質問を優先して回答する。お客様がすでに
   // 作業時間を質問済みなら距離だけを答え、未質問なら続けて時間も尋ねる。
@@ -3022,6 +3119,33 @@ function handleScriptedStaffReply(text) {
       ? "店舗名・担当者名の名乗りを確認しました。続けて会話を進めてください。"
       : "お客様のお名前を確認できました。続けて会話を進めてください。";
     renderProgress();
+    return;
+  }
+
+  // 日時確定後に同じ日程・都合を尋ね直されても、過去工程へ戻ったり
+  // 一語の「はい」だけで曖昧に答えたりしない。確定済みの予約を維持する。
+  if (state.proposedAppointment && asksInspectionAvailabilityAgainAfterAppointment(text)) {
+    state.turn += 1;
+    addMessage("customer", "お願いします。", {
+      audioId: "inspection_booking_invitation_accept_customer"
+    });
+    els.speechNote.textContent = "予約日時は確定済みです。日時を再確認せず、当日の案内へ進めてください。";
+    renderProgress();
+    return;
+  }
+
+  // 予約確定後の単独の受領表現や、持参物案内の前置き・言いかけには
+  // AIお客様の音声を割り込ませない。会話位置を保ったままスタッフ入力を再開する。
+  if (
+    state.proposedAppointment
+    && (
+      isInspectionAcknowledgementOnlyAfterAppointment(text)
+      || isInspectionGuidancePrefaceOrIncompleteFragment(text)
+    )
+  ) {
+    els.speechNote.textContent = "スタッフの案内の続きを待っています。";
+    renderProgress();
+    continueSpeechInputWithoutCustomerReply("音声入力中です。案内の続きを話してください。");
     return;
   }
 
@@ -3110,6 +3234,30 @@ function handleScriptedStaffReply(text) {
     });
     els.speechNote.textContent = "予約手続き時間を了承しました。続けて、具体的な入庫日と時刻を提案してください。";
     renderProgress();
+    return;
+  }
+
+  // 持参書類と空荷、ロックナット用具と早めの来店は、実際の電話では
+  // 複数の発話に分かれる。途中の「はい」を挟んでも現在工程を失わず、
+  // 会話全体のスタッフ発話がそろった時点で達成判定する。
+  const splitGuidanceKey = state.proposedAppointment
+    ? inspectionSplitGuidanceFragmentKey(text)
+    : "";
+  const splitGuidanceStep = splitGuidanceKey
+    ? scenario.steps.find((candidate) => candidate.key === splitGuidanceKey)
+    : null;
+  const splitGuidancePassed = splitGuidanceKey
+    && state.analyses.some((item) => item.stepKey === splitGuidanceKey && item.passed);
+  if (
+    splitGuidanceStep
+    && !splitGuidancePassed
+    && !scriptedStepMatches(text, splitGuidanceStep)
+  ) {
+    els.speechNote.textContent = splitGuidanceKey === "explained_documents"
+      ? "持参物の案内を記憶しています。AI音声を挟まず、必要書類と空荷の案内を続けてください。"
+      : "ロックナット用具または早めの来店案内を記憶しています。AI音声を挟まず案内を続けてください。";
+    renderProgress();
+    continueSpeechInputWithoutCustomerReply("音声入力中です。案内の続きを話してください。");
     return;
   }
 

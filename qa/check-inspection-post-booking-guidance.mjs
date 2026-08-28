@@ -10,8 +10,10 @@ assert.notEqual(helperStart, -1, "持参品と3日前連絡先の補助判定が
 assert.notEqual(helperEnd, -1, "補助判定の終端がありません");
 
 const context = {
+  state: { transcript: [] },
   normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
-  isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text)
+  isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text),
+  hasInspectionAppointmentProposalEvidence: () => false
 };
 vm.createContext(context);
 vm.runInContext(appSource.slice(helperStart, helperEnd), context);
@@ -29,6 +31,46 @@ assert.equal(
   context.hasInspectionDocumentGuidance("車検証、自賠責証書、納税証明書をお持ちください。"),
   false,
   "空荷案内なしで持参品項目を達成しています"
+);
+
+context.state.transcript = [
+  { role: "staff", text: "車検証、自賠責保険証明書、納税証明書をお持ちください。" },
+  { role: "customer", text: "はい。" },
+  { role: "staff", text: "トランクや荷室は荷物を積んでいない状態でご来店ください。" }
+];
+assert.equal(
+  context.hasInspectionDocumentGuidance(
+    context.inspectionStaffConversationEvidence("", "explained_documents")
+  ),
+  true,
+  "途中にお客様の『はい』を挟んだ必要書類と空荷の案内を会話全体から合算できません"
+);
+assert.equal(
+  context.inspectionSplitGuidanceFragmentKey("車検証と自賠責保険証明書をお持ちください。"),
+  "explained_documents",
+  "必要書類だけの途中案内を保持対象として判定できません"
+);
+assert.equal(
+  context.inspectionSplitGuidanceFragmentKey("ロックナットの工具をお持ちください。"),
+  "explained_lock_and_arrival",
+  "ロックナット用具だけの途中案内を保持対象として判定できません"
+);
+
+for (const phrase of [
+  "恐れ入りますが、当日お持ち。",
+  "当日の持ち物とお願いについて、3点ほど確認させてください。",
+  "また、受付に。"
+]) {
+  assert.equal(
+    context.isInspectionGuidancePrefaceOrIncompleteFragment(phrase),
+    true,
+    `案内途中の前置き・言いかけとして認識できません: ${phrase}`
+  );
+}
+assert.equal(
+  context.isInspectionAcknowledgementOnlyAfterAppointment("かしこまりました。"),
+  true,
+  "予約確定後の単独受領表現を認識できません"
 );
 
 for (const phrase of [
@@ -57,6 +99,16 @@ assert.match(
   appSource,
   /optionalAfterAppointmentKeys[\s\S]*?!optionalAfterAppointmentKeys\.has\(analysis\.stepKey\)/,
   "入庫日時確定後の任意項目を聞き返し減点から除外していません"
+);
+assert.match(
+  appSource,
+  /splitGuidanceStep[\s\S]*?continueSpeechInputWithoutCustomerReply\("音声入力中です。案内の続きを話してください。"\)/,
+  "分割案内の途中でAIの『はい』を挟まずスタッフ入力を継続する処理がありません"
+);
+assert.match(
+  appSource,
+  /asksInspectionAvailabilityAgainAfterAppointment\(text\)[\s\S]*?addMessage\("customer", "お願いします。"/,
+  "予約確定後の日程再質問へ後戻りせず応答する処理がありません"
 );
 
 console.log("車検誘致・予約後の分割案内と連絡先確認テスト: OK");
