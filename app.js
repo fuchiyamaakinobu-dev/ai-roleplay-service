@@ -84,6 +84,7 @@ const els = {
   sendButton: document.querySelector("#sendButton"),
   speechNote: document.querySelector("#speechNote"),
   scenarioNote: document.querySelector("#scenarioNote"),
+  conversationHighlightLegend: document.querySelector("#conversationHighlightLegend"),
   conversation: document.querySelector("#conversation"),
   progressStrip: document.querySelector("#progressStrip"),
   stateLabel: document.querySelector("#stateLabel"),
@@ -819,6 +820,9 @@ function addMessage(role, text, options = {}) {
 }
 
 function renderConversation() {
+  if (els.conversationHighlightLegend) {
+    els.conversationHighlightLegend.hidden = scenario.id !== "vehicle-inspection-phone-followup";
+  }
   if (state.transcript.length === 0) {
     els.conversation.innerHTML = `
       <div class="empty-state">
@@ -840,13 +844,17 @@ function renderConversation() {
       const issueButton = message.role === "customer"
         ? `<button class="report-audio" type="button" data-report-audio-index="${index}" aria-label="矛盾または不足音声として記録">矛盾・音声不足を記録</button>`
         : "";
+      const messageText = message.role === "staff"
+        && scenario.id === "vehicle-inspection-phone-followup"
+          ? renderInspectionConversationHighlights(message.text)
+          : escapeHtml(message.text);
       return `
         <div class="message ${roleClass}">
           <div class="message-top">
             <span class="speaker">${speaker}</span>
             <span class="message-tools">${audioButton}${issueButton}</span>
           </div>
-          <span>${escapeHtml(message.text)}</span>
+          <span>${messageText}</span>
         </div>`;
     })
     .join("");
@@ -996,6 +1004,128 @@ function staffLedStartInstruction() {
 function clearStaffInput() {
   els.staffInput.value = "";
   speechBaseText = "";
+}
+
+function inspectionHighlightPassed(stepKey) {
+  return state.analyses.some((analysis) =>
+    analysis.stepKey === stepKey && analysis.passed === true
+  );
+}
+
+function inspectionHighlightPatterns(text) {
+  const normalized = normalizeScriptedText(text);
+  const rules = [];
+  const add = (stepKey, patterns) => rules.push({
+    stepKey,
+    label: (scenario.scoring || []).find((item) => item.key === stepKey)?.label || stepKey,
+    confirmed: inspectionHighlightPassed(stepKey),
+    patterns
+  });
+  const customerName = String(scenario.customerName || "佐藤").replace(/様/g, "");
+  const vehicleName = String(scenario.vehicleName || "ヤリス");
+  const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+  const escapePattern = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  if (isScriptedQuestion(normalized) && [customerName, "佐藤", "斉藤"].some((name) => name && normalized.includes(name))) {
+    add("confirmed_identity", [new RegExp(`${escapePattern(customerName || "佐藤")}\\s*様?`, "g"), /佐藤\s*様?/g, /斉藤\s*様?/g]);
+  }
+  if (/(?:トヨタ|とよた|豊田)/.test(normalized)) {
+    add("introduced_self", [/(?:トヨタ|とよた|豊田)(?:\s*(?:モビリティ|もびりてぃ|モビリヒロ|もびりひろ))?(?:\s*(?:帯広|おびひろ))?/g, /[一-龯々ぁ-んァ-ヶー]{1,12}\s*(?:と\s*(?:申|もう)します|で\s*ございます|と\s*(?:言|い)います)/g]);
+  }
+  if (hasCourtesyExpression(normalized)) {
+    add("thanked_customer", [/(?:日頃|いつも|平素)/g, /お世話にな(?:って(?:おります|います)|り(?:まして)?)/g, /(?:ご利用|ご愛顧)/g, /(?:ありがとう|感謝)/g]);
+  }
+  if (hasClearInspectionPurposeNotice(normalized)) {
+    add("explained_inspection_notice", [new RegExp(escapePattern(vehicleName), "g"), /車検/g, /[0-9０-９]{1,2}\s*月\s*(?:の\s*)?[0-9０-９]{1,2}\s*日/g]);
+  }
+  if (hasInspectionBookingInvitation(normalized)) {
+    add("asked_availability", [/(?:ご都合|都合|ご予定|予定|日程|予約)/g, /(?:お決まり|決まり|いかが|よろしい)/g]);
+  }
+  if (expiryDate && normalized.includes(expiryDate)) {
+    add("explained_available_period", [/[0-9０-９]{1,2}\s*月\s*(?:の\s*)?[0-9０-９]{1,2}\s*日/g, /(?:満了日|満了)/g]);
+  }
+  if (/(?:走行距離|何キロ|\d+\s*(?:万)?\s*(?:km|キロ)|60分|六十分|75分|七十五分|90分|九十分|1時間|一時間|店内|店舗で|お待ち|待て|待つ)/i.test(normalized)) {
+    add("explained_duration_and_wait", [/(?:走行距離|何\s*キロ|[0-9０-９]+\s*(?:万)?\s*(?:km|キロ))/gi, /(?:[6６][0０]\s*分|六十分|[7７][5５]\s*分|七十五分|[9９][0０]\s*分|九十分|[1１]\s*時間|一時間)/g, /(?:店内|店舗で|お待ち|待て|待つ)/g]);
+  }
+  if (/(?:代車|代わりのお車|代替車)/.test(normalized)) {
+    add("explained_loaner", [/(?:代車|代わりのお車|代替車)/g, /(?:ご用意|用意|準備|手配)/g, /(?:早め|お早め|予約)/g]);
+  }
+  if (hasBookingContinuationConfirmation(normalized)) {
+    add("confirmed_booking_time", [/(?:このまま|予約手続き|予約|手続き|進め|続け)/g, /(?:[1１][0０]\s*分|十分|もう少し|お時間|時間)/g]);
+  }
+  if (inspectionAppointmentProposalMatch(normalized)) {
+    add("proposed_appointment", [/[0-9０-９]{1,2}\s*月\s*(?:の\s*)?[0-9０-９]{1,2}\s*日/g, /(?:午前|午後)?\s*[0-9０-９]{1,2}\s*時/g, /(?:いかが|どうでしょう)/g]);
+  }
+  if (/(?:店内|店舗で|お待ち|待て|待つ|代車|代わりのお車)/.test(normalized) && isScriptedQuestion(normalized)) {
+    add("confirmed_waiting", [/(?:店内|店舗で|お待ち|待て|待つ|代車|代わりのお車)/g]);
+  }
+  if (isScriptedQuestion(normalized) && /(?:気になる|不具合|調子|具合|追加作業|オイル交換)/.test(normalized)) {
+    add("asked_vehicle_concerns", [/(?:気になる|不具合|調子|具合|追加作業|オイル交換)/g]);
+  }
+  if (inspectionTextHasSplitGuidanceKey(normalized, "explained_documents")) {
+    add("explained_documents", [/(?:荷物|荷室|トランク|空荷)/g, /(?:車検証|自賠責(?:保険証明書|保険証書)?|納税証明書?)/g, /(?:降ろ|下ろ|積まない|積まず|空に|ない状態)/g]);
+  }
+  if (inspectionTextHasSplitGuidanceKey(normalized, "explained_lock_and_arrival")) {
+    add("explained_lock_and_arrival", [/(?:ロックナットキー|ロックキー|ロックナット|アダプター|専用工具|外す工具)/g, /(?:[1１][0０]\s*分前|十分前|[1１][5５]\s*分前|十五分前|早め)/g]);
+  }
+  if (/(?:3日前|三日前)/.test(normalized) && /(?:連絡|電話)/.test(normalized)) {
+    add("confirmed_reminder_contact", [/(?:[3３]\s*日前|三日前)/g, /(?:確認|連絡|電話)/g, /(?:この携帯|この電話|同じ電話|連絡先|電話番号)/g]);
+  }
+  const appointment = state.proposedAppointment;
+  if (appointment
+    && normalized.includes(`${appointment.month}月`)
+    && normalized.includes(`${appointment.day}日`)
+    && normalized.includes(`${appointment.hour}時`)
+    && [customerName, "佐藤", "斉藤"].some((name) => name && normalized.includes(name))) {
+    add("recapped_appointment", [new RegExp(`${escapePattern(customerName || "佐藤")}\\s*様?`, "g"), /佐藤\s*様?/g, /斉藤\s*様?/g, /[0-9０-９]{1,2}\s*月\s*(?:の\s*)?[0-9０-９]{1,2}\s*日/g, /(?:午前|午後)?\s*[0-9０-９]{1,2}\s*時/g]);
+  }
+  if (/ありがとうございました/.test(normalized)) {
+    add("closed_politely", [/ありがとうございました/g]);
+  }
+  return rules;
+}
+
+function renderInspectionConversationHighlights(text) {
+  const ranges = [];
+  inspectionHighlightPatterns(text).forEach((rule) => {
+    rule.patterns.forEach((pattern) => {
+      const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`;
+      const matcher = new RegExp(pattern.source, flags);
+      let match;
+      while ((match = matcher.exec(text)) !== null) {
+        if (!match[0]) {
+          matcher.lastIndex += 1;
+          continue;
+        }
+        ranges.push({
+          start: match.index,
+          end: match.index + match[0].length,
+          confirmed: rule.confirmed,
+          label: rule.label
+        });
+      }
+    });
+  });
+  if (ranges.length === 0) return escapeHtml(text);
+
+  const boundaries = [...new Set([0, text.length, ...ranges.flatMap((range) => [range.start, range.end])])]
+    .sort((left, right) => left - right);
+  let html = "";
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1];
+    const segment = text.slice(start, end);
+    const covering = ranges.filter((range) => range.start <= start && range.end >= end);
+    if (covering.length === 0) {
+      html += escapeHtml(segment);
+      continue;
+    }
+    const confirmed = covering.some((range) => range.confirmed);
+    const labels = [...new Set(covering.map((range) => range.label))].join("／");
+    const status = confirmed ? "確認済み" : "一部認識";
+    html += `<mark class="conversation-keyword ${confirmed ? "is-confirmed" : "is-partial"}" title="${escapeHtml(`${status}：${labels}`)}">${escapeHtml(segment)}</mark>`;
+  }
+  return html;
 }
 
 function continueSpeechInputWithoutCustomerReply(noteText) {
@@ -2491,6 +2621,7 @@ function analyzeScriptedStaff(text, step) {
   ) {
     state.inspectionLoanerConfirmed = true;
   }
+  if (typeof renderConversation === "function") renderConversation();
   return analysis;
 }
 
@@ -2535,6 +2666,7 @@ function markScriptedStepPassed(step, evidence) {
   };
   analysis[step.key] = true;
   state.analyses.push(analysis);
+  if (typeof renderConversation === "function") renderConversation();
 }
 
 function scriptedStepMatches(text, step) {

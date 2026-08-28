@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI接客ロープレ</title>
-  <link rel="stylesheet" href="./styles.css?v=20260828-3">
+  <link rel="stylesheet" href="./styles.css?v=20260829-3">
 </head>
 <body>
   <main class="app-shell">
@@ -122,6 +122,12 @@
             </div>
           </div>
 
+          <div class="conversation-highlight-legend" id="conversationHighlightLegend" hidden aria-label="会話ログの判定語の色">
+            <strong>判定語</strong>
+            <span><i class="highlight-sample is-confirmed"></i>確認済み</span>
+            <span><i class="highlight-sample is-partial"></i>一部認識</span>
+          </div>
+
           <div class="conversation" id="conversation" aria-live="polite">
             <div class="empty-state">
               <strong>ロープレ開始を押してください</strong>
@@ -194,6 +200,6 @@
   <script src="./audio-db.js?v=20260828-3"></script>
   <script src="./scenario.js?v=20260829-2"></script>
   <script type="module" src="./results-store.js?v=20260828-3"></script>
-  <script src="./cloud-scenario.js?v=20260829-2"></script>
+  <script src="./cloud-scenario.js?v=20260829-3"></script>
 </body>
 </html>

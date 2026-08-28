@@ -175,8 +175,8 @@ assert.match(
   /\["inspection_booking_invitation_accept_customer",\s*"[^"]+",\s*"お願いします。"\]/,
   "『お願いします。』の登録音声文が見つかりません"
 );
-assert.match(indexSource, /styles\.css\?v=20260828-3/);
-assert.match(indexSource, /cloud-scenario\.js\?v=20260829-2/);
+assert.match(indexSource, /styles\.css\?v=20260829-3/);
+assert.match(indexSource, /cloud-scenario\.js\?v=20260829-3/);
 assert.doesNotMatch(indexSource, /__CF\$cv\$params|challenge-platform/);
 
 console.log(`車検誘致・拡張会話マトリクス: OK（${loanerQuestions.length + acceptedLoanerReplies.length + documentOrders.length + 26}パターン）`);
