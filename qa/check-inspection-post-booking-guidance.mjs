@@ -45,6 +45,35 @@ assert.equal(
   true,
   "途中にお客様の『はい』を挟んだ必要書類と空荷の案内を会話全体から合算できません"
 );
+
+context.state.transcript = [
+  { role: "staff", text: "入庫の3日前に、私の方から改めてご連絡差し上げます。" },
+  { role: "staff", text: "こちらの携帯番号でよろしいでしょうか。" }
+];
+assert.equal(
+  context.hasInspectionReminderContactConfirmation("こちらの携帯番号でよろしいでしょうか。"),
+  true,
+  "3日前連絡と連絡先確認を別発話にした案内を会話全体から合算できません"
+);
+assert.equal(
+  context.inspectionSplitGuidanceFragmentKey("入庫の3日前に改めてご連絡差し上げます。"),
+  "confirmed_reminder_contact",
+  "3日前連絡だけの途中案内を保持対象として判定できません"
+);
+assert.equal(
+  context.inspectionSplitGuidanceFragmentKey("こちらの携帯番号でよろしいでしょうか。"),
+  "confirmed_reminder_contact",
+  "分割された連絡先確認を3日前連絡の続きとして判定できません"
+);
+
+context.state.transcript = [
+  { role: "staff", text: "入庫の3日前に確認のお電話をいたします。" }
+];
+assert.equal(
+  context.hasInspectionReminderContactConfirmation(""),
+  false,
+  "3日前連絡だけで連絡先確認まで達成扱いにしています"
+);
 assert.equal(
   context.inspectionSplitGuidanceFragmentKey("車検証と自賠責保険証明書をお持ちください。"),
   "explained_documents",

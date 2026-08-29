@@ -1085,7 +1085,7 @@ function inspectionHighlightPatterns(text) {
   if (inspectionTextHasSplitGuidanceKey(normalized, "explained_lock_and_arrival")) {
     add("explained_lock_and_arrival", [/(?:ロックナットキー|ロックキー|ロックナット|アダプター|専用工具|外す工具)/g, /(?:[1１][0０]\s*分前|十分前|[1１][5５]\s*分前|十五分前|早め)/g]);
   }
-  if (/(?:3日前|三日前)/.test(normalized) && /(?:連絡|電話)/.test(normalized)) {
+  if (inspectionTextHasSplitGuidanceKey(normalized, "confirmed_reminder_contact")) {
     add("confirmed_reminder_contact", [/(?:[3３]\s*日前|三日前)/g, /(?:確認|連絡|電話)/g, /(?:この携帯|この電話|同じ電話|連絡先|電話番号)/g]);
   }
   const appointment = state.proposedAppointment;
@@ -1169,7 +1169,12 @@ function looksLikeCompleteJapaneseSentence(text) {
   const normalized = text.replace(/\s+/g, "").trim();
   if (!normalized) return false;
   const withoutTrailingPunctuation = normalized.replace(/[、。,.！？!?]+$/g, "");
-  if (/(?:それから|それと|そして|続いて|このあと|そのあと|ええと|えっと|あの|あと)$/.test(withoutTrailingPunctuation)) {
+  if (/(?:それから|それと|それともし|それともしも|そして|続いて|このあと|そのあと|ええと|えっと|あの|あと)$/.test(withoutTrailingPunctuation)) {
+    return false;
+  }
+  // 語尾の句点だけで完成文とみなさない。Web Speech APIが
+  // 「お使いのヤリスが。」のような助詞終わりをisFinalで返す場合も続きを待つ。
+  if (/(?:が|を|に|の|と|で|へ|から|ので|けど|ですが|ますが|ましたが)$/.test(withoutTrailingPunctuation)) {
     return false;
   }
   const completeShortReplies = [
@@ -2065,7 +2070,10 @@ function normalizeScriptedText(text) {
     .replace(new RegExp(`(${kanaNumberPattern})(?:ふん|ぷん)`, "g"), (match, reading) => replaceKanaNumber(match, reading, "分"))
     .replace(/(\d{1,2})じかん/g, "$1時間")
     .replace(/(\d{1,2})時間はん/g, "$1時間半")
-    .replace(/(\d{1,2}(?:日|分))まえ/g, "$1前");
+    .replace(/(\d{1,2}(?:日|分))まえ/g, "$1前")
+    // 「くがつの30日」のように月だけがひらがなの場合、月を数値化した後で
+    // 残る「の」を除去し、登録済みの「9月30日」と同じ判定値にそろえる。
+    .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1");
 
   // 判定専用の同義表記。会話欄・保存ログの発話原文には適用しない。
   const recognitionAliases = [
@@ -2390,7 +2398,8 @@ function hasInspectionSelfIntroduction(text) {
   const normalized = normalizeScriptedText(text);
   // 担当者名は特定の個人名へ固定せず、店舗名に続く任意の氏名と
   // 「と申します／でございます／と言います」等の名乗り語尾で確認する。
-  return /(?:(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)?|(?:トヨタ|とよた|豊田)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|で[、,]?ございます|と[、,]?(?:申|もう)します|と[、,]?(?:言|い)います)/.test(normalized);
+  // 「帯広本別店」のように地域名と担当者名の間へ支店名が入る正式名称も許容する。
+  return /(?:(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)(?:[一-龯々ぁ-んァ-ヶー]{1,12}店)?|(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ)|(?:トヨタ|とよた|豊田)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|で[、,]?ございます|と[、,]?(?:申|もう)します|と[、,]?(?:言|い)います)/.test(normalized);
 }
 
 function hasInspectionDocumentGuidance(text) {
@@ -2410,6 +2419,13 @@ function inspectionTextHasSplitGuidanceKey(text, stepKey) {
   }
   if (stepKey === "explained_lock_and_arrival") {
     return /(?:ロック|ナット|アダプター|専用工具|外す工具|受付|10分前|十分前|15分前|十五分前)/.test(normalized);
+  }
+  if (stepKey === "confirmed_reminder_contact") {
+    const hasReminderFragment = /(?:3日前|三日前)/.test(normalized)
+      && /(?:連絡|電話)/.test(normalized);
+    const hasContactFragment = /(?:この|同じ|今の|こちらの).{0,8}(?:携帯|電話|連絡先)/.test(normalized)
+      || /(?:携帯|電話番号|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(normalized);
+    return hasReminderFragment || hasContactFragment;
   }
   return false;
 }
@@ -2434,6 +2450,9 @@ function inspectionSplitGuidanceFragmentKey(text) {
   }
   if (inspectionTextHasSplitGuidanceKey(text, "explained_lock_and_arrival")) {
     return "explained_lock_and_arrival";
+  }
+  if (inspectionTextHasSplitGuidanceKey(text, "confirmed_reminder_contact")) {
+    return "confirmed_reminder_contact";
   }
   return "";
 }
@@ -2461,13 +2480,25 @@ function asksInspectionAvailabilityAgainAfterAppointment(text) {
 }
 
 function hasInspectionReminderContactConfirmation(text) {
-  const normalized = normalizeScriptedText(text);
-  const hasThreeDayReminder = /(?:3日前|三日前)/.test(normalized)
-    && /(?:連絡|電話)/.test(normalized);
-  const asksKnownContact = /(?:この|同じ|今の|こちらの).{0,8}(?:携帯|電話|連絡先)/.test(normalized)
-    || /(?:携帯|電話|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(normalized)
-    || /(?:どちら|電話番号)/.test(normalized);
-  return hasThreeDayReminder && asksKnownContact && isScriptedQuestion(normalized);
+  const current = normalizeScriptedText(text);
+  const conversationEvidence = inspectionStaffConversationEvidence(
+    current,
+    "confirmed_reminder_contact"
+  );
+  const hasThreeDayReminder = /(?:3日前|三日前)/.test(conversationEvidence)
+    && /(?:連絡|電話)/.test(conversationEvidence);
+  const asksKnownContact = /(?:この|同じ|今の|こちらの).{0,8}(?:携帯|電話|連絡先)/.test(conversationEvidence)
+    || /(?:携帯|電話番号|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(conversationEvidence)
+    || /(?:どちら|電話番号)/.test(conversationEvidence);
+  const hasContactQuestion = inspectionStaffConversationEvidence(
+    current,
+    "confirmed_reminder_contact"
+  ).split(/(?<=[。.!！?？])/).some((fragment) =>
+    asksKnownContact
+    && isScriptedQuestion(fragment)
+    && /(?:携帯|電話番号|連絡先|この電話|同じ電話|今の電話)/.test(fragment)
+  );
+  return hasThreeDayReminder && asksKnownContact && hasContactQuestion;
 }
 
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
@@ -3408,7 +3439,9 @@ function handleScriptedStaffReply(text) {
   ) {
     els.speechNote.textContent = splitGuidanceKey === "explained_documents"
       ? "持参物の案内を記憶しています。AI音声を挟まず、必要書類と空荷の案内を続けてください。"
-      : "ロックナット用具または早めの来店案内を記憶しています。AI音声を挟まず案内を続けてください。";
+      : splitGuidanceKey === "explained_lock_and_arrival"
+        ? "ロックナット用具または早めの来店案内を記憶しています。AI音声を挟まず案内を続けてください。"
+        : "3日前の確認連絡を記憶しています。AI音声を挟まず、連絡先の確認を続けてください。";
     renderProgress();
     continueSpeechInputWithoutCustomerReply("音声入力中です。案内の続きを話してください。");
     return;

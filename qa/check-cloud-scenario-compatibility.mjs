@@ -172,7 +172,7 @@ assert.equal(normalized.scoring[0].action, "引取希望の事情を受け止め
 assert.equal(appendedScripts.length, 1, "互換補正後にapp.jsが起動していません");
 assert.equal(
   appendedScripts[0].src,
-  "./app.js?v=20260829-4",
+  "./app.js?v=20260829-5",
   "公開更新後もブラウザーキャッシュから古いapp.jsを読み込む可能性があります"
 );
 
