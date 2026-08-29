@@ -115,7 +115,7 @@
 
   function startApp() {
     const script = document.createElement("script");
-    script.src = "./app.js?v=20260829-5";
+    script.src = "./app.js?v=20260829-6";
     document.body.appendChild(script);
   }
 

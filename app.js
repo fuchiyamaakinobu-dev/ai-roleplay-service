@@ -2093,7 +2093,7 @@ function normalizeScriptedText(text) {
     [/そうこうきょり/g, "走行距離"], [/きょりすう/g, "距離数"], [/なんきろ/g, "何キロ"],
     [/おいるこうかん/g, "オイル交換"], [/ついかせいび/g, "追加整備"], [/ごようめい/g, "ご用命"],
     [/てんない/g, "店内"], [/おはやめ/g, "お早め"], [/はやめ/g, "早め"], [/ようい/g, "用意"],
-    [/じゅんび/g, "準備"], [/てはい/g, "手配"],
+    [/じゅんび/g, "準備"], [/てはい/g, "手配"], [/いらい/g, "依頼"],
     [/きになる/g, "気になる"], [/ふぐあい/g, "不具合"], [/ちょうし/g, "調子"],
     [/ぐあい/g, "具合"], [/いおん/g, "異音"], [/しょうじょう/g, "症状"], [/いわかん/g, "違和感"],
     [/にもつ/g, "荷物"], [/ろっくなっときー/g, "ロックナットキー"],
@@ -2174,7 +2174,7 @@ function hasInspectionLoanerConfirmation(text, allowImplicitLoaner = false) {
   return candidates.some((candidate) => {
     const clause = candidate.text;
     const hasLoaner = /(?:代車|代わりの車)/.test(clause) || allowImplicitLoaner;
-    const hasArrangement = /(?:用意|準備|手配)/.test(clause);
+    const hasArrangement = /(?:用意|準備|手配|依頼)/.test(clause);
     const hasNegative = /(?:できません|できない|難しい|空きがない|空いていない|空いていません|空いてません|用意がない|用意はない)/.test(clause);
     const isPendingConfirmation = /(?:できるか|可能か|空き(?:を|が)?).*確認(?:します|いたします|して)/.test(clause);
     const hasCommitment = /(?:できます|出来ます|(?:できる|出来る)(?:か)?と思います|可能です|いたします|します|させていただ|しておきます|しておきましょう|なります)/.test(clause)

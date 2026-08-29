@@ -52,6 +52,7 @@ const acceptedLoanerReplies = [
   "代車をご用意できます。",
   "代車をご準備いたします。",
   "代わりの車を手配しておきます。",
+  "代車を一応ご依頼させていただきます。",
   "代車ですね。ご用意は、問題なくできます。",
   "代車をご用意できる？できます。"
 ];
@@ -176,7 +177,7 @@ assert.match(
   "『お願いします。』の登録音声文が見つかりません"
 );
 assert.match(indexSource, /styles\.css\?v=20260829-3/);
-assert.match(indexSource, /cloud-scenario\.js\?v=20260829-5/);
+assert.match(indexSource, /cloud-scenario\.js\?v=20260829-6/);
 assert.doesNotMatch(indexSource, /__CF\$cv\$params|challenge-platform/);
 
 console.log(`車検誘致・拡張会話マトリクス: OK（${loanerQuestions.length + acceptedLoanerReplies.length + documentOrders.length + 26}パターン）`);
