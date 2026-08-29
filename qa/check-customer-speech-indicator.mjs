@@ -160,7 +160,7 @@ const passedKeys = new Set(state.analyses.filter((analysis) => analysis.passed).
 scenario.steps.forEach((step) => {
   assert.ok(passedKeys.has(step.key), `ボタン進行で未達の工程があります: ${step.key}`);
 });
-assert.equal(JSON.stringify(state.proposedAppointment), JSON.stringify({ month: 8, day: 30, hour: 10 }));
+assert.equal(JSON.stringify(state.proposedAppointment), JSON.stringify({ month: 8, day: 30, hour: 10, minute: 0 }));
 assert.equal(finished, true, "終了挨拶ボタンで採点終了へ進みません");
 assert.equal(addedMessages.filter((message) => message.role === "staff").length, 19);
 assert.ok(

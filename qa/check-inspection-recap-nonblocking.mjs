@@ -12,7 +12,7 @@ assert.notEqual(end, -1, "スタッフ発話解析の終端が見つかりませ
 
 const context = {
   state: {
-    proposedAppointment: { month: 9, day: 10, hour: 9 },
+    proposedAppointment: { month: 9, day: 10, hour: 9, minute: 30 },
     analyses: [],
     inspectionMileageAsked: true,
     inspectionLoanerRequested: false
@@ -58,6 +58,14 @@ const wrongDate = context.analyzeScriptedStaff(
 assert.equal(wrongDate.passed, false);
 assert.equal(wrongDate.canAdvance, true, "予約日が違う復唱で会話を停止しています");
 assert.equal(wrongDate.blocked, false, "予約日が違う復唱を聞き返し対象にしています");
+
+context.state.analyses = [];
+const wrongMinute = context.analyzeScriptedStaff(
+  "佐藤様、9月10日の9時にお待ちしております。",
+  recapStep
+);
+assert.equal(wrongMinute.passed, false, "9時30分の予約を9時と復唱して加点しています");
+assert.equal(wrongMinute.canAdvance, true, "分が異なる復唱で会話を停止しています");
 
 context.state.analyses = [];
 const completeRecap = context.analyzeScriptedStaff(

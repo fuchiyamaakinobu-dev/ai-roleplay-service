@@ -613,7 +613,7 @@ function handleInspectionCheckpointTest(event) {
   }
   if (buttonKey === "waiting") markPassed("confirmed_waiting");
   if (buttonKey === "appointment") {
-    state.proposedAppointment = { month: 8, day: 30, hour: 10 };
+    state.proposedAppointment = { month: 8, day: 30, hour: 10, minute: 0 };
     markPassed("proposed_appointment");
   }
 
@@ -1093,6 +1093,11 @@ function inspectionHighlightPatterns(text) {
     && normalized.includes(`${appointment.month}月`)
     && normalized.includes(`${appointment.day}日`)
     && normalized.includes(`${appointment.hour}時`)
+    && (Number(appointment.minute || 0) === 0
+      ? !new RegExp(`${appointment.hour}時(?:半|\\d{1,2}分)`).test(normalized)
+      : Number(appointment.minute) === 30
+        ? new RegExp(`${appointment.hour}時(?:半|30分)`).test(normalized)
+        : normalized.includes(`${appointment.hour}時${appointment.minute}分`))
     && [customerName, "佐藤", "斉藤"].some((name) => name && normalized.includes(name))) {
     add("recapped_appointment", [new RegExp(`${escapePattern(customerName || "佐藤")}\\s*様?`, "g"), /佐藤\s*様?/g, /斉藤\s*様?/g, /[0-9０-９]{1,2}\s*月\s*(?:の\s*)?[0-9０-９]{1,2}\s*日/g, /(?:午前|午後)?\s*[0-9０-９]{1,2}\s*時/g]);
   }
@@ -2071,6 +2076,9 @@ function normalizeScriptedText(text) {
     .replace(/(\d{1,2})じかん/g, "$1時間")
     .replace(/(\d{1,2})時間はん/g, "$1時間半")
     .replace(/(\d{1,2}(?:日|分))まえ/g, "$1前")
+    // 「くがつの一日」は、月を数値化した後に「9月1日」へそろえる。
+    // 「作業に一日かかる」のような期間表現は月の直後ではないため変換しない。
+    .replace(/(\d{1,2}月)の?一日(?!間)/g, (match, month) => `${month}1日`)
     // 「くがつの30日」のように月だけがひらがなの場合、月を数値化した後で
     // 残る「の」を除去し、登録済みの「9月30日」と同じ判定値にそろえる。
     .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1");
@@ -2322,12 +2330,13 @@ function inspectionAppointmentDateCandidates(text) {
 function inspectionAppointmentProposalMatch(text) {
   const normalized = normalizeScriptedText(text);
   for (const date of inspectionAppointmentDateCandidates(normalized)) {
-    const timeMatch = normalized.slice(date.end).match(/(\d{1,2})時/);
+    const timeMatch = normalized.slice(date.end).match(/(\d{1,2})時(?:(半)|(\d{1,2})分)?/);
     if (timeMatch) {
       return {
         month: date.month,
         day: date.day,
-        hour: timeMatch[1]
+        hour: timeMatch[1],
+        minute: timeMatch[2] === "半" ? 30 : Number(timeMatch[3] || 0)
       };
     }
   }
@@ -2616,7 +2625,8 @@ function analyzeScriptedStaff(text, step) {
       state.proposedAppointment = {
         month: appointmentMatch.month,
         day: appointmentMatch.day,
-        hour: appointmentMatch.hour
+        hour: appointmentMatch.hour,
+        minute: appointmentMatch.minute
       };
     }
   }
@@ -2628,6 +2638,11 @@ function analyzeScriptedStaff(text, step) {
       && normalized.includes(`${appointment.month}月`)
       && normalized.includes(`${appointment.day}日`)
       && normalized.includes(`${appointment.hour}時`)
+      && (Number(appointment.minute || 0) === 0
+        ? !new RegExp(`${appointment.hour}時(?:半|\\d{1,2}分)`).test(normalized)
+        : Number(appointment.minute) === 30
+          ? new RegExp(`${appointment.hour}時(?:半|30分)`).test(normalized)
+          : normalized.includes(`${appointment.hour}時${appointment.minute}分`))
     );
     passed = Boolean(
       passed
@@ -2797,6 +2812,16 @@ function hasCourtesyExpression(text) {
 function isAffirmativeScriptedReply(text) {
   const normalized = text.replace(/[\s、。,.!?！？]/g, "");
   return /^(?:はい|ええ|もちろん|大丈夫|できます|可能です|はいできます|もちろんできます|大丈夫です)$/.test(normalized);
+}
+
+function isAffirmativeBookingAvailabilityReply(text) {
+  const normalized = normalizeScriptedText(text);
+  if (isScriptedQuestion(normalized)) return false;
+  if (/(?:できません|出来ません|不可|難しい|空いていません|確認します)/.test(normalized)) return false;
+  return isAffirmativeScriptedReply(normalized)
+    || /^(?:はい|ええ)?大丈夫(?:です)?よ?$/.test(normalized.replace(/[、。,.!?！？]/g, ""))
+    || /(?:このまま)?(?:ご)?予約(?:が|は|を)?(?:できます|出来ます|可能です|可能)/.test(normalized)
+    || /このまま.{0,8}(?:できます|出来ます|可能です|可能)/.test(normalized);
 }
 
 function combinedScriptedReply(text, step) {
@@ -3104,6 +3129,11 @@ function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
         && normalized.includes(`${appointment.month}月`)
         && normalized.includes(`${appointment.day}日`)
         && normalized.includes(`${appointment.hour}時`)
+        && (Number(appointment.minute || 0) === 0
+          ? !new RegExp(`${appointment.hour}時(?:半|\\d{1,2}分)`).test(normalized)
+          : Number(appointment.minute) === 30
+            ? new RegExp(`${appointment.hour}時(?:半|30分)`).test(normalized)
+            : normalized.includes(`${appointment.hour}時${appointment.minute}分`))
       );
     }
     if (!passed) return;
@@ -3640,7 +3670,7 @@ function handleScriptedStaffReply(text) {
 
   const answeredDayPreferenceAfterExpiry = shouldAnswerDayPreferenceFromStoredExpiry(text, step);
   const answeredCustomerBookingAvailability = step.key === "confirmed_booking_time"
-    && isAffirmativeScriptedReply(text)
+    && isAffirmativeBookingAvailabilityReply(text)
     && (state.questionRepeats["inspection-retry:confirmed_booking_time:general"] || 0) > 0;
   const combinedText = combinedScriptedReply(text, step);
   const analysis = analyzeScriptedStaff(combinedText, step);

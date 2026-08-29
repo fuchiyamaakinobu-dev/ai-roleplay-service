@@ -23,6 +23,11 @@ vm.runInContext(
   `${source.slice(0, source.indexOf("function analyzeScriptedStaff"))}\n${source.slice(questionStart)}`,
   context
 );
+const affirmativeStart = appSource.indexOf("function isAffirmativeScriptedReply");
+const affirmativeEnd = appSource.indexOf("function combinedScriptedReply", affirmativeStart);
+assert.notEqual(affirmativeStart, -1, "肯定回答判定が見つかりません");
+assert.notEqual(affirmativeEnd, -1, "肯定回答判定の終端が見つかりません");
+vm.runInContext(appSource.slice(affirmativeStart, affirmativeEnd), context);
 
 for (const phrase of [
   "予約手続きに10分程度かかりますがよろしいでしょうか？",
@@ -61,9 +66,32 @@ assert.match(
 
 assert.match(
   appSource,
-  /answeredCustomerBookingAvailability = step\.key === "confirmed_booking_time"[\s\S]*?isAffirmativeScriptedReply\(text\)[\s\S]*?inspection-retry:confirmed_booking_time:general/,
+  /answeredCustomerBookingAvailability = step\.key === "confirmed_booking_time"[\s\S]*?isAffirmativeBookingAvailabilityReply\(text\)[\s\S]*?inspection-retry:confirmed_booking_time:general/,
   "お客様の予約可否質問への肯定回答を認識できません"
 );
+for (const phrase of [
+  "はい。",
+  "大丈夫ですよ。",
+  "はい。このまま予約できます。",
+  "このままご予約可能です。"
+]) {
+  assert.equal(
+    context.isAffirmativeBookingAvailabilityReply(phrase),
+    true,
+    `${phrase}を予約可否への肯定回答として認識できません`
+  );
+}
+for (const phrase of [
+  "このまま予約できますか？",
+  "このまま予約できません。",
+  "予約できるか確認します。"
+]) {
+  assert.equal(
+    context.isAffirmativeBookingAvailabilityReply(phrase),
+    false,
+    `${phrase}を予約可否への肯定回答として誤認識しています`
+  );
+}
 assert.match(
   appSource,
   /answeredCustomerBookingAvailability[\s\S]*?!analysis\.passed[\s\S]*?analysis\.canAdvance = true[\s\S]*?予約手続き時間の確認は未達/,

@@ -69,6 +69,18 @@ const firstDayAppointment = proposalContext.inspectionAppointmentProposalMatch(
 assert.equal(firstDayAppointment?.month, "9", "漢字の『一日』を含む予約日時の月が一致しません");
 assert.equal(firstDayAppointment?.day, "1", "漢字の『一日』を含む予約日時の日が一致しません");
 assert.equal(firstDayAppointment?.hour, "10", "漢字の『一日』を含む予約日時の時刻が一致しません");
+assert.equal(firstDayAppointment?.minute, 0, "分指定のない予約日時を0分として保持できません");
+const kanaMonthFirstDayAppointment = proposalContext.inspectionAppointmentProposalMatch(
+  "よろしければくがつの一日の10時半から作業できるのですが、いかがでしょうか？"
+);
+assert.equal(kanaMonthFirstDayAppointment?.month, "9", "『くがつの一日』を9月1日として認識できません");
+assert.equal(kanaMonthFirstDayAppointment?.day, "1", "『くがつの一日』の日付が一致しません");
+assert.equal(kanaMonthFirstDayAppointment?.hour, "10", "10時半の時が一致しません");
+assert.equal(kanaMonthFirstDayAppointment?.minute, 30, "10時半の30分を保持できません");
+const explicitMinuteAppointment = proposalContext.inspectionAppointmentProposalMatch(
+  "9月1日10時30分はいかがでしょうか？"
+);
+assert.equal(explicitMinuteAppointment?.minute, 30, "10時30分の分を保持できません");
 assert.equal(
   proposalContext.hasInspectionAppointmentProposalEvidence("8月20日です。"),
   false,
