@@ -927,7 +927,7 @@ function speakCustomerText(text, onFinished = null) {
   window.speechSynthesis.speak(utterance);
 }
 
-function beginAutomaticSpeechInput(noteText) {
+function beginAutomaticSpeechInput(noteText, retryCount = 0) {
   if (!state.started || state.ended || speechListening) return false;
   if (!speechRecognition) {
     els.speechNote.textContent = "このブラウザでは音声入力を利用できません。テキスト入力で練習できます。";
@@ -941,9 +941,26 @@ function beginAutomaticSpeechInput(noteText) {
   try {
     speechRecognition.start();
     return true;
-  } catch (_) {
+  } catch (error) {
     speechListening = false;
     updateMicButton(false);
+    // recognition.stop()の完了前にstart()すると、ブラウザーによっては
+    // InvalidStateErrorになる。予約確定後の「かしこまりました」など、
+    // AI音声を挟まず入力を続ける場面でもマイクをOFFのままにしない。
+    if (
+      error?.name === "InvalidStateError"
+      && retryCount < 6
+      && state.started
+      && !state.ended
+    ) {
+      if (speechInputStartTimer) window.clearTimeout(speechInputStartTimer);
+      els.speechNote.textContent = "音声入力の再開を待っています。";
+      speechInputStartTimer = window.setTimeout(() => {
+        speechInputStartTimer = null;
+        beginAutomaticSpeechInput(noteText, retryCount + 1);
+      }, 120);
+      return false;
+    }
     els.speechNote.textContent = "音声入力を開始できませんでした。マイクボタンを押してください。";
     return false;
   }
@@ -4292,6 +4309,10 @@ function updateMicButton(listening) {
 
 function stopSpeechInput() {
   speechListening = false;
+  if (speechInputStartTimer) {
+    window.clearTimeout(speechInputStartTimer);
+    speechInputStartTimer = null;
+  }
   if (speechRestartTimer) {
     window.clearTimeout(speechRestartTimer);
     speechRestartTimer = null;
