@@ -2264,6 +2264,16 @@ function hasInspectionBookingInvitation(text) {
     || /(?:ご)?予約.{0,12}いかが/.test(normalized);
 }
 
+function hasDirectInspectionBookingInvitation(text) {
+  const normalized = normalizeScriptedText(text);
+  if (!isScriptedQuestion(normalized)) return false;
+  if (!normalized.includes("予約")) return false;
+  if (/(?:代車.{0,10}予約|予約.{0,10}代車)/.test(normalized)) return false;
+  return /(?:この電話|お電話|このまま).{0,16}(?:ご)?予約/.test(normalized)
+    || /(?:ご)?予約(?:を)?(?:承|お取り|取れ|でき|進め|しま)/.test(normalized)
+    || /(?:ご)?予約.{0,12}いかが/.test(normalized);
+}
+
 function hasInspectionAppointmentProposalEvidence(text) {
   const normalized = normalizeScriptedText(text);
   const hasConcreteDateOrTime = inspectionAppointmentDateCandidates(normalized).length > 0
@@ -3886,7 +3896,7 @@ function handleScriptedStaffReply(text) {
   const skippedIdentity = useAdvanceRetry && step.key === "confirmed_identity";
   if (
     !customerResponseOverride
-    && hasInspectionBookingInvitation(combinedText)
+    && hasDirectInspectionBookingInvitation(combinedText)
     && advancedPastScriptedStep(
       startingScriptStep,
       state.scriptStep,

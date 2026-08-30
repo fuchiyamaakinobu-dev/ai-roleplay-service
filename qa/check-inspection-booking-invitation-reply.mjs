@@ -84,6 +84,23 @@ assert.equal(
   false,
   "代車予約の質問を入庫予約提案として誤認識しています"
 );
+assert.equal(
+  context.hasDirectInspectionBookingInvitation("よろしければこのお電話でご予約できますが、いかがでしょうか？"),
+  true,
+  "この電話での直接予約提案を認識できません"
+);
+assert.equal(
+  context.hasDirectInspectionBookingInvitation("今回の車検のご予定はお決まりでしょうか？"),
+  false,
+  "予定の有無を尋ねる質問を直接予約提案として誤認識しています"
+);
+assert.equal(
+  context.hasDirectInspectionBookingInvitation(
+    "お使いのヤリスの車検満了日は9月30日で、8月1日以降作業可能です。ご予定はお決まりでしたでしょうか？"
+  ),
+  false,
+  "車検案内と予定確認をまとめた発話を直接予約提案として誤認識しています"
+);
 
 const crossingStart = appSource.indexOf("function advancedPastScriptedStep");
 const crossingEnd = appSource.indexOf("function scriptedRequiredGroupsMatch", crossingStart);
@@ -206,13 +223,13 @@ assert.match(
 );
 assert.match(
   appSource,
-  /asksWhetherInspectionPlanIsDecided[\s\S]*?includesConcreteInspectionTiming[\s\S]*?return true/,
-  "車検時期と『ご予定はお決まり』をまとめた予約意思確認の優先判定がありません"
+  /function hasDirectInspectionBookingInvitation[\s\S]*?!normalized\.includes\("予約"\)[\s\S]*?return/,
+  "予定確認と直接予約提案を分ける判定がありません"
 );
 assert.match(
   appSource,
-  /state\.inspectionDurationProgressionPending = true[\s\S]*?text:\s*"お願いします。"/,
-  "予約意思への肯定返答後に自然な作業時間質問の進行状態を保持していません"
+  /hasDirectInspectionBookingInvitation\(combinedText\)[\s\S]*?state\.inspectionDurationProgressionPending = true[\s\S]*?text:\s*"お願いします。"/,
+  "直接予約提案への肯定返答後に自然な作業時間質問の進行状態を保持していません"
 );
 assert.match(
   appSource,
