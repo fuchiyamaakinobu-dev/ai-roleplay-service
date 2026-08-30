@@ -57,7 +57,8 @@ for (const phrase of [
   "何かお使いになっていて気になるところはございませんでしょうか？",
   "調子の悪いところはございますでしょうか？",
   "何か気になることや調子が悪いこと、オイル交換等はいかがいたしましょうか。",
-  "お車で何か不具合はありませんか？"
+  "お車で何か不具合はありませんか？",
+  "佐藤様、ヤリスの車検の他に、どこか不都合なところ、見てほしいところ、整備などございますか？"
 ]) {
   assert.equal(
     context.scriptedStepMatches(phrase, concernStep),
@@ -65,6 +66,13 @@ for (const phrase of [
     `${phrase} を車両状態の質問として認識できません`
   );
 }
+assert.equal(
+  context.asksInspectionVehicleConcerns(
+    "かしこまりました。代車の方もご用意いたします。佐藤様、ヤリスの車検の他に、どこか不都合なところ、見てほしいところ、整備などございますか？"
+  ),
+  true,
+  "代車承諾と同時に尋ねた『不都合・見てほしいところ』を車両状態確認として認識できません"
+);
 assert.equal(
   context.scriptedStepMatches("調子は良いですね。", concernStep),
   false,
@@ -81,6 +89,11 @@ assert.match(earlyConcernBlock, /analyzeScriptedStaff\(text, concernStep\)/);
 assert.match(earlyConcernBlock, /state\.scriptedPartialReplies\[step\.key\]/);
 assert.match(earlyConcernBlock, /オイル交換もお願いしたいです。/);
 assert.match(earlyConcernBlock, /inspection_asked_vehicle_concerns_customer/);
+assert.match(
+  earlyConcernBlock,
+  /askedConcernsEarly[\s\S]*?オイル交換もお願いしたいです。/,
+  "代車案内より後の車両状態質問へオイル交換希望を優先できません"
+);
 assert.match(
   appSource,
   /responseStep\.key === "asked_vehicle_concerns"[\s\S]*?text:\s*"オイル交換もお願いしたいです。"[\s\S]*?audioId:\s*"inspection_asked_vehicle_concerns_customer"/,

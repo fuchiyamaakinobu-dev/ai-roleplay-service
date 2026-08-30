@@ -494,7 +494,7 @@ function renderCustomerSpeechIndicator(progressVisible) {
   const anyStaffText = (matcher) => staffTexts.some((text) => matcher(normalizeScriptedText(text), text));
   const asksVehicleCondition = (normalized) =>
     isScriptedQuestion(normalized)
-    && /(?:気になる|不具合|調子|具合|症状|異音|違和感)/.test(normalized);
+    && /(?:気になる|不具合|不都合|調子|具合|症状|異音|違和感|見てほしい|見てもらいたい)/.test(normalized);
   const asksAdditionalWork = (normalized, originalText) =>
     asksInspectionAdditionalServiceFollowUp(originalText)
     || (
@@ -2603,6 +2603,12 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
     return hasInspectionReminderContactConfirmation(normalized);
   }
 
+  // 「どこか不都合なところ」「見てほしいところ」のような言い換えも、
+  // 車両状態や追加整備の希望を尋ねる質問として扱う。
+  if (step.key === "asked_vehicle_concerns") {
+    return asksInspectionVehicleConcerns(normalized);
+  }
+
   if (matchedGroups.every((matches) => matches.length > 0)) return true;
 
   if (step.key === "asked_availability") {
@@ -2756,6 +2762,12 @@ function isScriptedQuestion(normalized) {
   return /(?:でしょうか|ましょうか|ますか|ですか|ませんか|ございませんか|[?？])/.test(normalized);
 }
 
+function asksInspectionVehicleConcerns(text) {
+  const normalized = normalizeScriptedText(text);
+  return isScriptedQuestion(normalized)
+    && /(?:気になる|不具合|不都合|調子|具合|症状|異音|違和感|見てほしい|見てもらいたい)/.test(normalized);
+}
+
 function scriptedStepSpecificMatches(normalized, step) {
   if (step.key === "confirmed_identity") {
     const customerName = String(scenario.customerName || "佐藤")
@@ -2795,7 +2807,7 @@ function scriptedStepSpecificMatches(normalized, step) {
   }
 
   if (step.key === "asked_vehicle_concerns") {
-    return isScriptedQuestion(normalized);
+    return asksInspectionVehicleConcerns(normalized);
   }
 
   if (step.key === "explained_lock_and_arrival") {
