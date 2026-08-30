@@ -102,12 +102,15 @@ for (const text of [
   "かしこまりました。",
   "承知しました。",
   "分かりました。",
-  "わかりました"
+  "わかりました",
+  "ありがとうございます。",
+  "ありがとう"
 ]) {
   assert.equal(guidanceContext.isInspectionAcknowledgementOnlyAfterAppointment(text), true, text);
 }
 for (const text of [
-  "ありがとうございます。",
+  "ありがとうございました。",
+  "ありがとうございます。それでは当日のご案内です。",
   "かしこまりました。代車をご用意します。",
   "分かりましたか？"
 ]) {
@@ -177,7 +180,7 @@ assert.match(
   "『お願いします。』の登録音声文が見つかりません"
 );
 assert.match(indexSource, /styles\.css\?v=20260829-3/);
-assert.match(indexSource, /cloud-scenario\.js\?v=20260829-7/);
+assert.match(indexSource, /cloud-scenario\.js\?v=20260830-1/);
 assert.doesNotMatch(indexSource, /__CF\$cv\$params|challenge-platform/);
 
 console.log(`車検誘致・拡張会話マトリクス: OK（${loanerQuestions.length + acceptedLoanerReplies.length + documentOrders.length + 26}パターン）`);

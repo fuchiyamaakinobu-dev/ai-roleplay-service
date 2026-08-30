@@ -101,6 +101,16 @@ assert.equal(
   true,
   "予約確定後の単独受領表現を認識できません"
 );
+assert.equal(
+  context.isInspectionAcknowledgementOnlyAfterAppointment("ありがとうございます。"),
+  true,
+  "予約確定後の単独のお礼を音声入力継続として認識できません"
+);
+assert.equal(
+  context.isInspectionAcknowledgementOnlyAfterAppointment("ありがとうございました。"),
+  false,
+  "終話のお礼を単独受領表現として誤認識しています"
+);
 
 for (const phrase of [
   "入庫日の3日前に確認のお電話をしますが、この連絡先でよろしいでしょうか？",

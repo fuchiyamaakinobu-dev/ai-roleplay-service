@@ -2477,7 +2477,7 @@ function isInspectionGuidancePrefaceOrIncompleteFragment(text) {
 
 function isInspectionAcknowledgementOnlyAfterAppointment(text) {
   const normalized = normalizeScriptedText(text);
-  return /^(?:かしこまりました|承知しました|分かりました|わかりました)[。.!！]*$/.test(normalized);
+  return /^(?:かしこまりました|承知しました|分かりました|わかりました|ありがとうございます|ありがとう)[。.!！]*$/.test(normalized);
 }
 
 function asksInspectionAvailabilityAgainAfterAppointment(text) {

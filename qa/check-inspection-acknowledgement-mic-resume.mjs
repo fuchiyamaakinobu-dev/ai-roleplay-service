@@ -66,7 +66,12 @@ const handlerSource = source.slice(handlerStart, handlerEnd);
 assert.match(
   handlerSource,
   /isInspectionAcknowledgementOnlyAfterAppointment\(text\)[\s\S]*?continueSpeechInputWithoutCustomerReply\("音声入力中です。案内の続きを話してください。"\)/,
-  "予約確定後の『かしこまりました』から音声入力継続へ進みません"
+  "予約確定後の単独受領表現から音声入力継続へ進みません"
+);
+assert.match(
+  source,
+  /isInspectionAcknowledgementOnlyAfterAppointment[\s\S]*?ありがとうございます/,
+  "予約確定後の単独の『ありがとうございます。』を音声入力継続として扱えません"
 );
 
 const stopStart = source.indexOf("function stopSpeechInput");
