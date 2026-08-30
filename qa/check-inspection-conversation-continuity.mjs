@@ -30,6 +30,22 @@ assert.equal(
   false,
   "日時確定後の会話途中のお礼を終話として誤認識しています"
 );
+assert.equal(
+  closingContext.isInspectionFinalClosingThanks("ありがとうございました。"),
+  true,
+  "最終の『ありがとうございました』をマイク終了条件として認識できません"
+);
+for (const phrase of [
+  "ありがとうございます。",
+  "よろしくお願いいたします。",
+  "失礼いたします。"
+]) {
+  assert.equal(
+    closingContext.isInspectionFinalClosingThanks(phrase),
+    false,
+    `最終の『ありがとうございました』以外でマイク終了条件を満たしています: ${phrase}`
+  );
+}
 for (const phrase of [
   "ありがとうございました。",
   "よろしくお願いいたします。",
@@ -47,6 +63,16 @@ assert.match(
   source,
   /step\.key === "closed_politely"[\s\S]*?ありがとうございました/,
   "最終工程で『ありがとうございます』と『ありがとうございました』を区別していません"
+);
+assert.match(
+  source,
+  /const finished = reachedEnd && isInspectionFinalClosingThanks\(text\)/,
+  "最終の『ありがとうございました』以外で通常進行が終了する可能性があります"
+);
+assert.match(
+  source,
+  /const finishedAfterSkip = reachedEndAfterSkip && isInspectionFinalClosingThanks\(text\)/,
+  "任意項目の省略後に『ありがとうございました』なしで終了する可能性があります"
 );
 
 const remembered = [];

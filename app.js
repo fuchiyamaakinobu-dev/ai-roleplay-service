@@ -2525,7 +2525,7 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // 「ありがとうございます」は会話途中のお礼として扱い、過去形の
   // 「ありがとうございました」のときだけ終話あいさつを達成する。
   if (step.key === "closed_politely") {
-    return /ありがとうございました/.test(normalized);
+    return isInspectionFinalClosingThanks(normalized);
   }
 
   // Firestoreに予約手続き時間だけを必須とする旧条件が残っていても、
@@ -3066,13 +3066,17 @@ function hasScriptedClosingIntent(text) {
     return true;
   }
 
-  return [
+  return isInspectionFinalClosingThanks(normalized) || [
     /当日.*お待ち/,
     /ご?予約.*承り/,
     /以上.*(?:予約|案内)/,
-    /これで.*(?:予約|案内)/,
-    /ありがとうございました/
+    /これで.*(?:予約|案内)/
   ].some((pattern) => pattern.test(normalized));
+}
+
+function isInspectionFinalClosingThanks(text) {
+  const normalized = normalizeScriptedText(text);
+  return /ありがとうございました/.test(normalized);
 }
 
 function hasScriptedAppointmentRecapEvidence(text) {
@@ -3261,7 +3265,22 @@ function handleScriptedStaffReply(text) {
   const startingScriptStep = state.scriptStep;
   const step = scenario.steps[state.scriptStep];
   if (!step) {
-    finishRoleplay();
+    if (isInspectionFinalClosingThanks(text)) {
+      finishRoleplay();
+      return;
+    }
+    const closingIndex = scenario.steps.findIndex((item) => item.key === "closed_politely");
+    if (closingIndex >= 0) {
+      state.scriptStep = closingIndex;
+      state.currentState = scenario.steps[closingIndex].state;
+    }
+    state.ended = false;
+    state.turn += 1;
+    addMessage("customer", "はい。", {
+      audioId: "inspection_thanked_customer_retry"
+    });
+    els.speechNote.textContent = "最終の『ありがとうございました』までは会話を終了せず、音声入力を続けます。";
+    renderProgress();
     return;
   }
 
@@ -3751,7 +3770,11 @@ function handleScriptedStaffReply(text) {
       ) {
         state.scriptStep += 1;
       }
-      const finishedAfterSkip = state.scriptStep >= scenario.steps.length;
+      const reachedEndAfterSkip = state.scriptStep >= scenario.steps.length;
+      const finishedAfterSkip = reachedEndAfterSkip && isInspectionFinalClosingThanks(text);
+      if (reachedEndAfterSkip && !finishedAfterSkip) {
+        state.scriptStep = closingIndex;
+      }
       if (finishedAfterSkip) {
         state.ended = true;
       } else {
@@ -3895,7 +3918,11 @@ function handleScriptedStaffReply(text) {
     state.scriptStep += 1;
   }
 
-  const finished = state.scriptStep >= scenario.steps.length;
+  const reachedEnd = state.scriptStep >= scenario.steps.length;
+  const finished = reachedEnd && isInspectionFinalClosingThanks(text);
+  if (reachedEnd && !finished) {
+    state.scriptStep = closingIndex;
+  }
   if (finished) {
     state.ended = true;
   } else {
