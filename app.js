@@ -3442,18 +3442,23 @@ function handleScriptedStaffReply(text) {
       && recoveredEarlierIndex >= 0
       && recoveredEarlierIndex < appointmentIndexForRecovery
     );
+    const recoveredBookingTimeConfirmation = recoveredEarlierStep.key === "confirmed_booking_time";
     const loanerAlreadyChosen = recoveredEarlierStep.key === "confirmed_waiting"
       && state.inspectionLoanerConfirmed;
-    addMessage("customer", recoveredCoreStepAfterAppointment
-      ? "はい。"
-      : loanerAlreadyChosen
-        ? "分かりました。"
-        : recoveredEarlierStep.customerResponse, {
-      audioId: recoveredCoreStepAfterAppointment
-        ? "inspection_thanked_customer_retry"
+    addMessage("customer", recoveredBookingTimeConfirmation
+      ? "大丈夫ですよ。"
+      : recoveredCoreStepAfterAppointment
+        ? "はい。"
         : loanerAlreadyChosen
-          ? "inspection_explained_lock_and_arrival_customer"
-          : `inspection_${recoveredEarlierStep.key}_customer`
+          ? "分かりました。"
+          : recoveredEarlierStep.customerResponse, {
+      audioId: recoveredBookingTimeConfirmation
+        ? "inspection_confirmed_booking_time_customer"
+        : recoveredCoreStepAfterAppointment
+          ? "inspection_thanked_customer_retry"
+          : loanerAlreadyChosen
+            ? "inspection_explained_lock_and_arrival_customer"
+            : `inspection_${recoveredEarlierStep.key}_customer`
     });
     els.speechNote.textContent = "順序が前後した案内を確認しました。確認済みの内容へ戻らず、現在の会話位置から続けてください。";
     renderProgress();

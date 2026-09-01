@@ -108,6 +108,11 @@ assert.match(
   "日時提案待ちで予約手続き時間を確認した場合に『大丈夫ですよ。』へ回収する処理が見つかりません"
 );
 assert.match(
+  appSource,
+  /recoveredBookingTimeConfirmation = recoveredEarlierStep\.key === "confirmed_booking_time"[\s\S]*?recoveredBookingTimeConfirmation[\s\S]*?"大丈夫ですよ。"[\s\S]*?inspection_confirmed_booking_time_customer/,
+  "日時確定後に予約手続き時間を確認した場合も『大丈夫ですよ。』へ回収できません"
+);
+assert.match(
   audioDbSource,
   /inspection_proposed_appointment_retry",\s*"予約日時提案・聞き返し",\s*"具体的な日時を教えてください。"/,
   "日時確認の表示文と音声登録文が一致していません"
