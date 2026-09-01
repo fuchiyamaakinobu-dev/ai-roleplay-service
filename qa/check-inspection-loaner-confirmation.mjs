@@ -286,8 +286,13 @@ assert.match(
 );
 assert.match(
   appSource,
-  /responseStep\.key === "confirmed_waiting"[\s\S]*?hasInspectionLoanerConfirmation\(combinedText\)[\s\S]*?text: "分かりました。"[\s\S]*?inspection_explained_lock_and_arrival_customer/,
-  "スタッフ側から代車手配済みと案内した後の自然な回答が見つかりません"
+  /step\.key === "explained_loaner"[\s\S]*?responseStep\.key === "confirmed_waiting"[\s\S]*?hasInspectionLoanerConfirmation\(combinedText\)[\s\S]*?text: "お願いします。"[\s\S]*?inspection_booking_invitation_accept_customer/,
+  "代車手配の承諾へ『お願いします。』と回答する処理が見つかりません"
+);
+assert.match(
+  appSource,
+  /state\.inspectionLoanerConfirmed[\s\S]*?hasInspectionLoanerConfirmation\(text, true\)[\s\S]*?addMessage\("customer", "お願いします。"/,
+  "確認済みの代車手配が繰り返された場合に『お願いします。』と回答できません"
 );
 assert.match(
   scenarioSource,

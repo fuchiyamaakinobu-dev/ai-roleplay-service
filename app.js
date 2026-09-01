@@ -3575,6 +3575,25 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // 代車手配を一度確認済みの後に「代車をご用意します」と重ねて案内された場合も、
+  // 曖昧な「はい。」ではなく利用意思が明確な「お願いします。」を返す。
+  // 同じ発話に車両状態の質問や予約日時の提案・復唱がある場合は、そちらへの回答を優先する。
+  if (
+    state.inspectionLoanerConfirmed
+    && hasInspectionLoanerConfirmation(text, true)
+    && !asksInspectionVehicleConcerns(text)
+    && !hasInspectionAppointmentProposalEvidence(text)
+    && !hasScriptedAppointmentRecapEvidence(text)
+  ) {
+    state.turn += 1;
+    addMessage("customer", "お願いします。", {
+      audioId: "inspection_booking_invitation_accept_customer"
+    });
+    els.speechNote.textContent = "代車を利用する意思を確認済みです。現在の会話位置から続けてください。";
+    renderProgress();
+    return;
+  }
+
   // 作業時間に続く「ご来店いただけますか」は、来店可否の確認であり、
   // 店内で待つかの確認ではない。「はい」だけで通過せず、待ち方だけを尋ねる。
   if (
@@ -4043,12 +4062,16 @@ function handleScriptedStaffReply(text) {
   }
   if (
     !customerResponseOverride
-    && responseStep.key === "confirmed_waiting"
+    && (
+      (step.key === "explained_loaner" && analysis.passed)
+      || responseStep.key === "confirmed_waiting"
+    )
     && hasInspectionLoanerConfirmation(combinedText)
+    && !asksInspectionVehicleConcerns(combinedText)
   ) {
     customerResponseOverride = {
-      text: "分かりました。",
-      audioId: "inspection_explained_lock_and_arrival_customer"
+      text: "お願いします。",
+      audioId: "inspection_booking_invitation_accept_customer"
     };
   }
   if (!customerResponseOverride && responseStep.key === "asked_vehicle_concerns") {
