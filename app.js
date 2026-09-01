@@ -2436,11 +2436,30 @@ function hasClearInspectionPurposeNotice(text) {
 
 function hasInspectionSelfIntroduction(text) {
   const normalized = normalizeScriptedText(text);
-  // 担当者名は特定の個人名へ固定せず、店舗名に続く任意の氏名と
-  // 「と申します／でございます／と言います」等の名乗り語尾で確認する。
-  // 「帯広本別店」のように地域名と担当者名の間へ支店名が入る正式名称も許容する。
-  // 音声認識で「店」が省略された「帯広本別」や、途中に読点が入る「帯広本、別」も同じ店舗名として扱う。
-  return /(?:(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ)(?:帯広|おびひろ)(?:(?:本[、,]?別(?:店)?)|(?:[一-龯々ぁ-んァ-ヶー]{1,12}店))?|(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ)|(?:トヨタ|とよた|豊田)(?:モビリヒロ|もびりひろ)|トヨタ|とよた)(?:の|、)[、,]?[一-龯々ぁ-んァ-ヶー]{1,12}(?:です|で[、,]?ございます|と[、,]?(?:申|もう)します|と[、,]?(?:言|い)います)/.test(normalized);
+  // 個人名の辞書は使わない。店舗を表す単語列の後ろに残った未知の日本語を
+  // 「名前らしい語」として取り出し、名乗り語尾が続くことを確認する。
+  const storeMatch = normalized.match(
+    /(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ|モビリヒロ|もびりひろ)/
+  );
+  if (!storeMatch || storeMatch.index === undefined) return false;
+
+  const afterStore = normalized.slice(storeMatch.index + storeMatch[0].length);
+  const endingMatch = afterStore.match(
+    /(?:と[、,]?(?:申|もう)します|で[、,]?ございます|と[、,]?(?:言|い)います|です)/
+  );
+  if (!endingMatch || endingMatch.index === undefined) return false;
+
+  let beforeEnding = afterStore.slice(0, endingMatch.index);
+  // 店舗側の単語は氏名候補から除外する。本別店の「店」省略と読点誤認も許容する。
+  beforeEnding = beforeEnding
+    .replace(/^(?:帯広|おびひろ)/, "")
+    .replace(/^本[、,]?別(?:店)?/, "")
+    .replace(/^[一-龯々ぁ-んァ-ヶー]{1,12}店(?=(?:の|、|,))/, "")
+    .replace(/^(?:の|、|,)+/, "");
+
+  const nameLikeWord = beforeEnding.replace(/[、,]/g, "");
+  return /^[一-龯々ぁ-んァ-ヶー]{1,12}$/.test(nameLikeWord)
+    && !/^(?:帯広|本別|本別店|店舗|店|担当者|スタッフ|営業|サービス|受付)$/.test(nameLikeWord);
 }
 
 function hasInspectionDocumentGuidance(text) {
