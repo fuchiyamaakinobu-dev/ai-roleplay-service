@@ -1404,6 +1404,14 @@ function asksInspectionAdditionalServiceFollowUp(text) {
   return asksAboutOtherWork && hasServiceContext;
 }
 
+function asksInspectionForCustomerQuestions(text) {
+  const normalized = normalizeScriptedText(text);
+  if (!isScriptedQuestion(normalized)) return false;
+  const hasQuestionTopic = /(?:不明点|ご不明|分からない点|わからない点|ご質問|質問)/.test(normalized);
+  const asksWhetherAnyExist = /(?:ございます|あります|ありませんか|ないでしょうか)/.test(normalized);
+  return hasQuestionTopic && asksWhetherAnyExist;
+}
+
 function analyzeStaff(text) {
   // 音声認識が主要語をひらがなで返した場合も、表示文を変更せず判定だけをそろえる。
   const normalized = normalizeScriptedText(text);
@@ -3358,6 +3366,18 @@ function handleScriptedStaffReply(text) {
       audioId: "inspection_booking_invitation_accept_customer"
     });
     els.speechNote.textContent = "代車の利用希望を記憶しました。代車を用意できることを案内してください。";
+    renderProgress();
+    return;
+  }
+
+  // 「不明点等はございますか」は採点工程の質問ではなく、お客様側の質問有無確認。
+  // 単独の「はい。」で質問があるような矛盾を作らず、現在工程を保持して回答する。
+  if (asksInspectionForCustomerQuestions(text)) {
+    state.turn += 1;
+    addMessage("customer", "そのほかは大丈夫です。", {
+      audioId: "inspection_additional_service_none_customer"
+    });
+    els.speechNote.textContent = "お客様からの不明点はありません。現在の会話位置から続けてください。";
     renderProgress();
     return;
   }

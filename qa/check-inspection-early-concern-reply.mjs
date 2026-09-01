@@ -49,6 +49,22 @@ assert.equal(
   false,
   "店内待ちの質問を追加作業再確認として誤認識しています"
 );
+for (const phrase of [
+  "不明点等はございますでしょうか？",
+  "何かご不明な点はございますか？",
+  "ほかにご質問はありませんか？"
+]) {
+  assert.equal(
+    additionalFollowUpContext.asksInspectionForCustomerQuestions(phrase),
+    true,
+    `${phrase} をお客様の質問有無確認として認識できません`
+  );
+}
+assert.equal(
+  additionalFollowUpContext.asksInspectionForCustomerQuestions("不明点をご説明します。"),
+  false,
+  "質問ではない不明点の説明を質問有無確認として誤認識しています"
+);
 
 const concernStep = {
   key: "asked_vehicle_concerns",
@@ -142,6 +158,11 @@ const additionalServiceFollowUpBlock = appSource.slice(
 assert.match(additionalServiceFollowUpBlock, /そのほかは大丈夫です。/);
 assert.match(additionalServiceFollowUpBlock, /inspection_additional_service_none_customer/);
 assert.match(additionalServiceFollowUpBlock, /state\.scriptedPartialReplies\[step\.key\]/);
+assert.match(
+  appSource,
+  /asksInspectionForCustomerQuestions\(text\)[\s\S]*?addMessage\("customer", "そのほかは大丈夫です。"[\s\S]*?inspection_additional_service_none_customer/,
+  "不明点の有無確認へ『そのほかは大丈夫です。』と返す処理がありません"
+);
 assert.match(
   audioDbSource,
   /inspection_additional_service_none_customer",\s*"追加作業再確認・ほかはなし",\s*"そのほかは大丈夫です。"\]/,
