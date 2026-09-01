@@ -2264,6 +2264,17 @@ function hasInspectionBookingInvitation(text) {
     || /(?:ご)?予約.{0,12}いかが/.test(normalized);
 }
 
+function hasInspectionAvailabilityRequest(text) {
+  const normalized = normalizeScriptedText(text);
+  if (hasInspectionBookingInvitation(normalized)) return true;
+
+  // 「ご都合の良い日を教えていただければと思います」のように、
+  // 疑問形ではなく依頼形で希望日を尋ねる自然な電話表現も都合確認とする。
+  const hasAvailabilityContext = /(?:ご)?都合|(?:ご)?予定|希望(?:日|日時)|日程/.test(normalized);
+  const requestsCustomerChoice = /(?:いかが|よろしい|教えて|お聞かせ|伺え|お知らせ|ご提示|いただければ|お願い(?:いた)?します)/.test(normalized);
+  return hasAvailabilityContext && requestsCustomerChoice;
+}
+
 function hasDirectInspectionBookingInvitation(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
@@ -2483,7 +2494,7 @@ function isInspectionGuidancePrefaceOrIncompleteFragment(text) {
   return /(?:当日の)?(?:持ち物|お願い).{0,18}(?:確認|説明)させてください/.test(normalized)
     || /(?:恐れ入りますが)?当日お持ち(?:ください)?[。.!！]*$/.test(normalized)
     || /(?:それから|また)?受付に[。.!！]*$/.test(normalized)
-    || /^(?:それから|また|続いて)[。.!！]*$/.test(normalized);
+    || /^(?:それから|それと(?:もし)?|また|続いて)[。.!！]*$/.test(normalized);
 }
 
 function isInspectionAcknowledgementOnlyAfterAppointment(text) {
@@ -2612,7 +2623,7 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   if (matchedGroups.every((matches) => matches.length > 0)) return true;
 
   if (step.key === "asked_availability") {
-    return hasInspectionBookingInvitation(normalized);
+    return hasInspectionAvailabilityRequest(normalized);
   }
 
   if (step.key !== "explained_inspection_notice") return false;
@@ -2782,7 +2793,7 @@ function scriptedStepSpecificMatches(normalized, step) {
   }
 
   if (step.key === "asked_availability") {
-    return isScriptedQuestion(normalized);
+    return hasInspectionAvailabilityRequest(normalized);
   }
 
   if (step.key === "confirmed_booking_time") {
@@ -2824,9 +2835,9 @@ function hasCourtesyExpression(text) {
   const hasThanks = /(?:ありがとう|感謝)/.test(normalized);
   const hasDirectPatronage = /(?:ご利用|ご愛顧)/.test(normalized);
   const hasAlwaysThanks = normalized.includes("いつも") && hasThanks;
-  const hasEstablishedGreeting = /お世話になって(?:おります|います)/.test(normalized);
+  const hasEstablishedGreeting = /お世話になって(?:おります|います|ます)/.test(normalized);
   const hasOngoingRelationship = /(?:日頃|いつも|平素)/.test(normalized)
-    && /お世話にな(?:って(?:おります|います)|り(?:まして)?)/.test(normalized);
+    && /お世話にな(?:って(?:おります|います|ます)|り(?:まして)?)/.test(normalized);
   return hasAlwaysThanks
     || hasEstablishedGreeting
     || (hasThanks && (hasDirectPatronage || hasOngoingRelationship));
@@ -3510,12 +3521,21 @@ function handleScriptedStaffReply(text) {
     && !scriptedStepMatches(text, splitGuidanceStep)
   ) {
     els.speechNote.textContent = splitGuidanceKey === "explained_documents"
-      ? "持参物の案内を記憶しています。AI音声を挟まず、必要書類と空荷の案内を続けてください。"
+      ? "持参物の案内を記憶しています。必要書類と空荷の案内を続けてください。"
       : splitGuidanceKey === "explained_lock_and_arrival"
-        ? "ロックナット用具または早めの来店案内を記憶しています。AI音声を挟まず案内を続けてください。"
-        : "3日前の確認連絡を記憶しています。AI音声を挟まず、連絡先の確認を続けてください。";
+        ? "ロックナット用具または早めの来店案内を記憶しています。案内を続けてください。"
+        : "3日前の確認連絡を記憶しています。連絡先の確認を続けてください。";
     renderProgress();
-    continueSpeechInputWithoutCustomerReply("音声入力中です。案内の続きを話してください。");
+    // 言いかけには割り込まないが、完結した案内を複数回に分けた場合は
+    // 採点対象外の短いあいづちを返し、MP3終了後にマイクを確実に再開する。
+    if (isInspectionGuidancePrefaceOrIncompleteFragment(text)) {
+      continueSpeechInputWithoutCustomerReply("音声入力中です。案内の続きを話してください。");
+      return;
+    }
+    state.turn += 1;
+    addMessage("customer", "はい。", {
+      audioId: "inspection_thanked_customer_retry"
+    });
     return;
   }
 
@@ -4171,6 +4191,92 @@ function scoreRoleplay() {
   };
 }
 
+function inspectionConversationMetricAchieved(metricKey) {
+  const transcript = Array.isArray(state.transcript) ? state.transcript : [];
+  const staffUtterances = transcript
+    .filter((message) => message.role === "staff")
+    .map((message) => normalizeScriptedText(message.text))
+    .filter(Boolean);
+  const customerEvidence = normalizeScriptedText(
+    transcript
+      .filter((message) => message.role === "customer")
+      .map((message) => message.text)
+      .join(" ")
+  );
+  const staffEvidence = staffUtterances.join(" ");
+  const customerRequestedLoaner = state.inspectionLoanerRequested
+    || /(?:代車|代わりのお車|代替車).{0,24}(?:用意|準備|手配|お願い|できますか)/.test(customerEvidence);
+  const loanerWasConfirmed = transcript.some((message, index) => {
+    if (message.role !== "staff") return false;
+    if (hasInspectionLoanerConfirmation(message.text)) return true;
+    const previous = transcript[index - 1];
+    const previousWasLoanerRequest = previous?.role === "customer"
+      && /(?:代車|代わりのお車|代替車).{0,24}(?:用意|準備|手配|お願い|できますか)/.test(
+        normalizeScriptedText(previous.text)
+      );
+    return previousWasLoanerRequest
+      && hasInspectionLoanerConfirmation(message.text, true);
+  });
+
+  // 最終採点は会話の順番ではなく、「確認したか・説明したか」を会話全体で判定する。
+  // 質問であることが必要な項目は個々の発話で確認し、説明項目だけを発話間で合算する。
+  if (metricKey === "introduced_self") {
+    return staffUtterances.some((text) => hasInspectionSelfIntroduction(text));
+  }
+  if (metricKey === "thanked_customer") {
+    return staffUtterances.some((text) => hasCourtesyExpression(text));
+  }
+  if (metricKey === "explained_inspection_notice") {
+    const vehicleName = normalizeScriptedText(scenario.vehicleName || "");
+    const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+    return Boolean(vehicleName && expiryDate)
+      && staffEvidence.includes(vehicleName)
+      && staffEvidence.includes("車検")
+      && staffEvidence.includes(expiryDate);
+  }
+  if (metricKey === "asked_availability") {
+    return staffUtterances.some((text) => hasInspectionAvailabilityRequest(text));
+  }
+  if (metricKey === "explained_available_period") {
+    const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+    return Boolean(expiryDate) && staffEvidence.includes(expiryDate);
+  }
+  if (metricKey === "explained_duration_and_wait") {
+    const mileageWasAsked = state.inspectionMileageAsked
+      || staffUtterances.some((text) => asksCurrentMileage(text));
+    return mileageWasAsked
+      && hasSupportedInspectionDuration(staffEvidence)
+      && /(?:待|店内)/.test(staffEvidence);
+  }
+  if (metricKey === "explained_loaner") {
+    return customerRequestedLoaner && loanerWasConfirmed;
+  }
+  if (metricKey === "confirmed_waiting") {
+    return staffUtterances.some((text) =>
+      asksInspectionWaitingMethodConfirmation(text)
+      || hasInspectionWaitingChoiceOffer(text)
+    ) || (customerRequestedLoaner && loanerWasConfirmed);
+  }
+  if (metricKey === "asked_vehicle_concerns") {
+    return staffUtterances.some((text) => asksInspectionVehicleConcerns(text));
+  }
+  if (metricKey === "explained_documents") {
+    return hasInspectionDocumentGuidance(staffEvidence);
+  }
+  if (metricKey === "explained_lock_and_arrival") {
+    const hasArrivalLeadTime = /(?:10分|十分|15分|十五分)/.test(staffEvidence)
+      && /(?:早め|前)/.test(staffEvidence);
+    return hasLockNutToolExpression(staffEvidence) && hasArrivalLeadTime;
+  }
+  if (metricKey === "confirmed_reminder_contact") {
+    return hasInspectionReminderContactConfirmation("");
+  }
+  if (metricKey === "closed_politely") {
+    return staffUtterances.some((text) => isInspectionFinalClosingThanks(text));
+  }
+  return false;
+}
+
 function scoreScriptedRoleplay() {
   const notApplicableKeys = new Set(
     state.analyses
@@ -4185,13 +4291,16 @@ function scoreScriptedRoleplay() {
   );
   const achieved = {};
   scenario.scoring.forEach((metric) => {
-    achieved[metric.key] = state.analyses.some((analysis) => analysis[metric.key] === true);
+    achieved[metric.key] = state.analyses.some((analysis) => analysis[metric.key] === true)
+      || (typeof inspectionConversationMetricAchieved === "function"
+        && inspectionConversationMetricAchieved(metric.key));
   });
 
   const retryCount = state.analyses.filter((analysis) =>
     analysis.scripted
     && analysis.blocked
     && analysis.noClarificationDeduction !== true
+    && !achieved[analysis.stepKey]
     && !optionalAfterAppointmentKeys.has(analysis.stepKey)
   ).length;
   const earnedPoints = applicableScoring.reduce(

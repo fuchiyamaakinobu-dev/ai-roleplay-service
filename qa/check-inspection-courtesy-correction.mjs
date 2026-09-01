@@ -21,7 +21,8 @@ for (const text of [
   "ご愛顧いただき感謝しております。",
   "いつもありがとうございます。",
   "お世話になっております。",
-  "お世話になっています。"
+  "お世話になっています。",
+  "いつもお世話になってます。"
 ]) {
   assert.equal(courtesyContext.hasCourtesyExpression(text), true, `日頃のお礼として判定できません: ${text}`);
 }

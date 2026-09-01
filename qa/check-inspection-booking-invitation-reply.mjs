@@ -85,6 +85,21 @@ assert.equal(
   "代車予約の質問を入庫予約提案として誤認識しています"
 );
 assert.equal(
+  context.hasInspectionAvailabilityRequest("佐藤様のご都合の良い日を教えていただければと思います。"),
+  true,
+  "疑問形でない自然な希望日依頼を都合確認として認識できません"
+);
+assert.equal(
+  context.hasInspectionAvailabilityRequest("ご都合はいかがでしょうか？"),
+  true,
+  "通常の都合確認を達成判定へ接続できません"
+);
+assert.equal(
+  context.hasInspectionAvailabilityRequest("ご都合のご案内です。"),
+  false,
+  "希望日を求めていない説明を都合確認として誤認識しています"
+);
+assert.equal(
   context.hasDirectInspectionBookingInvitation("よろしければこのお電話でご予約できますが、いかがでしょうか？"),
   true,
   "この電話での直接予約提案を認識できません"
