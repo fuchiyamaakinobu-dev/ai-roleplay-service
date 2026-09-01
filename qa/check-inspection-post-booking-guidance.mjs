@@ -146,8 +146,13 @@ assert.match(
 );
 assert.match(
   appSource,
-  /splitGuidanceStep[\s\S]*?addMessage\("customer", "はい。",[\s\S]*?inspection_thanked_customer_retry/,
-  "完結した分割案内へ採点対象外のあいづちを返す処理がありません"
+  /splitGuidanceStep[\s\S]*?addMessage\("customer", "分かりました。",[\s\S]*?inspection_explained_lock_and_arrival_customer/,
+  "完結した分割案内へ『分かりました。』のあいづちを返す処理がありません"
+);
+assert.match(
+  appSource,
+  /\["explained_documents", "explained_lock_and_arrival"\]\.includes\(responseStep\.key\)[\s\S]*?text: "分かりました。"[\s\S]*?inspection_explained_lock_and_arrival_customer/,
+  "予約後案内を一度に完了した場合も『分かりました。』を返せません"
 );
 assert.match(
   appSource,

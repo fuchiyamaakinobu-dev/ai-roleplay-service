@@ -3539,7 +3539,7 @@ function handleScriptedStaffReply(text) {
   }
 
   // 持参書類と空荷、ロックナット用具と早めの来店は、実際の電話では
-  // 複数の発話に分かれる。途中の「はい」を挟んでも現在工程を失わず、
+  // 複数の発話に分かれる。途中の相づちを挟んでも現在工程を失わず、
   // 会話全体のスタッフ発話がそろった時点で達成判定する。
   const splitGuidanceKey = state.proposedAppointment
     ? inspectionSplitGuidanceFragmentKey(text)
@@ -3561,14 +3561,14 @@ function handleScriptedStaffReply(text) {
         : "3日前の確認連絡を記憶しています。連絡先の確認を続けてください。";
     renderProgress();
     // 言いかけには割り込まないが、完結した案内を複数回に分けた場合は
-    // 採点対象外の短いあいづちを返し、MP3終了後にマイクを確実に再開する。
+    // 採点対象外の「分かりました。」を返し、MP3終了後にマイクを確実に再開する。
     if (isInspectionGuidancePrefaceOrIncompleteFragment(text)) {
       continueSpeechInputWithoutCustomerReply("音声入力中です。案内の続きを話してください。");
       return;
     }
     state.turn += 1;
-    addMessage("customer", "はい。", {
-      audioId: "inspection_thanked_customer_retry"
+    addMessage("customer", "分かりました。", {
+      audioId: "inspection_explained_lock_and_arrival_customer"
     });
     return;
   }
@@ -4053,6 +4053,15 @@ function handleScriptedStaffReply(text) {
     customerResponseOverride = {
       text: "オイル交換もお願いしたいです。",
       audioId: "inspection_asked_vehicle_concerns_customer"
+    };
+  }
+  if (
+    !customerResponseOverride
+    && ["explained_documents", "explained_lock_and_arrival"].includes(responseStep.key)
+  ) {
+    customerResponseOverride = {
+      text: "分かりました。",
+      audioId: "inspection_explained_lock_and_arrival_customer"
     };
   }
   addMessage("customer", customerResponseOverride?.text
