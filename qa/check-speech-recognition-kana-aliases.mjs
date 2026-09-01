@@ -15,6 +15,7 @@ vm.runInContext(appSource.slice(helperStart, helperEnd), context);
 const cases = [
   ["さとうさまでしょうか", "佐藤さまでしょうか"],
   ["私、豊田モビリティ帯広の渕山と申します", "私、トヨタモビリティ帯広の渕山と申します"],
+  ["わたくしトヨタとモビリティ帯広本別店の寺屋と申します", "わたくしトヨタモビリティ帯広本別店の寺屋と申します"],
   ["とよたもびりてぃおびひろのふちやまともうします", "トヨタモビリティ帯広の渕山ともうします"],
   ["やりすのしゃけんがくがつさんじゅうにちまでです", "ヤリスの車検が9月30日までです"],
   ["やりすのしゃけんがくがつの30日までです", "ヤリスの車検が9月30日までです"],
@@ -41,6 +42,15 @@ for (const [spoken, expected] of cases) {
     `${spoken} のひらがな表記を判定用に補正できません`
   );
 }
+
+const introductionStart = appSource.indexOf("function hasInspectionSelfIntroduction");
+const introductionEnd = appSource.indexOf("function hasInspectionDocumentGuidance", introductionStart);
+vm.runInContext(appSource.slice(introductionStart, introductionEnd), context);
+assert.equal(
+  context.hasInspectionSelfIntroduction("わたくしトヨタとモビリティ帯広本別店の寺屋と申します"),
+  true,
+  "余分な『と』を含む店舗名と任意の担当者名を名乗りとして認識できません"
+);
 
 assert.equal(
   context.normalizeScriptedText("ごじつれんらくします"),
