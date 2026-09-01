@@ -35,7 +35,8 @@ vm.runInContext(
 for (const phrase of [
   "その他の追加作業はございますでしょうか？",
   "その他何か、追加する整備などはございますでしょうか？",
-  "そのほかに整備しておくことはありますか？"
+  "そのほかに整備しておくことはありますか？",
+  "かしこまりました。その他、気になるところはございませんでしょうか？"
 ]) {
   assert.equal(
     additionalFollowUpContext.asksInspectionAdditionalServiceFollowUp(phrase),

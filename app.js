@@ -1398,7 +1398,9 @@ function asksInspectionAdditionalServiceFollowUp(text) {
   const asksAboutOtherWork = /(?:その他|そのほか|ほかに|他に|追加)/.test(normalized);
   // 「追加整備」だけでなく、音声会話で自然に挟まれる
   // 「追加する整備」「ほかに整備」なども同じ再確認として扱う。
-  const hasServiceContext = /(?:追加作業|追加整備|ご用命|オイル交換|作業|整備)/.test(normalized);
+  // オイル交換を受け付けた直後は「その他、気になるところはございませんか」も
+  // 残る要望の再確認であるため、車両状態の語を含む言い換えも同じ扱いにする。
+  const hasServiceContext = /(?:追加作業|追加整備|ご用命|オイル交換|作業|整備|気になる|不具合|不都合|調子|具合|症状|見てほしい)/.test(normalized);
   return asksAboutOtherWork && hasServiceContext;
 }
 
@@ -2099,7 +2101,7 @@ function normalizeScriptedText(text) {
     [/ごつごう/g, "ご都合"], [/つごう/g, "都合"], [/よてい/g, "予定"],
     [/にってい/g, "日程"], [/(?:よやく|ご役)/g, "予約"], [/てつづき/g, "手続き"],
     [/ごきぼう/g, "ご希望"], [/きぼう/g, "希望"], [/ひにち/g, "日にち"],
-    [/そうこうきょり/g, "走行距離"], [/きょりすう/g, "距離数"], [/なんきろ/g, "何キロ"],
+    [/そうこうきょり/g, "走行距離"], [/きょりすう/g, "距離数"], [/(?:キュリー|きゅりー)/g, "距離"], [/なんきろ/g, "何キロ"],
     [/おいるこうかん/g, "オイル交換"], [/ついかせいび/g, "追加整備"], [/ごようめい/g, "ご用命"],
     [/てんない/g, "店内"], [/おはやめ/g, "お早め"], [/はやめ/g, "早め"], [/ようい/g, "用意"],
     [/じゅんび/g, "準備"], [/てはい/g, "手配"], [/いらい/g, "依頼"],
@@ -2224,7 +2226,7 @@ function hasLockNutToolExpression(text) {
 function asksCurrentMileage(text) {
   const normalized = normalizeScriptedText(text).toLowerCase();
   if (!isScriptedQuestion(normalized)) return false;
-  return /(?:走行距離|距離数|何(?:キロ|km))/.test(normalized);
+  return /(?:走行距離|距離数|何(?:キロ|km)|距離.{0,12}(?:乗|走))/.test(normalized);
 }
 
 function hasBookingContinuationConfirmation(text) {
