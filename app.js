@@ -2264,6 +2264,15 @@ function hasInspectionBookingInvitation(text) {
     || /(?:ご)?予約.{0,12}いかが/.test(normalized);
 }
 
+function asksInspectionVisitAttendance(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasVisitContext = /(?:ご)?来店/.test(normalized);
+  const asksWhetherCustomerCanVisit = /(?:いただけます|いただける|できます|可能|大丈夫|よろしい)/.test(normalized);
+  return hasVisitContext
+    && asksWhetherCustomerCanVisit
+    && isScriptedQuestion(normalized);
+}
+
 function hasInspectionAvailabilityRequest(text) {
   const normalized = normalizeScriptedText(text);
   if (hasInspectionBookingInvitation(normalized)) return true;
@@ -3536,6 +3545,23 @@ function handleScriptedStaffReply(text) {
     addMessage("customer", "はい。", {
       audioId: "inspection_thanked_customer_retry"
     });
+    return;
+  }
+
+  // 作業時間に続く「ご来店いただけますか」は、来店可否の確認であり、
+  // 店内で待つかの確認ではない。「はい」だけで通過せず、待ち方だけを尋ねる。
+  if (
+    hasSupportedInspectionDuration(text)
+    && asksInspectionVisitAttendance(text)
+    && !/(?:待|店内)/.test(normalizeScriptedText(text))
+  ) {
+    state.inspectionWaitingRequested = true;
+    state.turn += 1;
+    addMessage("customer", "お店で待つことはできますか？", {
+      audioId: "inspection_duration_wait_missing_retry"
+    });
+    els.speechNote.textContent = "作業時間は確認しました。続けて、店内で待てるかをご案内ください。";
+    renderProgress();
     return;
   }
 
