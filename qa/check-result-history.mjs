@@ -43,6 +43,26 @@ assert.match(storeSource, /collection\(db, "roleplayActivity"\)/);
 assert.match(storeSource, /collection\(db, "roleplayResults"\)/);
 assert.match(storeSource, /employeeCode: cleanText\(payload\.employeeCode, 6\)/);
 assert.match(storeSource, /serverTimestamp\(\)/);
+assert.match(storeSource, /text: maskPhoneNumbers\(message\.text\)/);
+
+const maskStart = storeSource.indexOf("function cleanText(");
+const maskEnd = storeSource.indexOf("function cleanBase(", maskStart);
+const maskContext = {};
+vm.createContext(maskContext);
+vm.runInContext(`${storeSource.slice(maskStart, maskEnd)}\nthis.maskPhoneNumbers = maskPhoneNumbers;`, maskContext);
+assert.equal(
+  maskContext.maskPhoneNumbers("連絡先は08060927403です。"),
+  "連絡先は[電話番号をマスキング]です。"
+);
+assert.equal(
+  maskContext.maskPhoneNumbers("0155-12-3456へお願いします。"),
+  "[電話番号をマスキング]へお願いします。"
+);
+assert.equal(
+  maskContext.maskPhoneNumbers("予約は9月5日10時30分です。"),
+  "予約は9月5日10時30分です。",
+  "予約日時を電話番号として誤って伏せています"
+);
 assert.match(historySource, /ADMIN_EMAIL = "fuchiyama\.akinobu@gmail\.com"/);
 assert.match(historySource, /const HISTORY_LIMIT = 500/);
 assert.match(historySource, /snapshot\.docs\.slice\(HISTORY_LIMIT\)/);

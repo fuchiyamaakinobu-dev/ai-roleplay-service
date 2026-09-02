@@ -48,8 +48,10 @@ const state = {
   inspectionDurationQuestionAsked: false,
   inspectionDurationProgressionPending: false,
   inspectionWaitingRequested: false,
+  inspectionWaitingMethod: null,
   inspectionLoanerRequested: false,
   inspectionLoanerConfirmed: false,
+  inspectionClosingPending: false,
   inspectionButtonChecks: {},
   usedVariants: {},
   questionRepeats: {},
@@ -336,8 +338,10 @@ function selectScenario(scenarioId) {
   state.inspectionDurationQuestionAsked = false;
   state.inspectionDurationProgressionPending = false;
   state.inspectionWaitingRequested = false;
+  state.inspectionWaitingMethod = null;
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
+  state.inspectionClosingPending = false;
   state.inspectionButtonChecks = {};
   state.usedVariants = {};
   state.questionRepeats = {};
@@ -1189,7 +1193,11 @@ function looksLikeCompleteJapaneseSentence(text) {
   if (completeShortReplies.includes(normalized)) return true;
   if (hasTrailingServiceInquiry(normalized)) return true;
   if (normalized.length < 5) return false;
-  return /(?:です|ます|ました|ません|でしょう|ください|お願いします|と思います|できます|できません|出来ます|出来ません|伺います|行きます|します|ですか|ますか|でしょうか|[。！？!?])$/.test(normalized);
+  if (/[！？!?]$/.test(normalized)) return true;
+  if (/\d{1,2}月\d{1,2}日.*\d{1,2}時/.test(withoutTrailingPunctuation)) return true;
+  // 句点が付いただけの意味不明な断片を完成発話とみなさない。
+  // 文法的な終止表現がある場合だけ自動送信し、列挙途中や誤認識は続きを待つ。
+  return /(?:です|ございます|ます|ました|ません|でしょう|ください|お願いします|と思います|できます|できません|出来ます|出来ません|伺います|行きます|します|ですか|ますか|でしょうか)$/.test(withoutTrailingPunctuation);
 }
 
 function startRoleplay() {
@@ -1244,8 +1252,10 @@ function startRoleplay() {
   state.inspectionDurationQuestionAsked = false;
   state.inspectionDurationProgressionPending = false;
   state.inspectionWaitingRequested = false;
+  state.inspectionWaitingMethod = null;
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
+  state.inspectionClosingPending = false;
   state.inspectionButtonChecks = {};
   state.usedVariants = {};
   state.questionRepeats = {};
@@ -2558,6 +2568,37 @@ function asksInspectionAvailabilityAgainAfterAppointment(text) {
     && !hasInspectionAppointmentProposalEvidence(normalized);
 }
 
+function confirmedInspectionAppointmentMatches(text) {
+  const appointment = state.proposedAppointment;
+  if (!appointment) return false;
+  const match = inspectionAppointmentProposalMatch(normalizeScriptedText(text));
+  return Boolean(
+    match
+    && match.month === appointment.month
+    && match.day === appointment.day
+    && match.hour === appointment.hour
+    && Number(match.minute || 0) === Number(appointment.minute || 0)
+  );
+}
+
+function repeatedInspectionCoreStepAfterAppointment(text) {
+  if (!state.proposedAppointment) return null;
+  const appointmentStepIndex = scenario.steps.findIndex((candidate) => candidate.key === "proposed_appointment");
+  if (appointmentStepIndex < 0) return null;
+  const coreKeys = new Set([
+    "confirmed_identity",
+    "introduced_self",
+    "thanked_customer",
+    "explained_inspection_notice",
+    "asked_availability"
+  ]);
+  return scenario.steps.slice(0, appointmentStepIndex).find((candidate) =>
+    coreKeys.has(candidate.key)
+    && state.analyses.some((analysis) => analysis.stepKey === candidate.key && analysis.passed)
+    && scriptedStepMatches(text, candidate)
+  ) || null;
+}
+
 function hasInspectionReminderContactConfirmation(text) {
   const current = normalizeScriptedText(text);
   const conversationEvidence = inspectionStaffConversationEvidence(
@@ -2759,6 +2800,7 @@ function analyzeScriptedStaff(text, step) {
     )
   ) {
     state.inspectionLoanerConfirmed = true;
+    state.inspectionWaitingMethod = state.inspectionWaitingMethod || "loaner";
   }
   if (typeof renderConversation === "function") renderConversation();
   return analysis;
@@ -3332,14 +3374,11 @@ function handleScriptedStaffReply(text) {
     if (closingIndex >= 0) {
       state.scriptStep = closingIndex;
       state.currentState = scenario.steps[closingIndex].state;
+      state.inspectionClosingPending = true;
+      state.ended = false;
+      handleScriptedStaffReply(text);
+      return;
     }
-    state.ended = false;
-    state.turn += 1;
-    addMessage("customer", "はい。", {
-      audioId: "inspection_thanked_customer_retry"
-    });
-    els.speechNote.textContent = "最終の『ありがとうございました』までは会話を終了せず、音声入力を続けます。";
-    renderProgress();
     return;
   }
 
@@ -3365,8 +3404,17 @@ function handleScriptedStaffReply(text) {
 
   // 「代車は必要ですか」「代車はお使いになりますか」のように利用希望を
   // 直接尋ねられた場合は、「はい」ではなく明確に「お願いします。」と答える。
+  // 最初に店内待ちが確定済みなら、後から代車へ変更せず最初の待ち方を維持する。
   // この希望は会話状態へ保存し、後続の「ご用意します」で代車手配を確定する。
   if (asksInspectionLoanerNeed(text)) {
+    if (state.inspectionWaitingMethod === "store") {
+      state.turn += 1;
+      addMessage("customer", "代車は必要ありません。");
+      els.speechNote.textContent = "店内で待つことが確定済みです。最初に確認した待ち方を維持します。";
+      renderProgress();
+      return;
+    }
+    state.inspectionWaitingMethod = state.inspectionWaitingMethod || "loaner";
     state.inspectionLoanerRequested = true;
     const waitingStep = scenario.steps.find((candidate) => candidate.key === "confirmed_waiting");
     markScriptedStepPassed(waitingStep, "お客様が代車利用を希望");
@@ -3375,6 +3423,34 @@ function handleScriptedStaffReply(text) {
       audioId: "inspection_booking_invitation_accept_customer"
     });
     els.speechNote.textContent = "代車の利用希望を記憶しました。代車を用意できることを案内してください。";
+    renderProgress();
+    return;
+  }
+
+  // 代車利用が先に確定している場合、後から店内待ちを尋ねられても
+  // 両方を肯定せず、確定済みの代車希望を明確に返す。
+  if (
+    state.inspectionWaitingMethod === "loaner"
+    && asksInspectionWaitingMethodConfirmation(text)
+    && !asksInspectionLoanerNeed(text)
+  ) {
+    state.turn += 1;
+    addMessage("customer", "代車をお願いします。");
+    els.speechNote.textContent = "代車利用が確定済みです。店内待ちへ変更せず、現在の会話位置から続けてください。";
+    renderProgress();
+    return;
+  }
+
+  // 店内待ちが先に確定しているのに代車手配を案内された場合も、
+  // 曖昧に了承せず、不要であることを明確にして矛盾を防ぐ。
+  if (
+    state.inspectionWaitingMethod === "store"
+    && hasInspectionLoanerConfirmation(text)
+    && !asksInspectionVehicleConcerns(text)
+  ) {
+    state.turn += 1;
+    addMessage("customer", "代車は必要ありません。");
+    els.speechNote.textContent = "店内待ちが確定済みのため、代車手配は受け付けていません。";
     renderProgress();
     return;
   }
@@ -3419,6 +3495,27 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // 「3日前に確認連絡」まで説明したうえで、現在の携帯・電話番号を
+  // 連絡先としてよいか尋ねられた場合は、工程の位置にかかわらず明確に回答する。
+  if (hasInspectionReminderContactConfirmation(text)) {
+    const reminderStepIndex = scenario.steps.findIndex(
+      (candidate) => candidate.key === "confirmed_reminder_contact"
+    );
+    const reminderStep = scenario.steps[reminderStepIndex];
+    markScriptedStepPassed(reminderStep, text);
+    if (reminderStepIndex === state.scriptStep) {
+      state.scriptStep += 1;
+      state.currentState = scenario.steps[state.scriptStep]?.state || "CLOSING";
+    }
+    state.turn += 1;
+    addMessage("customer", "この携帯にお願いします。", {
+      audioId: "inspection_confirmed_reminder_contact_customer"
+    });
+    els.speechNote.textContent = "3日前の確認連絡は、現在おかけの携帯への連絡で確認しました。";
+    renderProgress();
+    return;
+  }
+
   // 予約を先に確定して作業時間工程を通過した後でも、会話全体に証拠が
   // そろえば走行距離・作業時間・店内待ちを採点へ回収する。
   const durationStepIndex = scenario.steps.findIndex(
@@ -3432,6 +3529,35 @@ function handleScriptedStaffReply(text) {
     && scriptedStepMatches(text, durationStep)
   ) {
     markScriptedStepPassed(durationStep, text);
+  }
+
+  // 予約日時を確定した後に同じ日時を再提示されても、過去工程へ戻らず
+  // 確定済みの予約を維持する。異なる日時が提示された場合も自動変更しない。
+  if (
+    state.proposedAppointment
+    && hasInspectionAppointmentProposalEvidence(text)
+    && !hasScriptedAppointmentRecapEvidence(text)
+  ) {
+    const sameAppointment = confirmedInspectionAppointmentMatches(text);
+    state.turn += 1;
+    addMessage("customer", sameAppointment
+      ? "では、その日でお願いします。"
+      : "予約は先ほどの日時でお願いします。", sameAppointment
+      ? { audioId: "inspection_proposed_appointment_customer" }
+      : {});
+    els.speechNote.textContent = "予約日時は確定済みです。前の工程へ戻らず、当日の案内へ進めてください。";
+    renderProgress();
+    return;
+  }
+
+  // 予約確定後、すでに達成済みの本人確認・名乗り・用件案内を再度話しても、
+  // AIお客様は新しい会話として応答しない。採点済みの証拠は保持し、マイクだけ再開する。
+  const repeatedCoreStep = repeatedInspectionCoreStepAfterAppointment(text);
+  if (repeatedCoreStep) {
+    els.speechNote.textContent = "予約確定前の確認項目は達成済みです。前工程へ戻らず、会話の続きを話してください。";
+    renderProgress();
+    continueSpeechInputWithoutCustomerReply("音声入力中です。予約後の案内を続けてください。");
+    return;
   }
 
   // 名乗りを先に済ませた後で本人確認へ戻るなど、冒頭2項目の順序が入れ替わっても
@@ -3743,6 +3869,9 @@ function handleScriptedStaffReply(text) {
 
   const closingIntent = hasScriptedClosingIntent(text);
   const closingIndex = scenario.steps.findIndex((item) => item.key === "closed_politely");
+  if (closingIntent && state.proposedAppointment && !isInspectionFinalClosingThanks(text)) {
+    state.inspectionClosingPending = true;
+  }
 
   if (closingIntent && !state.proposedAppointment) {
     const analysis = {
@@ -4009,6 +4138,8 @@ function handleScriptedStaffReply(text) {
         text: "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？",
         audioId: "inspection_waiting_followup_loaner_request"
       };
+      state.inspectionWaitingMethod = state.inspectionWaitingMethod || "loaner";
+      state.inspectionLoanerRequested = true;
     } else if (hasInspectionWaitingChoiceOffer(combinedText)) {
       markScriptedStepNotApplicable(waitingBranchLoanerStep, "スタッフが店内待ちを提案");
       responseStep = waitingBranchLoanerStep;
@@ -4124,10 +4255,20 @@ function handleScriptedStaffReply(text) {
       audioId: "inspection_explained_lock_and_arrival_customer"
     };
   }
-  addMessage("customer", customerResponseOverride?.text
+  const finalCustomerResponseText = customerResponseOverride?.text
     || (skippedIdentity
       ? "どちら様でしょうか？"
-      : useAdvanceRetry ? step.retryResponse : responseStep.customerResponse), {
+      : useAdvanceRetry ? step.retryResponse : responseStep.customerResponse);
+  if (!state.inspectionWaitingMethod && finalCustomerResponseText === "待っています。") {
+    state.inspectionWaitingMethod = "store";
+  }
+  if (
+    !state.inspectionWaitingMethod
+    && /(?:代車|代わりのお車)/.test(finalCustomerResponseText)
+  ) {
+    state.inspectionWaitingMethod = "loaner";
+  }
+  addMessage("customer", finalCustomerResponseText, {
     audioId: customerResponseOverride?.audioId
       || (skippedIdentity
         ? "inspection_introduced_self_retry"
@@ -4340,6 +4481,13 @@ function inspectionConversationMetricAchieved(metricKey) {
 
   // 最終採点は会話の順番ではなく、「確認したか・説明したか」を会話全体で判定する。
   // 質問であることが必要な項目は個々の発話で確認し、説明項目だけを発話間で合算する。
+  if (metricKey === "confirmed_identity") {
+    const customerName = normalizeScriptedText(scenario.customerName || "").replace(/様$/, "");
+    return Boolean(customerName) && staffUtterances.some((text) =>
+      text.includes(customerName)
+      && /(?:でしょうか|ですか|お電話|お宅|本人)/.test(text)
+    );
+  }
   if (metricKey === "introduced_self") {
     return staffUtterances.some((text) => hasInspectionSelfIntroduction(text));
   }
@@ -4371,6 +4519,15 @@ function inspectionConversationMetricAchieved(metricKey) {
   if (metricKey === "explained_loaner") {
     return customerRequestedLoaner && loanerWasConfirmed;
   }
+  if (metricKey === "confirmed_booking_time") {
+    return staffUtterances.some((text) => hasExplicitBookingContinuationConfirmation(text));
+  }
+  if (metricKey === "proposed_appointment") {
+    return staffUtterances.some((text) =>
+      hasInspectionAppointmentProposalEvidence(text)
+      && Boolean(inspectionAppointmentProposalMatch(text))
+    );
+  }
   if (metricKey === "confirmed_waiting") {
     return staffUtterances.some((text) =>
       asksInspectionWaitingMethodConfirmation(text)
@@ -4390,6 +4547,9 @@ function inspectionConversationMetricAchieved(metricKey) {
   }
   if (metricKey === "confirmed_reminder_contact") {
     return hasInspectionReminderContactConfirmation("");
+  }
+  if (metricKey === "recapped_appointment") {
+    return staffUtterances.some((text) => hasScriptedAppointmentRecapEvidence(text));
   }
   if (metricKey === "closed_politely") {
     return staffUtterances.some((text) => isInspectionFinalClosingThanks(text));

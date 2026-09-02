@@ -38,7 +38,10 @@ vm.runInContext(source.slice(completionStart, completionEnd), context);
 for (const phrase of [
   "お使いのヤリスが。",
   "それともし。",
-  "当日は車検証をお持ちいただきますが。"
+  "当日は車検証をお持ちいただきますが。",
+  "あや。いいしゃ。みつい",
+  "あや。いいしゃ。みつい。",
+  "車検証、自賠責保険証券。"
 ]) {
   assert.equal(
     context.looksLikeCompleteJapaneseSentence(phrase),

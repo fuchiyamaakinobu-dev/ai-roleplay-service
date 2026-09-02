@@ -17,6 +17,7 @@ const normalize = (text) => String(text || "")
 const context = {
   state: { transcript: [], analyses: [], inspectionLoanerRequested: false, inspectionMileageAsked: false },
   scenario: {
+    customerName: "佐藤様",
     vehicleName: "ヤリス",
     expiryDate: "9月30日",
     steps: [],
@@ -39,6 +40,12 @@ const context = {
   hasInspectionDocumentGuidance: () => false,
   hasLockNutToolExpression: () => false,
   hasInspectionReminderContactConfirmation: () => false,
+  hasExplicitBookingContinuationConfirmation: (text) => /(?:予約|手続き).*(?:時間|よろしい|大丈夫)/.test(text),
+  inspectionAppointmentProposalMatch: (text) => /\d{1,2}月\d{1,2}日.*\d{1,2}時/.test(text)
+    ? { month: 9, day: 5, hour: 10, minute: 30 }
+    : null,
+  hasInspectionAppointmentProposalEvidence: (text) => /\d{1,2}月\d{1,2}日.*\d{1,2}時.*(?:いかが|どう)/.test(text),
+  hasScriptedAppointmentRecapEvidence: (text) => /佐藤.*\d{1,2}月\d{1,2}日.*\d{1,2}時/.test(text),
   isInspectionFinalClosingThanks: (text) => /ありがとうございました/.test(text)
 };
 vm.createContext(context);
@@ -56,6 +63,18 @@ context.state.transcript = [
 assert.equal(context.inspectionConversationMetricAchieved("asked_availability"), true);
 assert.equal(context.inspectionConversationMetricAchieved("explained_duration_and_wait"), true);
 assert.equal(context.inspectionConversationMetricAchieved("explained_loaner"), true);
+
+context.state.transcript = [
+  { role: "staff", text: "恐れ入ります。佐藤様のお電話でしょうか。" },
+  { role: "staff", text: "9月5日午前10時30分はいかがでしょうか。" },
+  { role: "customer", text: "では、その時間でお願いします。" },
+  { role: "staff", text: "このまま予約手続きを進めます。10分ほどお時間よろしいでしょうか。" },
+  { role: "staff", text: "佐藤様、9月5日午前10時30分にお待ちしております。" }
+];
+assert.equal(context.inspectionConversationMetricAchieved("confirmed_identity"), true);
+assert.equal(context.inspectionConversationMetricAchieved("proposed_appointment"), true);
+assert.equal(context.inspectionConversationMetricAchieved("confirmed_booking_time"), true);
+assert.equal(context.inspectionConversationMetricAchieved("recapped_appointment"), true);
 
 context.state.transcript = [
   { role: "staff", text: "本日は佐藤様がお乗りのヤリスの車検のご案内でお電話しました。" },

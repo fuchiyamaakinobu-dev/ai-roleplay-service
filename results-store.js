@@ -28,6 +28,12 @@ function cleanText(value, maximum = 1000) {
   return String(value || "").slice(0, maximum);
 }
 
+function maskPhoneNumbers(value) {
+  const text = cleanText(value, 1000);
+  const phonePattern = /(^|[^0-9])(?:0[0-9]{9,10}|0[0-9]{1,4}[-‐‑–—−ー][0-9]{1,4}[-‐‑–—−ー][0-9]{3,4})(?=$|[^0-9])/g;
+  return text.replace(phonePattern, (_match, prefix) => `${prefix}[電話番号をマスキング]`);
+}
+
 function cleanBase(payload) {
   return {
     employeeCode: cleanText(payload.employeeCode, 6),
@@ -67,7 +73,9 @@ async function saveResult(payload) {
       recommendedTalk: cleanText(payload.recommendedTalk, 3000),
       transcript: (payload.transcript || []).slice(0, 100).map((message) => ({
         role: cleanText(message.role, 20),
-        text: cleanText(message.text, 1000)
+        // 採点は画面内の原文で完了させ、外部履歴へ保存する直前だけ
+        // 10～11桁またはハイフン区切りの電話番号らしい文字列を伏せる。
+        text: maskPhoneNumbers(message.text)
       }))
     });
     notify("saved", "採点結果を履歴へ保存しました。");
