@@ -57,6 +57,13 @@ assert.equal(
   true,
   "具体的な日付の先行提案を認識できません"
 );
+assert.equal(
+  proposalContext.hasInspectionAppointmentProposalEvidence(
+    "佐藤様のヤリスは8月1日からできますので、9月の5日土曜日、よろしいですか？"
+  ),
+  true,
+  "『よろしいですか』で提示した具体的な日付を先行提案として認識できません"
+);
 const firstDayCandidates = proposalContext.inspectionAppointmentDateCandidates(
   "9月の一日はいかがでしょうか？"
 );

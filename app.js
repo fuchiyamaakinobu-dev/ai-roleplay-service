@@ -1412,6 +1412,15 @@ function asksInspectionForCustomerQuestions(text) {
   return hasQuestionTopic && asksWhetherAnyExist;
 }
 
+function asksInspectionCallTimingPermission(text) {
+  const normalized = normalizeScriptedText(text);
+  if (!isScriptedQuestion(normalized)) return false;
+  const hasCurrentCallContext = /(?:今|ただいま|現在).{0,10}(?:お?電話|お話)/.test(normalized)
+    || /(?:お?電話|お話).{0,10}(?:今|ただいま|現在)/.test(normalized);
+  const asksPermission = /(?:よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized);
+  return hasCurrentCallContext && asksPermission;
+}
+
 function analyzeStaff(text) {
   // 音声認識が主要語をひらがなで返した場合も、表示文を変更せず判定だけをそろえる。
   const normalized = normalizeScriptedText(text);
@@ -2164,7 +2173,7 @@ function asksInspectionWaitingMethodConfirmation(text) {
 function asksInspectionLoanerNeed(text) {
   const normalized = normalizeScriptedText(text);
   const hasLoanerContext = /(?:代車|代わりのお車|代わりの車|代替車)/.test(normalized);
-  const asksNeedOrUse = /(?:必要|使い|お使い|利用|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
+  const asksNeedOrUse = /(?:必要|使い|お使い|利用|あった方|あったほう|あれば|ある方|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
   const isChoiceQuestion = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized)
     || /(?:いかがいたしましょう|どうされます|どうします)/.test(normalized);
   return hasLoanerContext && asksNeedOrUse && isChoiceQuestion;
@@ -2309,7 +2318,7 @@ function hasInspectionAppointmentProposalEvidence(text) {
   const normalized = normalizeScriptedText(text);
   const hasConcreteDateOrTime = inspectionAppointmentDateCandidates(normalized).length > 0
     || /\d{1,2}時/.test(normalized);
-  const hasProposalContext = /(?:いかが|どうでしょう|空いて|空き|予約|予定)/.test(normalized);
+  const hasProposalContext = /(?:いかが|どうでしょう|よろしい|空いて|空き|予約|予定)/.test(normalized);
   return hasConcreteDateOrTime && hasProposalContext && isScriptedQuestion(normalized);
 }
 
@@ -4078,6 +4087,12 @@ function handleScriptedStaffReply(text) {
     customerResponseOverride = {
       text: "お願いしたいんですけど、いつできますか？",
       audioId: "inspection_asked_availability_customer"
+    };
+  }
+  if (!customerResponseOverride && asksInspectionCallTimingPermission(combinedText)) {
+    customerResponseOverride = {
+      text: "大丈夫ですよ。",
+      audioId: "inspection_confirmed_booking_time_customer"
     };
   }
   if (

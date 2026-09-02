@@ -204,4 +204,30 @@ assert.match(
   "標準シナリオに担当者名の名乗り語尾がそろっていません"
 );
 
+const callTimingStart = appSource.indexOf("function asksInspectionCallTimingPermission");
+const callTimingEnd = appSource.indexOf("function analyzeStaff", callTimingStart);
+assert.notEqual(callTimingStart, -1, "通話可否確認の判定が見つかりません");
+assert.notEqual(callTimingEnd, -1, "通話可否確認の判定終端が見つかりません");
+const callTimingContext = {
+  normalizeScriptedText: (text) => String(text || "").replace(/\s+/g, ""),
+  isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text)
+};
+vm.createContext(callTimingContext);
+vm.runInContext(appSource.slice(callTimingStart, callTimingEnd), callTimingContext);
+assert.equal(
+  callTimingContext.asksInspectionCallTimingPermission("今、お電話よろしかったですか？"),
+  true,
+  "現在の通話可否確認を認識できません"
+);
+assert.equal(
+  callTimingContext.asksInspectionCallTimingPermission("このまま予約を進めてもよろしいでしょうか？"),
+  false,
+  "予約手続き確認を現在の通話可否確認として誤認識しています"
+);
+assert.match(
+  appSource,
+  /asksInspectionCallTimingPermission\(combinedText\)[\s\S]*?text: "大丈夫ですよ。"[\s\S]*?inspection_confirmed_booking_time_customer/,
+  "名乗り・お礼と同時の通話可否確認へ『大丈夫ですよ。』と回答できません"
+);
+
 console.log("携帯電話発信・本人確認省略テスト: OK");
