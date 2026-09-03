@@ -52,6 +52,7 @@ const state = {
   inspectionLoanerRequested: false,
   inspectionLoanerConfirmed: false,
   inspectionClosingPending: false,
+  inspectionReminderContactAnswered: false,
   inspectionButtonChecks: {},
   usedVariants: {},
   questionRepeats: {},
@@ -342,6 +343,7 @@ function selectScenario(scenarioId) {
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
   state.inspectionClosingPending = false;
+  state.inspectionReminderContactAnswered = false;
   state.inspectionButtonChecks = {};
   state.usedVariants = {};
   state.questionRepeats = {};
@@ -1256,6 +1258,7 @@ function startRoleplay() {
   state.inspectionLoanerRequested = false;
   state.inspectionLoanerConfirmed = false;
   state.inspectionClosingPending = false;
+  state.inspectionReminderContactAnswered = false;
   state.inspectionButtonChecks = {};
   state.usedVariants = {};
   state.questionRepeats = {};
@@ -2242,6 +2245,20 @@ function hasInspectionAvailableFromInformation(text) {
     && /(?:作業|車検|入庫|受け|可能|以降)/.test(normalized);
 }
 
+function hasInspectionAvailablePeriodEvidence(text) {
+  const evidence = inspectionStaffConversationEvidence(
+    normalizeScriptedText(text),
+    "explained_available_period"
+  );
+  const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+  const availableFrom = normalizeScriptedText(scenario.availableFrom || "");
+  return Boolean(expiryDate && availableFrom)
+    && evidence.includes(expiryDate)
+    && evidence.includes(availableFrom)
+    && /(?:満了|期限|まで|車検)/.test(evidence)
+    && /(?:以降|から|作業|入庫|可能|受け)/.test(evidence);
+}
+
 function hasLockNutToolExpression(text) {
   const normalized = normalizeScriptedText(text);
   if (normalized.includes("アダプター")) return true;
@@ -2329,7 +2346,13 @@ function hasInspectionAppointmentProposalEvidence(text) {
   const hasConcreteDateOrTime = inspectionAppointmentDateCandidates(normalized).length > 0
     || /\d{1,2}時/.test(normalized);
   const hasProposalContext = /(?:いかが|どうでしょう|よろしい|空いて|空き|予約|予定)/.test(normalized);
-  return hasConcreteDateOrTime && hasProposalContext && isScriptedQuestion(normalized);
+  const hasCompleteDateTime = Boolean(inspectionAppointmentProposalMatch(normalized));
+  const declaresServiceAvailability = /(?:作業|入庫|車検).{0,20}(?:可能|できます|できる)/.test(normalized);
+  return hasConcreteDateOrTime
+    && (
+      hasProposalContext && isScriptedQuestion(normalized)
+      || hasCompleteDateTime && declaresServiceAvailability
+    );
 }
 
 function hasCompleteInspectionAppointmentProposal(text) {
@@ -2503,6 +2526,9 @@ function hasInspectionDocumentGuidance(text) {
 
 function inspectionTextHasSplitGuidanceKey(text, stepKey) {
   const normalized = normalizeScriptedText(text);
+  if (stepKey === "explained_available_period") {
+    return /(?:満了|期限|車検|作業|入庫|可能|以降|から|まで|\d{1,2}月\d{1,2}日)/.test(normalized);
+  }
   if (stepKey === "explained_documents") {
     return /(?:荷物|荷室|トランク|空荷|車検証|自賠責|納税証明|持ち物)/.test(normalized);
   }
@@ -2621,6 +2647,13 @@ function hasInspectionReminderContactConfirmation(text) {
   return hasThreeDayReminder && asksKnownContact && hasContactQuestion;
 }
 
+function asksInspectionReminderContactDestination(text) {
+  const normalized = normalizeScriptedText(text);
+  return isScriptedQuestion(normalized)
+    && /(?:携帯|電話番号|連絡先|この電話|同じ電話|今の電話)/.test(normalized)
+    && /(?:よろしい|良い|大丈夫|どちら|どこ|お願いしますか)/.test(normalized);
+}
+
 function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // 「ありがとうございます」は会話途中のお礼として扱い、過去形の
   // 「ありがとうございました」のときだけ終話あいさつを達成する。
@@ -2648,11 +2681,10 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
     return hasCourtesyExpression(normalized);
   }
 
-  // Firestoreに「満了・車検」の旧キーワード条件が残っていても、
-  // 登録済みの具体的な満了日を案内できれば達成とする。
+  // Firestoreに旧キーワード条件が残っていても、登録済みの具体的な
+  // 満了日と入庫可能日の両方を会話全体で案内した場合だけ達成とする。
   if (step.key === "explained_available_period") {
-    const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
-    return Boolean(expiryDate) && normalized.includes(expiryDate);
+    return hasInspectionAvailablePeriodEvidence(normalized);
   }
 
   // Firestoreの公開シナリオに旧キーワードが残っていても、
@@ -2895,8 +2927,7 @@ function scriptedStepSpecificMatches(normalized, step) {
   }
 
   if (step.key === "explained_available_period") {
-    const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
-    return Boolean(expiryDate) && normalized.includes(expiryDate);
+    return hasInspectionAvailablePeriodEvidence(normalized);
   }
 
   if (step.key === "explained_duration_and_wait") {
@@ -3046,6 +3077,14 @@ function scriptedRetryForMissingDetails(text, step) {
   }
 
   if (step.key === "explained_available_period") {
+    const conversationEvidence = inspectionStaffConversationEvidence(
+      normalized,
+      step.key
+    );
+    const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+    const availableFrom = normalizeScriptedText(scenario.availableFrom || "");
+    const hasExpiryDate = Boolean(expiryDate) && conversationEvidence.includes(expiryDate);
+    const hasAvailableFrom = Boolean(availableFrom) && conversationEvidence.includes(availableFrom);
     if (asksInspectionDayPreference(normalized)) {
       return {
         text: "土日がいいです。ちなみに、車検はいつまでですか？",
@@ -3065,6 +3104,20 @@ function scriptedRetryForMissingDetails(text, step) {
             audioId: ""
           }
         ]
+      };
+    }
+    if (hasExpiryDate && !hasAvailableFrom) {
+      return {
+        text: "いつから車検を受けられるんですか？",
+        audioId: "inspection_available_from_optional_question",
+        missingDetail: "availableFrom"
+      };
+    }
+    if (!hasExpiryDate && hasAvailableFrom) {
+      return {
+        text: "車検はいつまでですか？",
+        audioId: "inspection_explained_available_period_retry",
+        missingDetail: "expiryDate"
       };
     }
     return {
@@ -3382,6 +3435,22 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // 具体的な予約日時が確定済みなら、最終の「ありがとうございました」を
+  // 連絡先確認などすべての個別判定より先に処理して確実に終話する。
+  if (state.proposedAppointment && isInspectionFinalClosingThanks(text)) {
+    const closingStep = scenario.steps.find((candidate) => candidate.key === "closed_politely");
+    markScriptedStepPassed(closingStep, text);
+    state.scriptStep = scenario.steps.length;
+    state.ended = true;
+    state.turn += 1;
+    addMessage("customer", closingStep?.customerResponse || "ありがとうございました。", {
+      audioId: "inspection_closed_politely_customer",
+      onCommitted: () => finishRoleplay({ keepCustomerPlayback: true })
+    });
+    renderProgress();
+    return;
+  }
+
   // 車検案内と予約意思確認をまとめた模範フローでは、お客様の「お願いします。」に
   // スタッフが「ありがとうございます。」と応じた後、お客様から自然に作業時間を尋ねる。
   // この1ターンは案内不足の聞き返しではないため、減点対象から除外する。
@@ -3393,7 +3462,8 @@ function handleScriptedStaffReply(text) {
   state.inspectionDurationProgressionPending = false;
 
   const expiryStep = scenario.steps.find((item) => item.key === "explained_available_period");
-  if (expiryStep && scriptedStepMatches(text, expiryStep)) {
+  const configuredExpiryDate = normalizeScriptedText(scenario.expiryDate || "");
+  if (expiryStep && configuredExpiryDate && normalizeScriptedText(text).includes(configuredExpiryDate)) {
     state.inspectionExpiryEvidence = text;
   }
 
@@ -3401,6 +3471,30 @@ function handleScriptedStaffReply(text) {
   // 後工程へ到達した際に、すでに聞いた内容を再質問しないための記録であり、
   // この時点で会話順序を強制的に進めるものではない。
   rememberFutureScriptedAchievements(text, state.scriptStep);
+
+  // 前工程と同じ発話内で実際の都合・希望日を尋ねられた場合は、
+  // お礼など前半項目の定型返答より、最後に尋ねられた質問への回答を優先する。
+  const availabilityStepIndex = scenario.steps.findIndex(
+    (candidate) => candidate.key === "asked_availability"
+  );
+  if (
+    !state.proposedAppointment
+    && availabilityStepIndex > state.scriptStep
+    && hasInspectionAvailabilityRequest(text)
+  ) {
+    recordSkippedScriptedSteps(text, state.scriptStep, availabilityStepIndex, "お客様の都合確認を優先");
+    const availabilityStep = scenario.steps[availabilityStepIndex];
+    markScriptedStepPassed(availabilityStep, text);
+    state.scriptStep = availabilityStepIndex + 1;
+    state.currentState = scenario.steps[state.scriptStep].state;
+    state.turn += 1;
+    addMessage("customer", "お願いしたいんですけど、いつできますか？", {
+      audioId: "inspection_asked_availability_customer"
+    });
+    els.speechNote.textContent = "お客様の都合確認へ回答しました。車検満了日と入庫可能日を案内してください。";
+    renderProgress();
+    return;
+  }
 
   // 「代車は必要ですか」「代車はお使いになりますか」のように利用希望を
   // 直接尋ねられた場合は、「はい」ではなく明確に「お願いします。」と答える。
@@ -3497,7 +3591,16 @@ function handleScriptedStaffReply(text) {
 
   // 「3日前に確認連絡」まで説明したうえで、現在の携帯・電話番号を
   // 連絡先としてよいか尋ねられた場合は、工程の位置にかかわらず明確に回答する。
-  if (hasInspectionReminderContactConfirmation(text)) {
+  if (
+    hasInspectionReminderContactConfirmation(text)
+    && asksInspectionReminderContactDestination(text)
+  ) {
+    if (state.inspectionReminderContactAnswered) {
+      els.speechNote.textContent = "3日前の連絡先は確認済みです。予約復唱または終話へ進めてください。";
+      renderProgress();
+      continueSpeechInputWithoutCustomerReply("音声入力中です。会話の続きを話してください。");
+      return;
+    }
     const reminderStepIndex = scenario.steps.findIndex(
       (candidate) => candidate.key === "confirmed_reminder_contact"
     );
@@ -3507,6 +3610,7 @@ function handleScriptedStaffReply(text) {
       state.scriptStep += 1;
       state.currentState = scenario.steps[state.scriptStep]?.state || "CLOSING";
     }
+    state.inspectionReminderContactAnswered = true;
     state.turn += 1;
     addMessage("customer", "この携帯にお願いします。", {
       audioId: "inspection_confirmed_reminder_contact_customer"
@@ -3539,12 +3643,14 @@ function handleScriptedStaffReply(text) {
     && !hasScriptedAppointmentRecapEvidence(text)
   ) {
     const sameAppointment = confirmedInspectionAppointmentMatches(text);
+    if (sameAppointment) {
+      els.speechNote.textContent = "予約日時は確認済みです。同じ日時への返答を繰り返さず、予約後の案内を続けてください。";
+      renderProgress();
+      continueSpeechInputWithoutCustomerReply("音声入力中です。予約後の案内を続けてください。");
+      return;
+    }
     state.turn += 1;
-    addMessage("customer", sameAppointment
-      ? "では、その日でお願いします。"
-      : "予約は先ほどの日時でお願いします。", sameAppointment
-      ? { audioId: "inspection_proposed_appointment_customer" }
-      : {});
+    addMessage("customer", "予約は先ほどの日時でお願いします。");
     els.speechNote.textContent = "予約日時は確定済みです。前の工程へ戻らず、当日の案内へ進めてください。";
     renderProgress();
     return;
@@ -4506,8 +4612,7 @@ function inspectionConversationMetricAchieved(metricKey) {
     return staffUtterances.some((text) => hasInspectionAvailabilityRequest(text));
   }
   if (metricKey === "explained_available_period") {
-    const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
-    return Boolean(expiryDate) && staffEvidence.includes(expiryDate);
+    return hasInspectionAvailablePeriodEvidence(staffEvidence);
   }
   if (metricKey === "explained_duration_and_wait") {
     const mileageWasAsked = state.inspectionMileageAsked

@@ -11,7 +11,7 @@ const helperEnd = appSource.indexOf("function analyzeScriptedStaff", helperStart
 assert.notEqual(helperStart, -1, "車検誘致用の数字正規化関数が見つかりません");
 assert.notEqual(helperEnd, -1, "作業時間判定関数の終端が見つかりません");
 
-const context = { state: { inspectionMileageAsked: true } };
+const context = { state: { inspectionMileageAsked: true, transcript: [] } };
 vm.createContext(context);
 vm.runInContext(appSource.slice(helperStart, helperEnd), context);
 
@@ -64,13 +64,8 @@ assert.equal(
 
 assert.match(
   scenarioSource,
-  /requiredGroups:\s*\[\["9月30日"\]\]/,
-  "車検満了日だけで達成する必須条件になっていません"
-);
-assert.doesNotMatch(
-  scenarioSource,
-  /requiredGroups:\s*\[\["9月30日"\],\s*\["8月1日"\]/,
-  "入庫可能日が必須条件に残っています"
+  /requiredGroups:\s*\[\["9月30日"\],\s*\["8月1日"\]\]/,
+  "車検満了日と入庫可能日の両方が必須条件になっていません"
 );
 assert.match(
   scenarioSource,
@@ -137,24 +132,24 @@ const questionStart = appSource.indexOf("function isScriptedQuestion");
 const specificEnd = appSource.indexOf("function hasCourtesyExpression", questionStart);
 assert.notEqual(questionStart, -1, "車検誘致の個別判定関数が見つかりません");
 assert.notEqual(specificEnd, -1, "車検誘致の個別判定関数の終端が見つかりません");
-context.scenario = { customerName: "佐藤様", expiryDate: "9月30日" };
+context.scenario = { customerName: "佐藤様", expiryDate: "9月30日", availableFrom: "8月1日" };
 vm.runInContext(appSource.slice(questionStart, specificEnd), context);
 
 assert.equal(
   context.scriptedStepSpecificMatches(
-    context.normalizeScriptedText("車検満了日は９月３０日です"),
+    context.normalizeScriptedText("車検満了日は9月30日で、8月1日以降作業可能です"),
     { key: "explained_available_period" }
   ),
   true,
-  "満了日だけの案内を達成として認識できません"
+  "満了日と入庫可能日の案内を達成として認識できません"
 );
 assert.equal(
   context.scriptedStepSpecificMatches(
     context.normalizeScriptedText("9月30日までとなります"),
     { key: "explained_available_period" }
   ),
-  true,
-  "『車検』『満了』を省略した具体的な満了日案内を認識できません"
+  false,
+  "満了日だけの案内を両日案内として誤認識しています"
 );
 assert.equal(
   context.scriptedStepSpecificMatches(
@@ -165,17 +160,17 @@ assert.equal(
   "入庫可能日だけの案内を満了日として誤認識しています"
 );
 
-context.scenario = { customerName: "佐藤様", expiryDate: "9月30日" };
+context.scenario = { customerName: "佐藤様", expiryDate: "9月30日", availableFrom: "8月1日" };
 assert.equal(
   requiredGroupsMatch(
-    "9月30日までとなります",
+    "車検満了日は9月30日で、8月1日以降作業可能です",
     {
       key: "explained_available_period",
       requiredGroups: [["9月30日"], ["満了", "車検"]]
     }
   ),
   true,
-  "Firestoreの旧条件が残る場合に具体的な満了日だけで達成できません"
+  "Firestoreの旧条件が残る場合も満了日と入庫可能日を達成できません"
 );
 assert.equal(
   requiredGroupsMatch(

@@ -3,6 +3,24 @@ import fs from "node:fs";
 import vm from "node:vm";
 
 const source = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const scenarioSource = fs.readFileSync(new URL("../scenario.js", import.meta.url), "utf8");
+const scenarioContext = { window: {} };
+vm.createContext(scenarioContext);
+vm.runInContext(scenarioSource, scenarioContext);
+const canonicalScoring = scenarioContext.window.VEHICLE_INSPECTION_SCENARIO.scoring;
+assert.equal(canonicalScoring.length, 17, "車検誘致の採点項目が17項目ではありません");
+assert.equal(
+  canonicalScoring.reduce((sum, metric) => sum + metric.points, 0),
+  100,
+  "車検誘致の配点合計が100点ではありません"
+);
+assert.equal(
+  canonicalScoring
+    .filter((metric) => ["explained_available_period", "confirmed_booking_time"].includes(metric.key))
+    .reduce((sum, metric) => sum + metric.points, 0),
+  12,
+  "対象ログで未達となる2項目の配点が12点ではありません"
+);
 const start = source.indexOf("function inspectionConversationMetricAchieved");
 const end = source.indexOf("function buildImprovementTalk", start);
 assert.notEqual(start, -1, "会話全体の最終達成判定がありません");
@@ -46,6 +64,7 @@ const context = {
     : null,
   hasInspectionAppointmentProposalEvidence: (text) => /\d{1,2}月\d{1,2}日.*\d{1,2}時.*(?:いかが|どう)/.test(text),
   hasScriptedAppointmentRecapEvidence: (text) => /佐藤.*\d{1,2}月\d{1,2}日.*\d{1,2}時/.test(text),
+  hasInspectionAvailablePeriodEvidence: (text) => /9月30日/.test(text) && /8月1日/.test(text),
   isInspectionFinalClosingThanks: (text) => /ありがとうございました/.test(text)
 };
 vm.createContext(context);
@@ -75,6 +94,21 @@ assert.equal(context.inspectionConversationMetricAchieved("confirmed_identity"),
 assert.equal(context.inspectionConversationMetricAchieved("proposed_appointment"), true);
 assert.equal(context.inspectionConversationMetricAchieved("confirmed_booking_time"), true);
 assert.equal(context.inspectionConversationMetricAchieved("recapped_appointment"), true);
+
+context.state.transcript = [
+  { role: "staff", text: "佐藤様のヤリスは9月30日で車検満了を迎えます。" },
+  { role: "staff", text: "9月12日10時半から作業可能でございます。" }
+];
+assert.equal(
+  context.inspectionConversationMetricAchieved("explained_available_period"),
+  false,
+  "8月1日以降の案内がない実施ログを入庫可能期間達成にしています"
+);
+assert.equal(
+  context.inspectionConversationMetricAchieved("confirmed_booking_time"),
+  false,
+  "予約手続き時間を確認していない実施ログを達成にしています"
+);
 
 context.state.transcript = [
   { role: "staff", text: "本日は佐藤様がお乗りのヤリスの車検のご案内でお電話しました。" },

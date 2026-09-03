@@ -10,9 +10,11 @@ assert.notEqual(helperStart, -1, "車検誘致の正規化関数が見つかり�
 assert.notEqual(helperEnd, -1, "車検案内判定関数の終端が見つかりません");
 
 const context = {
+  state: { transcript: [] },
   scenario: {
     vehicleName: "ヤリス",
-    expiryDate: "9月30日"
+    expiryDate: "9月30日",
+    availableFrom: "8月1日"
   }
 };
 vm.createContext(context);
@@ -49,8 +51,13 @@ assert.equal(
 );
 assert.equal(
   context.scriptedStepMatches(combinedTalk, expiryStep),
+  false,
+  "入庫可能日がない案内を満了日・入庫可能日達成として認識しています"
+);
+assert.equal(
+  context.scriptedStepMatches(`${combinedTalk} 8月1日以降作業可能です。`, expiryStep),
   true,
-  "同じ発話の満了日案内を認識できません"
+  "満了日と入庫可能日を同じ会話で案内しても認識できません"
 );
 assert.equal(
   context.normalizeScriptedText("車検が9月の30日までです"),
@@ -79,8 +86,8 @@ assert.equal(
 );
 assert.equal(
   context.scriptedStepMatches(spokenDateTalk, expiryStep),
-  true,
-  "『9月の30日』を登録済み満了日として認識できません"
+  false,
+  "入庫可能日なしの『9月の30日』だけで両日案内を達成しています"
 );
 assert.equal(
   context.scriptedStepMatches("ヤリスの車検のご案内です。", noticeStep),
@@ -114,8 +121,13 @@ assert.equal(
 );
 assert.equal(
   context.scriptedStepMatches(carriedTalk, expiryStep),
+  false,
+  "入庫可能日がない引き継ぎ発話を両日案内として認識しています"
+);
+assert.equal(
+  context.scriptedStepMatches(`${carriedTalk} 8月1日以降作業可能です。`, expiryStep),
   true,
-  "引き継いだ発話の満了日案内を認識できません"
+  "引き継いだ満了日と入庫可能日の案内を合算できません"
 );
 assert.match(
   source,

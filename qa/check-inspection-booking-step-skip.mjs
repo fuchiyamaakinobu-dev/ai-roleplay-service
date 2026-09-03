@@ -94,6 +94,16 @@ assert.equal(
   "質問・提案ではない日付の言及を先行提案として扱っています"
 );
 assert.equal(
+  proposalContext.hasInspectionAppointmentProposalEvidence("9月12日土曜日の10時半から作業可能でございます。"),
+  true,
+  "具体的日時と作業可能を伝えた断定形を予約提案として認識できません"
+);
+assert.equal(
+  proposalContext.hasInspectionAppointmentProposalEvidence("9月12日10時半から作業できます。"),
+  true,
+  "『作業できます』を含む具体的日時提案を認識できません"
+);
+assert.equal(
   proposalContext.hasInspectionAppointmentProposalEvidence("このまま予約を進めてもよろしいでしょうか？"),
   false,
   "具体的な日時のない予約手続き確認を日時提案として扱っています"

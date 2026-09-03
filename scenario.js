@@ -180,7 +180,7 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     { key: "thanked_customer", label: "日頃の利用へのお礼", action: "日頃のご利用への感謝を伝える", points: 4 },
     { key: "explained_inspection_notice", label: "車種・車検時期", action: "車種と車検時期を説明する", points: 8 },
     { key: "asked_availability", label: "都合確認", action: "お客様のご都合を確認する", points: 5 },
-    { key: "explained_available_period", label: "車検満了日", action: "車検満了日を案内する", points: 7 },
+    { key: "explained_available_period", label: "満了日・入庫可能日", action: "車検満了日と入庫可能日を案内する", points: 7 },
     { key: "explained_duration_and_wait", label: "走行距離・時間・店内待ち", action: "走行距離を確認し、基本作業時間と店内で待てることを説明する", points: 7 },
     { key: "explained_loaner", label: "代車予約", action: "早期予約で代車を用意できることを説明する", points: 6 },
     { key: "confirmed_booking_time", label: "予約手続き確認", action: "予約手続きを続ける時間があるか了承を得る", points: 5 },
@@ -238,8 +238,8 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     {
       state: "INSPECTION_GUIDANCE",
       key: "explained_available_period",
-      expected: "車検満了日を案内する",
-      requiredGroups: [["9月30日"]],
+      expected: "車検満了日と入庫可能日を案内する",
+      requiredGroups: [["9月30日"], ["8月1日"]],
       customerResponse: "どれくらい時間がかかるのですか？",
       retryResponse: "車検はいつまでですか？"
     },

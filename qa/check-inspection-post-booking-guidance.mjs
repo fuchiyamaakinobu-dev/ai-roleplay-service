@@ -56,6 +56,16 @@ assert.equal(
   "3日前連絡と連絡先確認を別発話にした案内を会話全体から合算できません"
 );
 assert.equal(
+  context.asksInspectionReminderContactDestination("こちらの携帯番号でよろしいでしょうか。"),
+  true,
+  "現在の発話にある連絡先質問を認識できません"
+);
+assert.equal(
+  context.asksInspectionReminderContactDestination("かしこまりました。"),
+  false,
+  "過去の連絡先質問を現在の受領発話へ持ち越しています"
+);
+assert.equal(
   context.inspectionSplitGuidanceFragmentKey("入庫の3日前に改めてご連絡差し上げます。"),
   "confirmed_reminder_contact",
   "3日前連絡だけの途中案内を保持対象として判定できません"

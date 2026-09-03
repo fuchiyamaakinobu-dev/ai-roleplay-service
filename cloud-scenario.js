@@ -96,6 +96,9 @@
       if (localStep.advanceOnFailure === true) step.advanceOnFailure = true;
       return step;
     });
+    // 車検誘致の17項目・100点配分は確定仕様。Firestore側に古い配列や
+    // 欠けた配列が残っていても、公開データで採点条件を上書きさせない。
+    scenario.scoring = (localScenario.scoring || []).map((metric) => ({ ...metric }));
     return scenario;
   }
 
@@ -115,7 +118,7 @@
 
   function startApp() {
     const script = document.createElement("script");
-    script.src = "./app.js?v=20260830-2";
+    script.src = "./app.js?v=20260903-1";
     document.body.appendChild(script);
   }
 

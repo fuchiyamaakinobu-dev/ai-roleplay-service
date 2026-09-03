@@ -62,6 +62,10 @@ const localInspectionScenario = {
   id: "vehicle-inspection-phone-followup",
   mode: "staff-led-scripted",
   title: "車検誘致・電話フォロー",
+  scoring: [
+    { key: "confirmed_identity", label: "本人確認", action: "本人確認する", points: 4 },
+    { key: "confirmed_booking_time", label: "予約手続き確認", action: "時間を確認する", points: 5 }
+  ],
   steps: [
     {
       key: "asked_vehicle_concerns",
@@ -80,6 +84,9 @@ const localInspectionScenario = {
 
 const publishedInspectionScenario = {
   ...structuredClone(localInspectionScenario),
+  scoring: [
+    { key: "confirmed_identity", label: "古い本人確認", action: "古い確認", points: 100 }
+  ],
   steps: [
     {
       key: "asked_vehicle_concerns",
@@ -172,11 +179,16 @@ assert.equal(normalized.scoring[0].action, "引取希望の事情を受け止め
 assert.equal(appendedScripts.length, 1, "互換補正後にapp.jsが起動していません");
 assert.equal(
   appendedScripts[0].src,
-  "./app.js?v=20260830-2",
+  "./app.js?v=20260903-1",
   "公開更新後もブラウザーキャッシュから古いapp.jsを読み込む可能性があります"
 );
 
 const normalizedInspection = context.window.ROLEPLAY_SCENARIOS[1];
+assert.deepEqual(
+  JSON.parse(JSON.stringify(normalizedInspection.scoring)),
+  localInspectionScenario.scoring,
+  "公開Firestoreの古い採点配列が17項目のローカル確定仕様を上書きしています"
+);
 assert.equal(
   normalizedInspection.steps[0].customerResponse,
   "オイル交換もお願いしたいです。",

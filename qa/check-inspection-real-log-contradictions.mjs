@@ -30,8 +30,13 @@ assert.match(
 );
 assert.match(
   source,
-  /hasInspectionReminderContactConfirmation\(text\)[\s\S]*?この携帯にお願いします。/,
+  /hasInspectionReminderContactConfirmation\(text\)[\s\S]*?asksInspectionReminderContactDestination\(text\)[\s\S]*?inspectionReminderContactAnswered[\s\S]*?この携帯にお願いします。/,
   "3日前確認連絡の連絡先質問へ明確に回答できません"
+);
+assert.match(
+  source,
+  /state\.proposedAppointment && isInspectionFinalClosingThanks\(text\)[\s\S]*?inspection_closed_politely_customer[\s\S]*?finishRoleplay/,
+  "最終のお礼を連絡先確認より先に処理して終話できません"
 );
 assert.match(
   source,
@@ -47,6 +52,16 @@ assert.match(
   source,
   /confirmedInspectionAppointmentMatches\(text\)[\s\S]*?予約は先ほどの日時でお願いします。/,
   "確定後に異なる予約日時へ自動変更しない処理がありません"
+);
+assert.match(
+  source,
+  /const sameAppointment = confirmedInspectionAppointmentMatches\(text\);[\s\S]*?if \(sameAppointment\)[\s\S]*?continueSpeechInputWithoutCustomerReply/,
+  "確認済みの同一日時へAIが回答を繰り返しています"
+);
+assert.match(
+  source,
+  /availabilityStepIndex > state\.scriptStep[\s\S]*?hasInspectionAvailabilityRequest\(text\)[\s\S]*?お願いしたいんですけど、いつできますか？/,
+  "前工程と同じ発話内の都合確認より定型返答を優先しています"
 );
 
 console.log("直近実施ログ・会話矛盾再発防止テスト: OK");
