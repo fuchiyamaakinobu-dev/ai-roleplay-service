@@ -43,7 +43,6 @@ const state = {
   analyses: [],
   scriptedPartialReplies: {},
   inspectionExpiryEvidence: "",
-  inspectionAvailabilityFollowUpPending: false,
   inspectionMileageAsked: false,
   inspectionDurationQuestionAsked: false,
   inspectionDurationProgressionPending: false,
@@ -334,7 +333,6 @@ function selectScenario(scenarioId) {
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.inspectionExpiryEvidence = "";
-  state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionMileageAsked = false;
   state.inspectionDurationQuestionAsked = false;
   state.inspectionDurationProgressionPending = false;
@@ -1086,7 +1084,7 @@ function inspectionHighlightPatterns(text) {
     add("asked_vehicle_concerns", [/(?:気になる|不具合|調子|具合|追加作業|オイル交換)/g]);
   }
   if (inspectionTextHasSplitGuidanceKey(normalized, "explained_documents")) {
-    add("explained_documents", [/(?:荷物|荷室|トランク|空荷)/g, /(?:車検証|自賠責(?:保険証明書|保険証書)?|納税証明書?)/g, /(?:降ろ|下ろ|積まない|積まず|空に|ない状態)/g]);
+    add("explained_documents", [/(?:荷物|荷室|トランク|ラゲージ|空荷|荷)/g, /(?:車検証|自賠責(?:保険証明書|保険証書)?|納税証明書?)/g, /(?:空|積|降|下)/g]);
   }
   if (inspectionTextHasSplitGuidanceKey(normalized, "explained_lock_and_arrival")) {
     add("explained_lock_and_arrival", [/(?:ロックナットキー|ロックキー|ロックナット|アダプター|専用工具|外す工具)/g, /(?:[1１][0０]\s*分前|十分前|[1１][5５]\s*分前|十五分前|早め)/g]);
@@ -1249,7 +1247,6 @@ function startRoleplay() {
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.inspectionExpiryEvidence = "";
-  state.inspectionAvailabilityFollowUpPending = false;
   state.inspectionMileageAsked = false;
   state.inspectionDurationQuestionAsked = false;
   state.inspectionDurationProgressionPending = false;
@@ -2516,8 +2513,11 @@ function hasInspectionSelfIntroduction(text) {
 
 function hasInspectionDocumentGuidance(text) {
   const normalized = normalizeScriptedText(text);
-  const hasEmptyVehicleGuidance = /(?:荷物|空荷)/.test(normalized)
-    && /(?:降ろ|下ろ|積まない|積まず|空に|ない状態)/.test(normalized);
+  // 音声認識で文章が崩れても、「荷物側」と「空にする側」の文字が
+  // それぞれ残っていれば空荷説明として扱う。片方だけでは達成にしない。
+  const hasLuggageArea = /(?:荷物|荷室|トランク|ラゲージ|空荷|荷)/.test(normalized);
+  const explainsEmptyVehicle = /(?:空|積|降|下)/.test(normalized);
+  const hasEmptyVehicleGuidance = hasLuggageArea && explainsEmptyVehicle;
   return hasEmptyVehicleGuidance
     && normalized.includes("納税証明")
     && normalized.includes("車検証")
@@ -2839,7 +2839,10 @@ function analyzeScriptedStaff(text, step) {
 }
 
 function scriptedStepCanAdvanceOnFailure(step) {
-  return step?.advanceOnFailure === true || step?.key === "confirmed_identity";
+  if (!step) return false;
+  // 会話を止める最低条件は具体的な入庫日・時刻と最終の終話あいさつだけ。
+  // それ以外は未達項目として採点へ残し、次工程の発話を受け付ける。
+  return !["proposed_appointment", "closed_politely"].includes(step.key);
 }
 
 function markScriptedStepNotApplicable(step, reason) {
@@ -3002,12 +3005,6 @@ function asksInspectionDayPreference(normalized) {
   const hasDayChoice = /(?:平日|土日|週末|曜日)/.test(normalized);
   const asksPreference = /(?:どちら|希望|都合|よろしい|良い|いかが)/.test(normalized);
   return hasDayChoice && asksPreference && isScriptedQuestion(normalized);
-}
-
-function shouldAnswerDayPreferenceFromStoredExpiry(text, step) {
-  return step.key === "explained_available_period"
-    && Boolean(state.inspectionExpiryEvidence)
-    && asksInspectionDayPreference(normalizeScriptedText(text));
 }
 
 function scriptedRetryForMissingDetails(text, step) {
@@ -3472,6 +3469,36 @@ function handleScriptedStaffReply(text) {
   // この時点で会話順序を強制的に進めるものではない。
   rememberFutureScriptedAchievements(text, state.scriptStep);
 
+  // 平日・土日・曜日の希望を尋ねられた場合は、現在工程の不足確認より
+  // 実際の質問への回答を優先する。満了日が未案内でも期限を聞き返さず、
+  // 未達項目は採点へ残して会話を進める。
+  const dayPreferenceAvailabilityIndex = scenario.steps.findIndex(
+    (candidate) => candidate.key === "asked_availability"
+  );
+  if (!state.proposedAppointment && asksInspectionDayPreference(normalizeScriptedText(text))) {
+    if (dayPreferenceAvailabilityIndex > state.scriptStep) {
+      recordSkippedScriptedSteps(
+        text,
+        state.scriptStep,
+        dayPreferenceAvailabilityIndex,
+        "曜日希望の質問への回答を優先"
+      );
+    }
+    const availabilityStep = scenario.steps[dayPreferenceAvailabilityIndex];
+    markScriptedStepPassed(availabilityStep, text);
+    if (dayPreferenceAvailabilityIndex >= state.scriptStep) {
+      state.scriptStep = dayPreferenceAvailabilityIndex + 1;
+      state.currentState = scenario.steps[state.scriptStep].state;
+    }
+    state.turn += 1;
+    addMessage("customer", "土日がいいです。", {
+      audioId: "inspection_day_preference_answer"
+    });
+    els.speechNote.textContent = "曜日希望へ回答しました。未確認項目へ戻らず会話を続けてください。";
+    renderProgress();
+    return;
+  }
+
   // 前工程と同じ発話内で実際の都合・希望日を尋ねられた場合は、
   // お礼など前半項目の定型返答より、最後に尋ねられた質問への回答を優先する。
   const availabilityStepIndex = scenario.steps.findIndex(
@@ -3855,23 +3882,6 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
-  // 作業時間に続く「ご来店いただけますか」は、来店可否の確認であり、
-  // 店内で待つかの確認ではない。「はい」だけで通過せず、待ち方だけを尋ねる。
-  if (
-    hasSupportedInspectionDuration(text)
-    && asksInspectionVisitAttendance(text)
-    && !/(?:待|店内)/.test(normalizeScriptedText(text))
-  ) {
-    state.inspectionWaitingRequested = true;
-    state.turn += 1;
-    addMessage("customer", "お店で待つことはできますか？", {
-      audioId: "inspection_duration_wait_missing_retry"
-    });
-    els.speechNote.textContent = "作業時間は確認しました。続けて、店内で待てるかをご案内ください。";
-    renderProgress();
-    return;
-  }
-
   // 入庫日時の確定後は、未確認の任意項目へ戻らない。
   // スタッフが先の任意項目を説明した場合は、間の未確認項目を未達のまま通過し、
   // 同じ発話内で実際に確認できた持参品・ロックナット・事前連絡などを記録する。
@@ -3889,21 +3899,6 @@ function handleScriptedStaffReply(text) {
     state.currentState = scenario.steps[state.scriptStep].state;
     handleScriptedStaffReply(text);
     return;
-  }
-
-  // 車検満了日だけを案内した後の「いつから受けられるか」は任意質問。
-  // 回答を省略して作業時間を案内しても、減点せず通常進行へ戻す。
-  if (state.inspectionAvailabilityFollowUpPending) {
-    state.inspectionAvailabilityFollowUpPending = false;
-    if (!hasSupportedInspectionDuration(text)) {
-      state.turn += 1;
-      addMessage("customer", "どれくらい時間がかかるのですか？", {
-        audioId: "inspection_explained_available_period_customer"
-      });
-      els.speechNote.textContent = "入庫可能日は任意案内です。続けて、作業時間と店内で待てるかをご案内ください。";
-      renderProgress();
-      return;
-    }
   }
 
   // オイル交換希望に対して「その他の追加作業」を再確認された場合は、
@@ -4066,7 +4061,6 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
-  const answeredDayPreferenceAfterExpiry = shouldAnswerDayPreferenceFromStoredExpiry(text, step);
   const answeredCustomerBookingAvailability = step.key === "confirmed_booking_time"
     && isAffirmativeBookingAvailabilityReply(text)
     && (state.questionRepeats["inspection-retry:confirmed_booking_time:general"] || 0) > 0;
@@ -4167,25 +4161,6 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
-  const nextStep = scenario.steps[state.scriptStep + 1];
-  const shouldAskAvailableFrom = step.key === "explained_available_period"
-    && !hasInspectionAvailableFromInformation(combinedText)
-    && !answeredDayPreferenceAfterExpiry
-    && !(nextStep && scriptedStepMatches(text, nextStep));
-
-  if (shouldAskAvailableFrom) {
-    delete state.scriptedPartialReplies[step.key];
-    state.scriptStep += 1;
-    state.currentState = scenario.steps[state.scriptStep].state;
-    state.inspectionAvailabilityFollowUpPending = true;
-    addMessage("customer", "いつから車検を受けられるんですか？", {
-      audioId: "inspection_available_from_optional_question"
-    });
-    els.speechNote.textContent = "入庫可能日の追加質問です。回答を省略して作業時間を案内しても減点されません。";
-    renderProgress();
-    return;
-  }
-
   delete state.scriptedPartialReplies[step.key];
 
   let responseStep = step;
@@ -4198,11 +4173,6 @@ function handleScriptedStaffReply(text) {
     ? {
         text: "では、その時間でお願いします。",
         audioId: "inspection_appointment_single_time_customer"
-      }
-    : answeredDayPreferenceAfterExpiry
-    ? {
-        text: "土日がいいです。",
-        audioId: "inspection_day_preference_answer"
       }
     : null;
   const followingStep = scenario.steps[state.scriptStep + 1];
@@ -4286,11 +4256,10 @@ function handleScriptedStaffReply(text) {
   } else {
     state.currentState = scenario.steps[state.scriptStep].state;
   }
-  const useAdvanceRetry = responseStep === step
+  const skippedIncompleteStep = responseStep === step
     && !analysis.passed
     && scriptedStepCanAdvanceOnFailure(step)
     && !hasCourtesyExpression(text);
-  const skippedIdentity = useAdvanceRetry && step.key === "confirmed_identity";
   if (
     !customerResponseOverride
     && hasDirectInspectionBookingInvitation(combinedText)
@@ -4362,9 +4331,7 @@ function handleScriptedStaffReply(text) {
     };
   }
   const finalCustomerResponseText = customerResponseOverride?.text
-    || (skippedIdentity
-      ? "どちら様でしょうか？"
-      : useAdvanceRetry ? step.retryResponse : responseStep.customerResponse);
+    || (skippedIncompleteStep ? "はい。" : responseStep.customerResponse);
   if (!state.inspectionWaitingMethod && finalCustomerResponseText === "待っています。") {
     state.inspectionWaitingMethod = "store";
   }
@@ -4376,15 +4343,16 @@ function handleScriptedStaffReply(text) {
   }
   addMessage("customer", finalCustomerResponseText, {
     audioId: customerResponseOverride?.audioId
-      || (skippedIdentity
-        ? "inspection_introduced_self_retry"
-        : useAdvanceRetry
-        ? `inspection_${step.key}_retry`
+      || (skippedIncompleteStep
+        ? "inspection_thanked_customer_retry"
         : `inspection_${responseStep.key}_customer`),
     onCommitted: finished
       ? () => finishRoleplay({ keepCustomerPlayback: true })
       : null
   });
+  if (skippedIncompleteStep) {
+    els.speechNote.textContent = "未確認項目は未達として採点し、会話を止めず次へ進みました。";
+  }
   renderProgress();
 }
 

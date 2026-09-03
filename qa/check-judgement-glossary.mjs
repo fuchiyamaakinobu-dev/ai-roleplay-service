@@ -14,7 +14,7 @@ assert.match(html, /id="glossarySearch"/, "単語帳の検索欄がありませ�
 assert.match(html, /data-filter="score"/, "採点項目の絞り込みがありません");
 assert.match(html, /data-filter="alias"/, "音声認識補正の絞り込みがありません");
 assert.match(html, /単語1つだけでは達成になりません/, "複数条件を必要とする注意書きがありません");
-assert.match(html, /judgement-glossary\.js\?v=20260901-1/, "公開後に古い判定単語帳がキャッシュされる可能性があります");
+assert.match(html, /judgement-glossary\.js\?v=20260903-3/, "公開後に古い判定単語帳がキャッシュされる可能性があります");
 assert.match(css, /\.card-grid/, "単語帳カードの表示スタイルがありません");
 
 const context = { window: {} };
@@ -31,6 +31,9 @@ scoring.forEach((metric) => {
 assert.match(source, /質問・確認の形が必要/, "質問形が必要な項目の説明がありません");
 assert.match(source, /直前にお客様が代車を希望した場合だけ有効/, "代車の文脈条件が説明されていません");
 assert.match(source, /別々の発話でも会話全体で合算/, "順不同・分割発話の説明がありません");
+assert.match(source, /荷物・荷室・トランク・荷/, "空荷判定の荷物側グループが単語帳にありません");
+assert.match(source, /空・積・降・下/, "空荷判定の空にする側グループが単語帳にありません");
+assert.match(source, /片方だけでは達成しません/, "空荷判定の単独語を除外する説明がありません");
 assert.match(source, /ありがとうございます（現在形）と区別/, "終話のお礼の現在形・過去形が区別されていません");
 assert.match(source, /ヤルシス → ヤリス/, "既知の車種誤変換が単語帳にありません");
 assert.match(source, /代償 → 代車/, "既知の代車誤変換が単語帳にありません");

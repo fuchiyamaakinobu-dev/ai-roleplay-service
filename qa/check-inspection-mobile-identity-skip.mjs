@@ -19,8 +19,8 @@ assert.match(
 );
 assert.match(
   appSource,
-  /skippedIdentity[\s\S]*?"どちら様でしょうか？"[\s\S]*?"inspection_introduced_self_retry"/,
-  "本人確認も名乗りもない場合の自然な名乗り確認がありません"
+  /skippedIncompleteStep[\s\S]*?\? "はい。" : responseStep\.customerResponse/,
+  "本人確認や名乗りが未達の場合に会話を止めず進められません"
 );
 assert.doesNotMatch(
   audioDbSource,
@@ -42,8 +42,8 @@ assert.equal(
 );
 assert.equal(
   context.scriptedStepCanAdvanceOnFailure({ key: "introduced_self" }),
-  false,
-  "名乗りまで無条件で省略可能になっています"
+  true,
+  "名乗りが未達の場合に項目点を失ったまま次へ進めません"
 );
 assert.equal(
   context.scriptedStepCanAdvanceOnFailure({ key: "thanked_customer", advanceOnFailure: true }),

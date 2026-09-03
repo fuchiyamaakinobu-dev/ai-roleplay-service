@@ -72,15 +72,10 @@ assert.match(
   /key:\s*"explained_duration_and_wait"[\s\S]*?customerResponse:\s*"代車は貸してもらえますか？"/,
   "有効な作業時間の案内後に代車希望へ進めません"
 );
-assert.match(
+assert.doesNotMatch(
   appSource,
-  /inspectionAvailabilityFollowUpPending[\s\S]*?いつから車検を受けられるんですか？/,
-  "満了日だけの案内後に入庫可能日の任意質問へ進めません"
-);
-assert.match(
-  appSource,
-  /if \(state\.inspectionAvailabilityFollowUpPending\)[\s\S]*?!hasSupportedInspectionDuration\(text\)[\s\S]*?どれくらい時間がかかるのですか？/,
-  "任意質問への回答後に作業時間へ進めません"
+  /inspectionAvailabilityFollowUpPending/,
+  "入庫可能日不足で会話を止める旧分岐が残っています"
 );
 assert.match(
   appSource,
@@ -90,7 +85,7 @@ assert.match(
 assert.match(
   audioDbSource,
   /inspection_available_from_optional_question",\s*"入庫可能日・任意質問",\s*"いつから車検を受けられるんですか？"/,
-  "任意質問の表示文と音声登録文が一致していません"
+  "過去ログ再生に必要な入庫可能日質問の表示文と音声登録文が一致していません"
 );
 assert.match(
   scenarioSource,

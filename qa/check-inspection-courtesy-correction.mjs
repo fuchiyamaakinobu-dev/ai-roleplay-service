@@ -43,7 +43,7 @@ assert.match(
 
 const correctionStart = appSource.indexOf("const courtesyStep = scenario.steps.find");
 const normalAnalysisStart = appSource.indexOf(
-  "const answeredDayPreferenceAfterExpiry",
+  "const combinedText = combinedScriptedReply(text, step);",
   correctionStart
 );
 assert.notEqual(correctionStart, -1, "日頃のお礼の言い直し分岐がありません");

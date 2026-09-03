@@ -180,7 +180,7 @@ assert.match(
   "『お願いします。』の登録音声文が見つかりません"
 );
 assert.match(indexSource, /styles\.css\?v=20260829-3/);
-assert.match(indexSource, /cloud-scenario\.js\?v=20260903-1/);
+assert.match(indexSource, /cloud-scenario\.js\?v=20260903-4/);
 assert.match(indexSource, /scenario\.js\?v=20260903-1/);
 assert.doesNotMatch(indexSource, /__CF\$cv\$params|challenge-platform/);
 

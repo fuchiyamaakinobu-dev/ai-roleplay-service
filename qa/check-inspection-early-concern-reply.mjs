@@ -142,7 +142,7 @@ const additionalServiceFollowUpStart = appSource.indexOf(
   "if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text))"
 );
 const currentStepAnalysisStart = appSource.indexOf(
-  "const answeredDayPreferenceAfterExpiry = shouldAnswerDayPreferenceFromStoredExpiry(text, step);",
+  "const combinedText = combinedScriptedReply(text, step);",
   additionalServiceFollowUpStart
 );
 assert.notEqual(additionalServiceFollowUpStart, -1, "追加作業再確認への専用分岐がありません");

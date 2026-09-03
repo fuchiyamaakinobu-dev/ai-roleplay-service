@@ -39,10 +39,10 @@ assert.equal(
 const handlerStart = source.indexOf("function handleScriptedStaffReply");
 const handlerEnd = source.indexOf("function handleReply", handlerStart);
 const handler = source.slice(handlerStart, handlerEnd);
-assert.match(
+assert.doesNotMatch(
   handler,
   /hasSupportedInspectionDuration\(text\)[\s\S]*?asksInspectionVisitAttendance\(text\)[\s\S]*?!\/\(\?:待\|店内\)\/[\s\S]*?addMessage\("customer", "お店で待つことはできますか？",[\s\S]*?inspection_duration_wait_missing_retry/,
-  "作業時間＋来店可否へ店内待ちだけを尋ねる分岐がありません"
+  "作業時間＋来店可否で店内待ちを聞き返し、会話を止めています"
 );
 assert.match(
   audioDb,

@@ -27,6 +27,34 @@ assert.equal(
   true,
   "必要書類と空荷を分割した案内を合算できません"
 );
+for (const emptyVehiclePhrase of [
+  "トランクや荷室はお荷物の積んでいない空の状態でご来店ください。",
+  "当日はトランクを空にしてご来店ください。",
+  "荷室は空の状態でお願いいたします。",
+  "荷、積。"
+]) {
+  assert.equal(
+    context.hasInspectionDocumentGuidance(
+      `車検証、自賠責保険証明書、納税証明書をお持ちください。${emptyVehiclePhrase}`
+    ),
+    true,
+    `空荷案内として認識できません: ${emptyVehiclePhrase}`
+  );
+}
+assert.equal(
+  context.hasInspectionDocumentGuidance(
+    "車検証、自賠責保険証明書、納税証明書をお持ちください。荷物があります。"
+  ),
+  false,
+  "『荷』側の語だけで空荷説明を達成しています"
+);
+assert.equal(
+  context.hasInspectionDocumentGuidance(
+    "車検証、自賠責保険証明書、納税証明書をお持ちください。予約枠が空いています。"
+  ),
+  false,
+  "『空』だけで空荷説明を達成しています"
+);
 assert.equal(
   context.hasInspectionDocumentGuidance("車検証、自賠責証書、納税証明書をお持ちください。"),
   false,
