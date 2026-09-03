@@ -21,6 +21,7 @@ const state = {
   turn: 0,
   scriptStep: 0,
   proposedAppointment: null,
+  inspectionAppointmentIncomplete: false,
   variantSeed: 0,
   pickupReason: null,
   currentObjection: null,
@@ -318,6 +319,7 @@ function selectScenario(scenarioId) {
   state.turn = 0;
   state.scriptStep = 0;
   state.proposedAppointment = null;
+  state.inspectionAppointmentIncomplete = false;
   state.serviceTimeExplained = false;
   state.serviceTimeNeedsReconfirmation = false;
   state.appointmentDateConfirmed = false;
@@ -1228,6 +1230,7 @@ function startRoleplay() {
   state.turn = 0;
   state.scriptStep = 0;
   state.proposedAppointment = null;
+  state.inspectionAppointmentIncomplete = false;
   state.variantSeed = Math.floor(Math.random() * 1000);
   state.pickupReason = null;
   state.currentObjection = null;
@@ -2777,6 +2780,7 @@ function analyzeScriptedStaff(text, step) {
         hour: appointmentMatch.hour,
         minute: appointmentMatch.minute
       };
+      state.inspectionAppointmentIncomplete = false;
     }
   }
 
@@ -3434,7 +3438,10 @@ function handleScriptedStaffReply(text) {
 
   // 具体的な予約日時が確定済みなら、最終の「ありがとうございました」を
   // 連絡先確認などすべての個別判定より先に処理して確実に終話する。
-  if (state.proposedAppointment && isInspectionFinalClosingThanks(text)) {
+  if (
+    (state.proposedAppointment || state.inspectionAppointmentIncomplete)
+    && isInspectionFinalClosingThanks(text)
+  ) {
     const closingStep = scenario.steps.find((candidate) => candidate.key === "closed_politely");
     markScriptedStepPassed(closingStep, text);
     state.scriptStep = scenario.steps.length;
@@ -4096,20 +4103,30 @@ function handleScriptedStaffReply(text) {
 
   if (!analysis.canAdvance) {
     const retry = scriptedRetryForMissingDetails(combinedText, step);
-    const retryKey = `inspection-retry:${step.key}:${retry.missingDetail || "general"}`;
+    // 入庫日時は日付不足・時刻不足を合わせて一度だけ確認する。
+    // 不足内容が変わっても別の質問として数えず、2回目は未確定のまま先へ進む。
+    const retryKey = step.key === "proposed_appointment"
+      ? "inspection-retry:proposed_appointment:general"
+      : `inspection-retry:${step.key}:${retry.missingDetail || "general"}`;
     const alreadyAsked = (state.questionRepeats[retryKey] || 0) > 0;
-    const maySkipRepeatedQuestion = !["proposed_appointment", "closed_politely"].includes(step.key);
+    const maySkipRepeatedQuestion = step.key !== "closed_politely";
     const optionalAfterAppointment = Boolean(state.proposedAppointment && step.optionalAfterAppointment);
 
     // 入庫日時確定後の任意案内は聞き返さない。
     // 日時確定前でも同じ質問を一度行っている場合は、再質問せず未達のまま先へ進む。
-    // ただし最低条件である具体的な入庫日・時刻と、実際の終話あいさつは
-    // 自動スキップしない。終話前に採点済みとなってマイクが止まるのを防ぐ。
+    // 具体的な入庫日・時刻も確認は一度だけとし、2回目は予約日時未確定として
+    // 後工程へ進む。実際の終話あいさつだけは自動スキップしない。
     if (optionalAfterAppointment || (alreadyAsked && maySkipRepeatedQuestion)) {
       analysis.canAdvance = true;
       analysis.blocked = false;
       analysis.skippedRepeatedQuestion = alreadyAsked;
       analysis.skippedAfterAppointment = optionalAfterAppointment;
+      if (step.key === "proposed_appointment" && alreadyAsked) {
+        state.inspectionAppointmentIncomplete = true;
+        analysis.minimumAppointmentIncomplete = true;
+        analysis.noClarificationDeduction = true;
+        analysis.evidence.push("入庫日または時刻が一度の確認後も不足（予約日時未確定）");
+      }
       delete state.scriptedPartialReplies[step.key];
       state.scriptStep += 1;
       while (
@@ -4130,13 +4147,20 @@ function handleScriptedStaffReply(text) {
       } else {
         state.currentState = scenario.steps[state.scriptStep].state;
       }
-      addMessage("customer", "はい。", {
-        audioId: "inspection_thanked_customer_retry",
+      const skippedCustomerResponse = step.key === "proposed_appointment"
+        ? "分かりました。"
+        : "はい。";
+      addMessage("customer", skippedCustomerResponse, {
+        audioId: step.key === "proposed_appointment"
+          ? "inspection_explained_lock_and_arrival_customer"
+          : "inspection_thanked_customer_retry",
         onCommitted: finishedAfterSkip
           ? () => finishRoleplay({ keepCustomerPlayback: true })
           : null
       });
-      els.speechNote.textContent = optionalAfterAppointment
+      els.speechNote.textContent = step.key === "proposed_appointment"
+        ? "入庫日時は未確定です。同じ質問を繰り返さず、未達として採点に反映して次の案内へ進みました。"
+        : optionalAfterAppointment
         ? "入庫日時が確定しているため、未確認項目を聞き返さず先へ進みました。"
         : "同じ質問は繰り返さず、未確認項目として採点に反映して先へ進みました。";
       renderProgress();
@@ -4655,6 +4679,7 @@ function scoreScriptedRoleplay() {
     && analysis.noClarificationDeduction !== true
     && !achieved[analysis.stepKey]
     && !optionalAfterAppointmentKeys.has(analysis.stepKey)
+    && !(analysis.stepKey === "proposed_appointment" && !achieved.proposed_appointment)
   ).length;
   const earnedPoints = applicableScoring.reduce(
     (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
@@ -4664,7 +4689,16 @@ function scoreScriptedRoleplay() {
   const baseScore = applicablePoints > 0
     ? Math.round((earnedPoints / applicablePoints) * 100)
     : 0;
-  const score = Math.max(0, Math.min(100, baseScore - Math.min(20, retryCount * 2)));
+  const hasMinimumAppointmentMetric = applicableScoring.some(
+    (metric) => metric.key === "proposed_appointment"
+  );
+  const minimumAppointmentMissing = hasMinimumAppointmentMetric
+    && !achieved.proposed_appointment;
+  const minimumAppointmentPenalty = minimumAppointmentMissing ? 20 : 0;
+  const score = Math.max(
+    0,
+    Math.min(100, baseScore - Math.min(20, retryCount * 2) - minimumAppointmentPenalty)
+  );
   const good = applicableScoring
     .filter((metric) => achieved[metric.key])
     .map((metric) => `${metric.action}ことができています`);
@@ -4682,12 +4716,17 @@ function scoreScriptedRoleplay() {
   if (retryCount > 0) {
     improve.unshift(`案内不足によるお客様の聞き返しが${retryCount}回ありました`);
   }
+  if (minimumAppointmentMissing) {
+    improve.unshift("具体的な入庫日と来店時間が確定していません（最低条件未達：20点減点）");
+  }
 
   const judgements = scenario.scoring.map((metric) => {
     const attempts = state.analyses.filter((analysis) =>
       analysis.stepKey === metric.key && analysis.notApplicable !== true
     );
-    const status = notApplicableKeys.has(metric.key)
+    const status = metric.key === "proposed_appointment" && minimumAppointmentMissing
+      ? "要改善（最低条件未達・20点減点）"
+      : notApplicableKeys.has(metric.key)
       ? "対象外（店内待ち提案済み）"
       : achieved[metric.key] ? "○" : "要改善";
     return `${metric.label}: ${status}${attempts.length > 1 ? `（${attempts.length}回発話）` : ""}`;
@@ -4700,7 +4739,9 @@ function scoreScriptedRoleplay() {
     recommendedTalkTitle: "推奨トーク",
     recommendedTalk: scenario.recommendedTalk,
     judgements,
-    summary: score >= 90
+    summary: minimumAppointmentMissing
+      ? "具体的な入庫日と来店時間が未確定です。会話は完了しましたが、予約確定の最低条件未達として大幅減点しました。"
+      : score >= 90
       ? "車検誘致の電話応対を、予約確定から事前案内まで正確に完結できています。"
       : score >= 70
         ? "基本の流れはできています。案内漏れを減らすと、より安定した電話応対になります。"

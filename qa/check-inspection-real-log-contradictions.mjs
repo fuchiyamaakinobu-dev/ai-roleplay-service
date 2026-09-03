@@ -35,7 +35,7 @@ assert.match(
 );
 assert.match(
   source,
-  /state\.proposedAppointment && isInspectionFinalClosingThanks\(text\)[\s\S]*?inspection_closed_politely_customer[\s\S]*?finishRoleplay/,
+  /\(state\.proposedAppointment \|\| state\.inspectionAppointmentIncomplete\)[\s\S]*?isInspectionFinalClosingThanks\(text\)[\s\S]*?inspection_closed_politely_customer[\s\S]*?finishRoleplay/,
   "最終のお礼を連絡先確認より先に処理して終話できません"
 );
 assert.match(

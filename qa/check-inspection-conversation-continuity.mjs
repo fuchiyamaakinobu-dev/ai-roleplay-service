@@ -106,13 +106,13 @@ assert.match(
 );
 assert.match(
   source,
-  /!\["proposed_appointment", "closed_politely"\]\.includes\(step\.key\)/,
-  "入庫日時または終話あいさつまで再質問禁止の対象になっています"
+  /const maySkipRepeatedQuestion = step\.key !== "closed_politely"/,
+  "一度確認した未確定日時から後工程へ進む処理が見つかりません"
 );
 assert.match(
   source,
-  /実際の終話あいさつは[\s\S]*?自動スキップしない[\s\S]*?マイクが止まるのを防ぐ/,
-  "不完全な終話発話で採点済みとなる処理を防止できません"
+  /実際の終話あいさつだけは自動スキップしない/,
+  "終話工程を自動スキップしない意図が明記されていません"
 );
 
 console.log("車検誘致・会話記憶と重複質問防止テスト: OK");
