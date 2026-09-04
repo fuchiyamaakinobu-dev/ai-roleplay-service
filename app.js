@@ -1417,6 +1417,14 @@ function asksInspectionAdditionalServiceFollowUp(text) {
   return asksAboutOtherWork && hasServiceContext;
 }
 
+function asksInspectionOilChangeOffer(text) {
+  const normalized = normalizeScriptedText(text);
+  if (!isScriptedQuestion(normalized)) return false;
+  const hasOilChange = normalized.includes("オイル交換");
+  const asksPreference = /(?:いかが|希望|ご希望|しますか|されますか|ございますか|どうしますか)/.test(normalized);
+  return hasOilChange && asksPreference;
+}
+
 function asksInspectionForCustomerQuestions(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
@@ -2280,8 +2288,12 @@ function hasBookingContinuationConfirmation(text) {
     || /(?:予約|手続き).{0,24}いかが(?:でしょうか|ですか)/.test(normalized);
   if (!asksPermission) return false;
   const hasTimeContext = /(?:10分|十分|もう少し|少し|お時間|時間)/.test(normalized);
-  const hasBookingContext = /(?:予約|手続き|このまま|進め|続け)/.test(normalized);
-  return hasTimeContext || hasBookingContext;
+  const hasBookingContext = /(?:予約|手続き)/.test(normalized);
+  const explicitlyAsksToContinue = /このまま.{0,16}(?:予約|手続き|進め|続け)/.test(normalized)
+    || /(?:予約|手続き).{0,16}(?:進め|続け|させていただ|しても)/.test(normalized);
+  // 単なる予約日時の提案（「9月11日10時でよろしいですか」）は、
+  // 予約手続きに必要な時間・継続可否の確認として加点しない。
+  return hasTimeContext || (hasBookingContext && explicitlyAsksToContinue);
 }
 
 function hasExplicitBookingContinuationConfirmation(text) {
@@ -2437,7 +2449,10 @@ function asksOpenInspectionDatePreference(text) {
   const hasDateContext = /(?:日程|日にち|日付|日取り|何日|いつ(?!も))/.test(normalized);
   const asksForAnswer = isScriptedQuestion(normalized)
     || /(?:教えて|お聞かせ|ございますでしょう)/.test(normalized);
-  return hasPreference && hasDateContext && asksForAnswer;
+  const asksWhenPlanWorks = /(?:いつ頃|いつごろ|いつ).{0,12}(?:予定|都合)/.test(normalized)
+    || /(?:予定|都合).{0,12}(?:いつ頃|いつごろ|いつ)/.test(normalized);
+  return (hasPreference && hasDateContext && asksForAnswer)
+    || (asksWhenPlanWorks && asksForAnswer);
 }
 
 function hasInspectionAppointmentCoordinationEvidence(text) {
@@ -2465,7 +2480,10 @@ function shouldAnswerCombinedInspectionAvailability(text, startingIndex, current
   const availabilityStep = scenario.steps[availabilityIndex];
   return Boolean(
     availabilityStep
-    && advancedPastScriptedStep(startingIndex, currentIndex, scenario.steps, "asked_availability")
+    && (
+      advancedPastScriptedStep(startingIndex, currentIndex, scenario.steps, "asked_availability")
+      || (startingIndex > availabilityIndex && asksOpenInspectionDatePreference(text))
+    )
     && scriptedStepMatches(text, availabilityStep)
   );
 }
@@ -2541,7 +2559,7 @@ function inspectionTextHasSplitGuidanceKey(text, stepKey) {
   if (stepKey === "confirmed_reminder_contact") {
     const hasReminderFragment = /(?:3日前|三日前)/.test(normalized)
       && /(?:連絡|電話)/.test(normalized);
-    const hasContactFragment = /(?:この|同じ|今の|こちらの).{0,8}(?:携帯|電話|連絡先)/.test(normalized)
+    const hasContactFragment = /(?:この|同じ|今の|こちらの|今かけている).{0,8}(?:携帯|電話|連絡先|番号)/.test(normalized)
       || /(?:携帯|電話番号|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(normalized);
     return hasReminderFragment || hasContactFragment;
   }
@@ -2636,7 +2654,7 @@ function hasInspectionReminderContactConfirmation(text) {
   );
   const hasThreeDayReminder = /(?:3日前|三日前)/.test(conversationEvidence)
     && /(?:連絡|電話)/.test(conversationEvidence);
-  const asksKnownContact = /(?:この|同じ|今の|こちらの).{0,8}(?:携帯|電話|連絡先)/.test(conversationEvidence)
+  const asksKnownContact = /(?:この|同じ|今の|こちらの|今かけている).{0,8}(?:携帯|電話|連絡先|番号)/.test(conversationEvidence)
     || /(?:携帯|電話番号|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(conversationEvidence)
     || /(?:どちら|電話番号)/.test(conversationEvidence);
   const hasContactQuestion = inspectionStaffConversationEvidence(
@@ -2645,7 +2663,7 @@ function hasInspectionReminderContactConfirmation(text) {
   ).split(/(?<=[。.!！?？])/).some((fragment) =>
     asksKnownContact
     && isScriptedQuestion(fragment)
-    && /(?:携帯|電話番号|連絡先|この電話|同じ電話|今の電話)/.test(fragment)
+    && /(?:携帯|電話番号|連絡先|この電話|同じ電話|今の電話|こちらの番号|この番号|今かけている番号)/.test(fragment)
   );
   return hasThreeDayReminder && asksKnownContact && hasContactQuestion;
 }
@@ -2653,7 +2671,7 @@ function hasInspectionReminderContactConfirmation(text) {
 function asksInspectionReminderContactDestination(text) {
   const normalized = normalizeScriptedText(text);
   return isScriptedQuestion(normalized)
-    && /(?:携帯|電話番号|連絡先|この電話|同じ電話|今の電話)/.test(normalized)
+    && /(?:携帯|電話番号|連絡先|この電話|同じ電話|今の電話|こちらの番号|この番号|今かけている番号)/.test(normalized)
     && /(?:よろしい|良い|大丈夫|どちら|どこ|お願いしますか)/.test(normalized);
 }
 
@@ -3555,6 +3573,34 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // お客様が代車を希望した後の「代車をご用意します」は、工程の位置に
+  // かかわらず手配承諾として記憶し、曖昧な「はい」ではなく「お願いします」と返す。
+  if (
+    (state.inspectionLoanerRequested || state.inspectionLoanerConfirmed)
+    && hasInspectionLoanerConfirmation(text, true)
+    && !asksInspectionVehicleConcerns(text)
+    && !hasInspectionAppointmentProposalEvidence(text)
+    && !hasScriptedAppointmentRecapEvidence(text)
+  ) {
+    state.inspectionLoanerConfirmed = true;
+    const loanerStep = scenario.steps.find((candidate) => candidate.key === "explained_loaner");
+    const waitingStep = scenario.steps.find((candidate) => candidate.key === "confirmed_waiting");
+    if (loanerStep) markScriptedStepPassed(loanerStep, text);
+    if (waitingStep) {
+      markScriptedStepPassed(
+        waitingStep,
+        "お客様の代車希望とスタッフの手配承諾で待ち方を確認済み"
+      );
+    }
+    state.turn += 1;
+    addMessage("customer", "お願いします。", {
+      audioId: "inspection_booking_invitation_accept_customer"
+    });
+    els.speechNote.textContent = "代車の手配承諾を確認しました。現在の会話位置から続けてください。";
+    renderProgress();
+    return;
+  }
+
   // 代車利用が先に確定している場合、後から店内待ちを尋ねられても
   // 両方を肯定せず、確定済みの代車希望を明確に返す。
   if (
@@ -3591,6 +3637,20 @@ function handleScriptedStaffReply(text) {
       audioId: "inspection_additional_service_none_customer"
     });
     els.speechNote.textContent = "お客様からの不明点はありません。現在の会話位置から続けてください。";
+    renderProgress();
+    return;
+  }
+
+  // オイル交換の希望を直接尋ねられた場合は、現在の工程や質問順に左右されず、
+  // 「はい」ではなく具体的な追加作業希望を返す。
+  if (!hasInspectionOilChangeRequest() && asksInspectionOilChangeOffer(text)) {
+    const concernStep = scenario.steps.find((candidate) => candidate.key === "asked_vehicle_concerns");
+    if (concernStep) markScriptedStepPassed(concernStep, text);
+    state.turn += 1;
+    addMessage("customer", "オイル交換もお願いしたいです。", {
+      audioId: "inspection_asked_vehicle_concerns_customer"
+    });
+    els.speechNote.textContent = "オイル交換の希望を受け付けました。現在の会話位置から続けてください。";
     renderProgress();
     return;
   }
@@ -3867,25 +3927,6 @@ function handleScriptedStaffReply(text) {
     addMessage("customer", "分かりました。", {
       audioId: "inspection_explained_lock_and_arrival_customer"
     });
-    return;
-  }
-
-  // 代車手配を一度確認済みの後に「代車をご用意します」と重ねて案内された場合も、
-  // 曖昧な「はい。」ではなく利用意思が明確な「お願いします。」を返す。
-  // 同じ発話に車両状態の質問や予約日時の提案・復唱がある場合は、そちらへの回答を優先する。
-  if (
-    state.inspectionLoanerConfirmed
-    && hasInspectionLoanerConfirmation(text, true)
-    && !asksInspectionVehicleConcerns(text)
-    && !hasInspectionAppointmentProposalEvidence(text)
-    && !hasScriptedAppointmentRecapEvidence(text)
-  ) {
-    state.turn += 1;
-    addMessage("customer", "お願いします。", {
-      audioId: "inspection_booking_invitation_accept_customer"
-    });
-    els.speechNote.textContent = "代車を利用する意思を確認済みです。現在の会話位置から続けてください。";
-    renderProgress();
     return;
   }
 

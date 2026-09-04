@@ -131,8 +131,11 @@ const crossingContext = {
   },
   scriptedStepMatches(text, step) {
     return step.key === "asked_availability"
-      && /ご都合/.test(text)
+      && /(?:ご都合|ご予定)/.test(text)
       && /(?:でしょうか|ますか|ですか|[?？])/.test(text);
+  },
+  asksOpenInspectionDatePreference(text) {
+    return /(?:いつ頃|いつごろ|いつ).{0,12}(?:予定|都合)|(?:予定|都合).{0,12}(?:いつ頃|いつごろ|いつ)/.test(text);
   }
 };
 vm.createContext(crossingContext);
@@ -161,6 +164,15 @@ assert.equal(
   ),
   true,
   "車検案内と都合確認をまとめた発話へ都合の回答を返せません"
+);
+assert.equal(
+  crossingContext.shouldAnswerCombinedInspectionAvailability(
+    "8月1日以降から車検が可能ですが、いつ頃ご予定よろしいですか？",
+    3,
+    3
+  ),
+  true,
+  "都合確認工程を通過後でも、具体日時前の希望日質問へ自然な予約希望を返せません"
 );
 assert.equal(
   crossingContext.shouldAnswerCombinedInspectionAvailability(

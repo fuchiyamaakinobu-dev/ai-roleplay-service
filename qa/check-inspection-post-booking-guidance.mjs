@@ -89,6 +89,19 @@ assert.equal(
   "現在の発話にある連絡先質問を認識できません"
 );
 assert.equal(
+  context.asksInspectionReminderContactDestination("今かけているこちらの番号でよろしいでしょうか。"),
+  true,
+  "『こちらの番号』を現在の連絡先質問として認識できません"
+);
+context.state.transcript = [
+  { role: "staff", text: "入庫日の3日前に確認のお電話をいたします。" }
+];
+assert.equal(
+  context.hasInspectionReminderContactConfirmation("今かけているこちらの番号でよろしいでしょうか。"),
+  true,
+  "3日前連絡と『こちらの番号』の分割案内を合算できません"
+);
+assert.equal(
   context.asksInspectionReminderContactDestination("かしこまりました。"),
   false,
   "過去の連絡先質問を現在の受領発話へ持ち越しています"

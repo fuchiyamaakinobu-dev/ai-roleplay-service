@@ -296,6 +296,11 @@ assert.match(
   "確認済みの代車手配が繰り返された場合に『お願いします。』と回答できません"
 );
 assert.match(
+  appSource,
+  /state\.inspectionLoanerRequested \|\| state\.inspectionLoanerConfirmed[\s\S]*?hasInspectionLoanerConfirmation\(text, true\)[\s\S]*?state\.inspectionLoanerConfirmed = true[\s\S]*?addMessage\("customer", "お願いします。"/,
+  "代車希望直後の手配承諾へ『お願いします。』と回答して確定状態を保持できません"
+);
+assert.match(
   scenarioSource,
   /key:\s*"explained_loaner"[\s\S]*?customerResponse:\s*"予約しようかな。"/,
   "代車手配を承諾した後の『予約しようかな。』が設定されていません"

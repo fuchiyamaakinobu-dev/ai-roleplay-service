@@ -50,6 +50,17 @@ assert.equal(
   "店内待ちの質問を追加作業再確認として誤認識しています"
 );
 for (const phrase of [
+  "オイル交換などはいかがでしょうか？",
+  "オイル交換のご希望はございますか？",
+  "オイル交換はどうしますか？"
+]) {
+  assert.equal(
+    additionalFollowUpContext.asksInspectionOilChangeOffer(phrase),
+    true,
+    `${phrase} をオイル交換希望の質問として認識できません`
+  );
+}
+for (const phrase of [
   "不明点等はございますでしょうか？",
   "何かご不明な点はございますか？",
   "ほかにご質問はありませんか？"
