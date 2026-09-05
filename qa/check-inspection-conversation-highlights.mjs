@@ -46,6 +46,7 @@ const context = {
   inspectionAppointmentProposalMatch: (text) => /8月30日(?:午前)?10時.*いかが/.test(text)
     ? { month: 8, day: 30, hour: 10 }
     : null,
+  appointmentPeriodsMatch: () => true,
   inspectionTextHasSplitGuidanceKey: (text, key) => key === "explained_documents"
     ? /(?:荷物|荷室|トランク|車検証|自賠責|納税証明)/.test(text)
     : /(?:ロック|ナット|アダプター|工具|10分前|15分前)/.test(text),

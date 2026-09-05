@@ -31,6 +31,13 @@ const context = {
   },
   hasSupportedInspectionDuration() {
     return false;
+  },
+  hasConfirmedInspectionAppointmentRecap(text) {
+    const normalized = String(text || "").replace(/\s+/g, "");
+    return /佐藤/.test(normalized)
+      && /9月10日/.test(normalized)
+      && /9時(?:半|30分)/.test(normalized)
+      && /お待ちしております/.test(normalized);
   }
 };
 vm.createContext(context);

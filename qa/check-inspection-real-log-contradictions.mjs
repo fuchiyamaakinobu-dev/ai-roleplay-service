@@ -15,12 +15,12 @@ assert.equal(
 );
 assert.match(
   source,
-  /asksInspectionLoanerNeed\(text\)[\s\S]*?inspectionWaitingMethod === "store"[\s\S]*?代車は必要ありません。/,
-  "店内待ち確定後に代車を断る分岐がありません"
+  /asksInspectionLoanerNeed\(text\)[\s\S]*?inspectionWaitingMethod === "store"[\s\S]*?待っています。[\s\S]*?inspection_confirmed_waiting_customer/,
+  "店内待ち確定後に登録済み音声で待ち方を維持する分岐がありません"
 );
 assert.match(
   source,
-  /inspectionWaitingMethod === "loaner"[\s\S]*?asksInspectionWaitingMethodConfirmation\(text\)[\s\S]*?代車をお願いします。/,
+  /inspectionWaitingMethod === "loaner"[\s\S]*?asksInspectionWaitingMethodConfirmation\(text\)[\s\S]*?お願いします。[\s\S]*?inspection_booking_invitation_accept_customer/,
   "代車確定後に店内待ちへ変更しない分岐がありません"
 );
 assert.match(
@@ -50,8 +50,8 @@ assert.match(
 );
 assert.match(
   source,
-  /confirmedInspectionAppointmentMatches\(text\)[\s\S]*?予約は先ほどの日時でお願いします。/,
-  "確定後に異なる予約日時へ自動変更しない処理がありません"
+  /confirmedInspectionAppointmentMatches\(text\)[\s\S]*?異なる日時でも再確認せず[\s\S]*?continueSpeechInputWithoutCustomerReply/,
+  "確定後に異なる予約日時を再確認せず進める処理がありません"
 );
 assert.match(
   source,

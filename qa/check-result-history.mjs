@@ -44,6 +44,8 @@ assert.match(storeSource, /collection\(db, "roleplayResults"\)/);
 assert.match(storeSource, /employeeCode: cleanText\(payload\.employeeCode, 6\)/);
 assert.match(storeSource, /serverTimestamp\(\)/);
 assert.match(storeSource, /text: maskPhoneNumbers\(message\.text\)/);
+assert.match(appSource, /state\.transcript\.slice\(0, 300\)/);
+assert.match(storeSource, /payload\.transcript \|\| \[\]\)\.slice\(0, 300\)/);
 
 const maskStart = storeSource.indexOf("function cleanText(");
 const maskEnd = storeSource.indexOf("function cleanBase(", maskStart);

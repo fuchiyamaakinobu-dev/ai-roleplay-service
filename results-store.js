@@ -71,7 +71,7 @@ async function saveResult(payload) {
       judgements: (payload.judgements || []).slice(0, 30).map((item) => cleanText(item, 500)),
       recommendedTalkTitle: cleanText(payload.recommendedTalkTitle, 100),
       recommendedTalk: cleanText(payload.recommendedTalk, 3000),
-      transcript: (payload.transcript || []).slice(0, 100).map((message) => ({
+      transcript: (payload.transcript || []).slice(0, 300).map((message) => ({
         role: cleanText(message.role, 20),
         // 採点は画面内の原文で完了させ、外部履歴へ保存する直前だけ
         // 10～11桁またはハイフン区切りの電話番号らしい文字列を伏せる。

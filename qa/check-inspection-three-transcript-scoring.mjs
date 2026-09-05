@@ -64,6 +64,8 @@ const context = {
     : null,
   hasInspectionAppointmentProposalEvidence: (text) => /\d{1,2}月\d{1,2}日.*\d{1,2}時.*(?:いかが|どう)/.test(text),
   hasScriptedAppointmentRecapEvidence: (text) => /佐藤.*\d{1,2}月\d{1,2}日.*\d{1,2}時/.test(text),
+  hasConfirmedInspectionAppointmentRecap: (text) => /佐藤.*\d{1,2}月\d{1,2}日.*\d{1,2}時.*お待ち/.test(text),
+  asksInspectionIdentityConfirmation: (text) => /佐藤様?(?:のお電話|のお宅|でしょうか|ですか)/.test(text),
   hasInspectionAvailablePeriodEvidence: (text) => /9月30日/.test(text) && /8月1日/.test(text),
   isInspectionFinalClosingThanks: (text) => /ありがとうございました/.test(text)
 };

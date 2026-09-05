@@ -791,6 +791,7 @@ function commitMessage(role, text, options = {}) {
     } else if (
       els.audioEnabled.checked
       && scenario.id !== "service-12month-visit-promotion"
+      && scenario.id !== "vehicle-inspection-phone-followup"
     ) {
       speakCustomerText(message.text, onCustomerFinished);
     } else if (onCustomerFinished) {
@@ -895,9 +896,11 @@ function playAudio(src, fallbackText = "", showMissingMessage = true, onFinished
   const audio = new Audio(src);
   activeCustomerAudio = audio;
   let finished = false;
+  const playbackWatchdog = window.setTimeout(() => finishOnce(), 30000);
   const finishOnce = () => {
     if (finished || playbackGeneration !== customerPlaybackGeneration) return;
     finished = true;
+    window.clearTimeout(playbackWatchdog);
     if (activeCustomerAudio === audio) activeCustomerAudio = null;
     if (typeof onFinished === "function") onFinished();
   };
@@ -919,9 +922,11 @@ function speakCustomerText(text, onFinished = null) {
   }
   const playbackGeneration = customerPlaybackGeneration;
   let finished = false;
+  const playbackWatchdog = window.setTimeout(() => finishOnce(), 30000);
   const finishOnce = () => {
     if (finished || playbackGeneration !== customerPlaybackGeneration) return;
     finished = true;
+    window.clearTimeout(playbackWatchdog);
     if (typeof onFinished === "function") onFinished();
   };
   const utterance = new SpeechSynthesisUtterance(text);
@@ -1099,12 +1104,9 @@ function inspectionHighlightPatterns(text) {
     && normalized.includes(`${appointment.month}月`)
     && normalized.includes(`${appointment.day}日`)
     && normalized.includes(`${appointment.hour}時`)
-    && (Number(appointment.minute || 0) === 0
-      ? !new RegExp(`${appointment.hour}時(?:半|\\d{1,2}分)`).test(normalized)
-      : Number(appointment.minute) === 30
-        ? new RegExp(`${appointment.hour}時(?:半|30分)`).test(normalized)
-        : normalized.includes(`${appointment.hour}時${appointment.minute}分`))
-    && [customerName, "佐藤", "斉藤"].some((name) => name && normalized.includes(name))) {
+    && appointmentPeriodsMatch(appointment, inspectionAppointmentProposalMatch(normalized))
+    && [customerName, "佐藤", "斉藤"].some((name) => name && normalized.includes(name))
+    && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます)/.test(normalized)) {
     add("recapped_appointment", [new RegExp(`${escapePattern(customerName || "佐藤")}\\s*様?`, "g"), /佐藤\s*様?/g, /斉藤\s*様?/g, /[0-9０-９]{1,2}\s*月\s*(?:の\s*)?[0-9０-９]{1,2}\s*日/g, /(?:午前|午後)?\s*[0-9０-９]{1,2}\s*時/g]);
   }
   if (/ありがとうございました/.test(normalized)) {
@@ -2072,7 +2074,11 @@ function normalizeScriptedText(text) {
   specialDayReadings
     .sort(([left], [right]) => right.length - left.length)
     .forEach(([reading, value]) => {
-    normalized = normalized.replace(new RegExp(reading, "g"), `${value}日`);
+      // 「いつか」は日付以外の通常語にもなるため、月に続く場合だけ日へ変換する。
+      normalized = normalized.replace(
+        new RegExp(`(\\d{1,2}月)(?:の)?${reading}`, "g"),
+        (match, month) => `${month}${value}日`
+      );
     });
 
   // 月日・時刻・分数に続くひらがなの数詞だけを数値化する。
@@ -2122,6 +2128,14 @@ function normalizeScriptedText(text) {
     // 「くがつの30日」のように月だけがひらがなの場合、月を数値化した後で
     // 残る「の」を除去し、登録済みの「9月30日」と同じ判定値にそろえる。
     .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1");
+
+  // ひらがなの月を数値化した後で、「8月ついたち」のような日付読みを変換する。
+  specialDayReadings.forEach(([reading, value]) => {
+    normalized = normalized.replace(
+      new RegExp(`(\\d{1,2}月)(?:の)?${reading}`, "g"),
+      (match, month) => `${month}${value}日`
+    );
+  });
 
   // 判定専用の同義表記。会話欄・保存ログの発話原文には適用しない。
   const recognitionAliases = [
@@ -2181,20 +2195,22 @@ function hasInspectionWaitingChoiceOffer(text) {
   const normalized = normalizeScriptedText(text);
   const hasWaitingContext = /(?:待|店内)/.test(normalized);
   const offersWaitingChoice = /(?:いかが(?:でしょうか|ですか)|お待ちになりますか|待たれますか|待っていただけますか)/.test(normalized);
-  return hasWaitingContext && offersWaitingChoice;
+  const deniesWaiting = /(?:待てません|待つことはできません|お待ちいただけません|店内待ちはできません)/.test(normalized);
+  return hasWaitingContext && offersWaitingChoice && !deniesWaiting;
 }
 
 function asksInspectionWaitingMethodConfirmation(text) {
   const normalized = normalizeScriptedText(text);
   const hasWaitingContext = /(?:待|店内)/.test(normalized);
   const asksCustomerToWait = /(?:お待ちいただけますか|お待ちになりますか|待たれますか|待っていただけますか)/.test(normalized);
-  return hasWaitingContext && asksCustomerToWait;
+  const deniesWaiting = /(?:待てません|待つことはできません|お待ちいただけません|店内待ちはできません)/.test(normalized);
+  return hasWaitingContext && asksCustomerToWait && !deniesWaiting;
 }
 
 function asksInspectionLoanerNeed(text) {
   const normalized = normalizeScriptedText(text);
   const hasLoanerContext = /(?:代車|代わりのお車|代わりの車|代替車)/.test(normalized);
-  const asksNeedOrUse = /(?:必要|使い|お使い|利用|あった方|あったほう|あれば|ある方|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
+  const asksNeedOrUse = /(?:必要|使い|お使い|利用|用意|準備|手配|あった方|あったほう|あれば|ある方|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
   const isChoiceQuestion = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized)
     || /(?:いかがいたしましょう|どうされます|どうします)/.test(normalized);
   return hasLoanerContext && asksNeedOrUse && isChoiceQuestion;
@@ -2254,17 +2270,24 @@ function hasInspectionAvailableFromInformation(text) {
 }
 
 function hasInspectionAvailablePeriodEvidence(text) {
-  const evidence = inspectionStaffConversationEvidence(
-    normalizeScriptedText(text),
-    "explained_available_period"
-  );
+  const current = normalizeScriptedText(text);
+  const staffUtterances = (Array.isArray(state?.transcript) ? state.transcript : [])
+    .filter((message) => message.role === "staff")
+    .map((message) => normalizeScriptedText(message.text));
+  if (current && staffUtterances.length === 0) staffUtterances.push(current);
   const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
   const availableFrom = normalizeScriptedText(scenario.availableFrom || "");
-  return Boolean(expiryDate && availableFrom)
-    && evidence.includes(expiryDate)
-    && evidence.includes(availableFrom)
-    && /(?:満了|期限|まで|車検)/.test(evidence)
-    && /(?:以降|から|作業|入庫|可能|受け)/.test(evidence);
+  const hasExpiryGuidance = staffUtterances.some((utterance) =>
+    utterance.includes(expiryDate) && /(?:満了|期限|まで|車検)/.test(utterance)
+  );
+  const hasAvailableFromGuidance = staffUtterances.some((utterance) => {
+    const index = utterance.indexOf(availableFrom);
+    if (index < 0) return false;
+    const nearby = utterance.slice(index, index + availableFrom.length + 16);
+    return new RegExp(`${availableFrom}(?:以降|以後|から|より)`).test(nearby)
+      || new RegExp(`${availableFrom}.{0,8}(?:作業可能|入庫可能|車検可能|受けられ)`).test(nearby);
+  });
+  return Boolean(expiryDate && availableFrom && hasExpiryGuidance && hasAvailableFromGuidance);
 }
 
 function hasLockNutToolExpression(text) {
@@ -2287,19 +2310,22 @@ function hasBookingContinuationConfirmation(text) {
   const asksPermission = /(?:よろしい|大丈夫|ありますか|ございます|いただけ(?:ます|る)|構いません|構わない)/.test(normalized)
     || /(?:予約|手続き).{0,24}いかが(?:でしょうか|ですか)/.test(normalized);
   if (!asksPermission) return false;
-  const hasTimeContext = /(?:10分|十分|もう少し|少し|お時間|時間)/.test(normalized);
+  const hasTimeContext = /(?:10分|十分|もう少し|少し|お時間)/.test(normalized);
   const hasBookingContext = /(?:予約|手続き)/.test(normalized);
   const explicitlyAsksToContinue = /このまま.{0,16}(?:予約|手続き|進め|続け)/.test(normalized)
     || /(?:予約|手続き).{0,16}(?:進め|続け|させていただ|しても)/.test(normalized);
   // 単なる予約日時の提案（「9月11日10時でよろしいですか」）は、
   // 予約手続きに必要な時間・継続可否の確認として加点しない。
+  // 現在の予約手続き工程では「もう少しお時間ありますか」も自然な確認として扱う。
+  // 会話全体から採点を回収するときは、下の明示判定で予約・手続き語も必須にする。
   return hasTimeContext || (hasBookingContext && explicitlyAsksToContinue);
 }
 
 function hasExplicitBookingContinuationConfirmation(text) {
   const normalized = normalizeScriptedText(text);
   return hasBookingContinuationConfirmation(normalized)
-    && /(?:予約|手続き)/.test(normalized);
+    && /(?:予約|手続き)/.test(normalized)
+    && /(?:10分|十分|もう少し|少し|お時間)/.test(normalized);
 }
 
 function isInspectionDurationProgressAcknowledgement(text) {
@@ -2424,18 +2450,20 @@ function inspectionAppointmentDateCandidates(text) {
 
 function inspectionAppointmentProposalMatch(text) {
   const normalized = normalizeScriptedText(text);
-  for (const date of inspectionAppointmentDateCandidates(normalized)) {
-    const timeMatch = normalized.slice(date.end).match(/(\d{1,2})時(?:(半)|(\d{1,2})分)?/);
-    if (timeMatch) {
-      return {
-        month: date.month,
-        day: date.day,
-        hour: timeMatch[1],
-        minute: timeMatch[2] === "半" ? 30 : Number(timeMatch[3] || 0)
-      };
-    }
-  }
-  return null;
+  const dates = inspectionAppointmentDateCandidates(normalized);
+  if (dates.length !== 1) return null;
+  const date = dates[0];
+  const following = normalized.slice(date.end);
+  const timeMatches = [...following.matchAll(/(午前|午後)?(\d{1,2})時(?:(半)|(\d{1,2})分)?/g)];
+  if (timeMatches.length !== 1) return null;
+  const timeMatch = timeMatches[0];
+  return {
+    month: date.month,
+    day: date.day,
+    hour: timeMatch[2],
+    minute: timeMatch[3] === "半" ? 30 : Number(timeMatch[4] || 0),
+    period: timeMatch[1] || ""
+  };
 }
 
 function hasInspectionScheduleQuestionIntent(normalized) {
@@ -2509,7 +2537,7 @@ function hasInspectionSelfIntroduction(text) {
   // 個人名の辞書は使わない。店舗を表す単語列の後ろに残った未知の日本語を
   // 「名前らしい語」として取り出し、名乗り語尾が続くことを確認する。
   const storeMatch = normalized.match(
-    /(?:トヨタ|とよた|豊田)(?:モビリティ|もびりてぃ|モビリヒロ|もびりひろ)/
+    /(?:トヨタ|とよた|豊田)(?:(?:モビリティー?|モビリテ|もびりてぃー?)(?:帯広|おびひろ)|(?:モビリヒロ|もびりひろ))/
   );
   if (!storeMatch || storeMatch.index === undefined) return false;
 
@@ -2522,7 +2550,6 @@ function hasInspectionSelfIntroduction(text) {
   let beforeEnding = afterStore.slice(0, endingMatch.index);
   // 店舗側の単語は氏名候補から除外する。本別店の「店」省略と読点誤認も許容する。
   beforeEnding = beforeEnding
-    .replace(/^(?:帯広|おびひろ)/, "")
     .replace(/^本[、,]?別(?:店)?/, "")
     .replace(/^[一-龯々ぁ-んァ-ヶー]{1,12}店(?=(?:の|、|,))/, "")
     .replace(/^(?:の|、|,)+/, "");
@@ -2625,7 +2652,15 @@ function confirmedInspectionAppointmentMatches(text) {
     && match.day === appointment.day
     && match.hour === appointment.hour
     && Number(match.minute || 0) === Number(appointment.minute || 0)
+    && appointmentPeriodsMatch(appointment, match)
   );
+}
+
+function asksInspectionIdentityConfirmation(text) {
+  const normalized = normalizeScriptedText(text);
+  const customerName = normalizeScriptedText(scenario.customerName || "").replace(/様$/, "");
+  if (!customerName || !normalized.includes(customerName) || !isScriptedQuestion(normalized)) return false;
+  return new RegExp(`${customerName}(?:様)?(?:のお電話|のお宅|ご本人|様)?(?:でいらっしゃいます|でしょうか|ですか)`).test(normalized);
 }
 
 function repeatedInspectionCoreStepAfterAppointment(text) {
@@ -2711,7 +2746,8 @@ function scriptedRequiredGroupsMatch(normalized, step, matchedGroups) {
   // Firestoreの公開シナリオに旧キーワードが残っていても、
   // 走行距離確認と、確定済みの作業時間（60・75・90分）・店内待ちを必須にする。
   if (step.key === "explained_duration_and_wait") {
-    const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word));
+    const hasWaiting = ["待", "店内"].some((word) => normalized.includes(word))
+      && !/(?:待てません|待つことはできません|お待ちいただけません|店内待ちはできません)/.test(normalized);
     return state.inspectionMileageAsked
       && hasSupportedInspectionDuration(normalized)
       && hasWaiting;
@@ -2796,25 +2832,15 @@ function analyzeScriptedStaff(text, step) {
         month: appointmentMatch.month,
         day: appointmentMatch.day,
         hour: appointmentMatch.hour,
-        minute: appointmentMatch.minute
+        minute: appointmentMatch.minute,
+        period: appointmentMatch.period || ""
       };
       state.inspectionAppointmentIncomplete = false;
     }
   }
 
   if (step.key === "recapped_appointment") {
-    const appointment = state.proposedAppointment;
-    recappedConfirmedDateTime = Boolean(
-      appointment
-      && normalized.includes(`${appointment.month}月`)
-      && normalized.includes(`${appointment.day}日`)
-      && normalized.includes(`${appointment.hour}時`)
-      && (Number(appointment.minute || 0) === 0
-        ? !new RegExp(`${appointment.hour}時(?:半|\\d{1,2}分)`).test(normalized)
-        : Number(appointment.minute) === 30
-          ? new RegExp(`${appointment.hour}時(?:半|30分)`).test(normalized)
-          : normalized.includes(`${appointment.hour}時${appointment.minute}分`))
-    );
+    recappedConfirmedDateTime = hasConfirmedInspectionAppointmentRecap(normalized);
     passed = Boolean(
       passed
       && recappedConfirmedDateTime
@@ -2928,11 +2954,7 @@ function asksInspectionVehicleConcerns(text) {
 
 function scriptedStepSpecificMatches(normalized, step) {
   if (step.key === "confirmed_identity") {
-    const customerName = String(scenario.customerName || "佐藤")
-      .replace(/様/g, "")
-      .replace(/\s+/g, "");
-    const acceptedNames = new Set([customerName, "佐藤", "斉藤"]);
-    return [...acceptedNames].filter(Boolean).some((name) => normalized.includes(name));
+    return asksInspectionIdentityConfirmation(normalized);
   }
 
   if (step.key === "introduced_self") {
@@ -3024,6 +3046,7 @@ function combinedScriptedReply(text, step) {
 }
 
 function asksInspectionDayPreference(normalized) {
+  if (/\d{1,2}月\d{1,2}日/.test(normalized)) return false;
   const hasDayChoice = /(?:平日|土日|週末|曜日)/.test(normalized);
   const asksPreference = /(?:どちら|希望|都合|よろしい|良い|いかが)/.test(normalized);
   return hasDayChoice && asksPreference && isScriptedQuestion(normalized);
@@ -3240,7 +3263,6 @@ function hasScriptedClosingIntent(text) {
   }
 
   return isInspectionFinalClosingThanks(normalized) || [
-    /当日.*お待ち/,
     /ご?予約.*承り/,
     /以上.*(?:予約|案内)/,
     /これで.*(?:予約|案内)/
@@ -3249,7 +3271,10 @@ function hasScriptedClosingIntent(text) {
 
 function isInspectionFinalClosingThanks(text) {
   const normalized = normalizeScriptedText(text);
-  return /ありがとうございました/.test(normalized);
+  if (!/ありがとうございました/.test(normalized)) return false;
+  if (/[「『“\"]ありがとうございました[」』”\"]/.test(normalized)) return false;
+  if (/(?:まだ|とは|では|じゃ).{0,12}ありがとうございました.{0,12}(?:言っていません|言ってない|ありません|ない)/.test(normalized)) return false;
+  return true;
 }
 
 function hasScriptedAppointmentRecapEvidence(text) {
@@ -3323,18 +3348,7 @@ function recordOptionalShortcutEvidence(text, startIndex, closingIndex) {
       && scriptedStepSpecificMatches(normalized, step);
 
     if (step.key === "recapped_appointment") {
-      passed = Boolean(
-        passed
-        && appointment
-        && normalized.includes(`${appointment.month}月`)
-        && normalized.includes(`${appointment.day}日`)
-        && normalized.includes(`${appointment.hour}時`)
-        && (Number(appointment.minute || 0) === 0
-          ? !new RegExp(`${appointment.hour}時(?:半|\\d{1,2}分)`).test(normalized)
-          : Number(appointment.minute) === 30
-            ? new RegExp(`${appointment.hour}時(?:半|30分)`).test(normalized)
-            : normalized.includes(`${appointment.hour}時${appointment.minute}分`))
-      );
+      passed = Boolean(passed && appointment && hasConfirmedInspectionAppointmentRecap(normalized));
     }
     if (!passed) return;
 
@@ -3555,7 +3569,9 @@ function handleScriptedStaffReply(text) {
   if (asksInspectionLoanerNeed(text)) {
     if (state.inspectionWaitingMethod === "store") {
       state.turn += 1;
-      addMessage("customer", "代車は必要ありません。");
+      addMessage("customer", "待っています。", {
+        audioId: "inspection_confirmed_waiting_customer"
+      });
       els.speechNote.textContent = "店内で待つことが確定済みです。最初に確認した待ち方を維持します。";
       renderProgress();
       return;
@@ -3609,7 +3625,9 @@ function handleScriptedStaffReply(text) {
     && !asksInspectionLoanerNeed(text)
   ) {
     state.turn += 1;
-    addMessage("customer", "代車をお願いします。");
+    addMessage("customer", "お願いします。", {
+      audioId: "inspection_booking_invitation_accept_customer"
+    });
     els.speechNote.textContent = "代車利用が確定済みです。店内待ちへ変更せず、現在の会話位置から続けてください。";
     renderProgress();
     return;
@@ -3623,7 +3641,9 @@ function handleScriptedStaffReply(text) {
     && !asksInspectionVehicleConcerns(text)
   ) {
     state.turn += 1;
-    addMessage("customer", "代車は必要ありません。");
+    addMessage("customer", "待っています。", {
+      audioId: "inspection_confirmed_waiting_customer"
+    });
     els.speechNote.textContent = "店内待ちが確定済みのため、代車手配は受け付けていません。";
     renderProgress();
     return;
@@ -3743,10 +3763,9 @@ function handleScriptedStaffReply(text) {
       continueSpeechInputWithoutCustomerReply("音声入力中です。予約後の案内を続けてください。");
       return;
     }
-    state.turn += 1;
-    addMessage("customer", "予約は先ほどの日時でお願いします。");
-    els.speechNote.textContent = "予約日時は確定済みです。前の工程へ戻らず、当日の案内へ進めてください。";
+    els.speechNote.textContent = "予約日時は確定済みです。異なる日時でも再確認せず、当日の案内へ進めてください。";
     renderProgress();
+    continueSpeechInputWithoutCustomerReply("音声入力中です。予約後の案内を続けてください。");
     return;
   }
 
@@ -4421,6 +4440,24 @@ function handleScriptedStaffReply(text) {
   renderProgress();
 }
 
+function appointmentPeriodsMatch(expected, actual) {
+  return !expected?.period || expected.period === actual?.period;
+}
+
+function hasConfirmedInspectionAppointmentRecap(text) {
+  const appointment = state.proposedAppointment;
+  const customerName = normalizeScriptedText(scenario.customerName || "").replace(/様$/, "");
+  const match = inspectionAppointmentProposalMatch(text);
+  if (!appointment || !customerName || !match) return false;
+  return normalizeScriptedText(text).includes(customerName)
+    && match.month === appointment.month
+    && match.day === appointment.day
+    && match.hour === appointment.hour
+    && Number(match.minute || 0) === Number(appointment.minute || 0)
+    && appointmentPeriodsMatch(appointment, match)
+    && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます)/.test(normalizeScriptedText(text));
+}
+
 function handleReply(event) {
   event.preventDefault();
   if (!state.started || state.ended || state.customerReplyPending) return;
@@ -4486,7 +4523,7 @@ function finishRoleplay(options = {}) {
       judgements: result.judgements,
       recommendedTalkTitle: result.recommendedTalkTitle || "推奨トーク",
       recommendedTalk: result.recommendedTalk || "",
-      transcript: state.transcript.slice(0, 100).map((message) => ({
+      transcript: state.transcript.slice(0, 300).map((message) => ({
         role: message.role,
         text: String(message.text || "").slice(0, 1000)
       }))
@@ -4621,11 +4658,7 @@ function inspectionConversationMetricAchieved(metricKey) {
   // 最終採点は会話の順番ではなく、「確認したか・説明したか」を会話全体で判定する。
   // 質問であることが必要な項目は個々の発話で確認し、説明項目だけを発話間で合算する。
   if (metricKey === "confirmed_identity") {
-    const customerName = normalizeScriptedText(scenario.customerName || "").replace(/様$/, "");
-    return Boolean(customerName) && staffUtterances.some((text) =>
-      text.includes(customerName)
-      && /(?:でしょうか|ですか|お電話|お宅|本人)/.test(text)
-    );
+    return staffUtterances.some((text) => asksInspectionIdentityConfirmation(text));
   }
   if (metricKey === "introduced_self") {
     return staffUtterances.some((text) => hasInspectionSelfIntroduction(text));
@@ -4645,14 +4678,18 @@ function inspectionConversationMetricAchieved(metricKey) {
     return staffUtterances.some((text) => hasInspectionAvailabilityRequest(text));
   }
   if (metricKey === "explained_available_period") {
-    return hasInspectionAvailablePeriodEvidence(staffEvidence);
+    return hasInspectionAvailablePeriodEvidence("");
   }
   if (metricKey === "explained_duration_and_wait") {
     const mileageWasAsked = state.inspectionMileageAsked
       || staffUtterances.some((text) => asksCurrentMileage(text));
+    const waitingWasExplained = staffUtterances.some((text) =>
+      /(?:待|店内)/.test(text)
+      && !/(?:待てません|待つことはできません|お待ちいただけません|店内待ちはできません)/.test(text)
+    );
     return mileageWasAsked
       && hasSupportedInspectionDuration(staffEvidence)
-      && /(?:待|店内)/.test(staffEvidence);
+      && waitingWasExplained;
   }
   if (metricKey === "explained_loaner") {
     return customerRequestedLoaner && loanerWasConfirmed;
@@ -4687,7 +4724,7 @@ function inspectionConversationMetricAchieved(metricKey) {
     return hasInspectionReminderContactConfirmation("");
   }
   if (metricKey === "recapped_appointment") {
-    return staffUtterances.some((text) => hasScriptedAppointmentRecapEvidence(text));
+    return staffUtterances.some((text) => hasConfirmedInspectionAppointmentRecap(text));
   }
   if (metricKey === "closed_politely") {
     return staffUtterances.some((text) => isInspectionFinalClosingThanks(text));
@@ -4879,6 +4916,23 @@ function setupSpeech() {
   speechRecognition.interimResults = true;
   speechRecognition.continuous = true;
 
+  const restartRecognition = (retryCount = 0) => {
+    if (!speechListening || state.ended) return;
+    try {
+      speechRecognition.start();
+      speechRestartTimer = null;
+      els.speechNote.textContent = "音声入力中です。話し終えると自動的に次へ進みます。";
+    } catch (error) {
+      if (error?.name === "InvalidStateError" && retryCount < 6) {
+        speechRestartTimer = window.setTimeout(() => restartRecognition(retryCount + 1), 120);
+        return;
+      }
+      speechListening = false;
+      updateMicButton(false);
+      els.speechNote.textContent = "音声入力を再開できませんでした。マイクボタンを押してください。";
+    }
+  };
+
   speechRecognition.addEventListener("result", (event) => {
     if (!speechListening || state.ended) return;
     const text = Array.from(event.results).map((result) => result[0].transcript).join("");
@@ -4914,13 +4968,10 @@ function setupSpeech() {
     }
 
     speechBaseText = els.staffInput.value.trim();
+    if (speechRestartTimer) window.clearTimeout(speechRestartTimer);
     speechRestartTimer = window.setTimeout(() => {
       if (!speechListening || state.ended) return;
-      try {
-        speechRecognition.start();
-      } catch (_) {
-        els.speechNote.textContent = "マイクの再開を待っています。停止ボタンを押すと終了できます。";
-      }
+      restartRecognition();
     }, 250);
   });
 
@@ -4929,6 +4980,18 @@ function setupSpeech() {
       speechListening = false;
       updateMicButton(false);
       els.speechNote.textContent = "マイクの利用が許可されていません。ブラウザの設定を確認してください。";
+      return;
+    }
+    if (event.error === "audio-capture") {
+      speechListening = false;
+      updateMicButton(false);
+      els.speechNote.textContent = "マイクを使用できません。Windowsとブラウザのマイク設定を確認してください。";
+      return;
+    }
+    if (["network", "no-speech", "aborted"].includes(event.error) && speechListening && !state.ended) {
+      if (speechRestartTimer) window.clearTimeout(speechRestartTimer);
+      els.speechNote.textContent = "音声入力を再開しています。";
+      speechRestartTimer = window.setTimeout(() => restartRecognition(), 250);
     }
   });
 
