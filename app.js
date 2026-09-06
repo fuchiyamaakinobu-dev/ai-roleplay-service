@@ -3085,7 +3085,10 @@ function combinedScriptedReply(text, step) {
   return parts.filter(Boolean).join(" ");
 }
 
-function asksInspectionDayPreference(normalized) {
+function asksInspectionDayPreference(text) {
+  const normalized = normalizeScriptedText(text);
+  // 「9月 の 12日 土曜日」のように月日・曜日が分かれて認識されても、
+  // 具体日の提案を曜日選択質問へ戻さない。
   if (/\d{1,2}月\d{1,2}日/.test(normalized)) return false;
   const hasDayChoice = /(?:平日|土日|週末|曜日)/.test(normalized);
   const asksPreference = /(?:どちら|希望|都合|よろしい|良い|いかが)/.test(normalized);
@@ -3610,19 +3613,38 @@ function handleScriptedStaffReply(text) {
   const availabilityStepIndex = scenario.steps.findIndex(
     (candidate) => candidate.key === "asked_availability"
   );
+  const asksGeneralInspectionAvailability = hasInspectionAvailabilityRequest(decisionText)
+    && !hasDirectInspectionBookingInvitation(decisionText);
   if (
     !state.proposedAppointment
-    && availabilityStepIndex > state.scriptStep
-    && hasInspectionAvailabilityRequest(decisionText)
+    && availabilityStepIndex >= 0
+    && asksGeneralInspectionAvailability
   ) {
-    recordSkippedScriptedSteps(text, state.scriptStep, availabilityStepIndex, "お客様の都合確認を優先");
+    if (availabilityStepIndex > state.scriptStep) {
+      recordSkippedScriptedSteps(text, state.scriptStep, availabilityStepIndex, "お客様の都合確認を優先");
+    }
     const availabilityStep = scenario.steps[availabilityStepIndex];
     markScriptedStepPassed(availabilityStep, text);
-    state.scriptStep = availabilityStepIndex + 1;
-    state.currentState = scenario.steps[state.scriptStep].state;
-    state.turn += 1;
-    addMessage("customer", "お願いしたいんですけど、いつできますか？", {
+    // 都合確認が遅れて行われた場合は現在工程を後戻りさせない。
+    // 現在工程または前倒しの質問なら、都合確認の次工程へ進める。
+    if (availabilityStepIndex >= state.scriptStep) {
+      state.scriptStep = availabilityStepIndex + 1;
+      state.currentState = scenario.steps[state.scriptStep]?.state || state.currentState;
+    }
+    const availabilityReplyKey = "inspection-general-availability-answer";
+    if ((state.questionRepeats[availabilityReplyKey] || 0) > 0) {
+      els.speechNote.textContent = "お客様の予約希望は回答済みです。同じ返答を繰り返さず、具体的な日時の提示を待っています。";
+      renderProgress();
+      continueSpeechInputWithoutCustomerReply("音声入力中です。具体的な入庫日と時刻を案内してください。");
+      return;
+    }
+    const availabilityReply = customerQuestionTurn(availabilityReplyKey, [{
+      text: "お願いしたいんですけど、いつできますか？",
       audioId: "inspection_asked_availability_customer"
+    }]);
+    state.turn += 1;
+    addMessage("customer", availabilityReply.text, {
+      audioId: availabilityReply.audioId
     });
     els.speechNote.textContent = "お客様の都合確認へ回答しました。車検満了日と入庫可能日を案内してください。";
     renderProgress();
@@ -3766,6 +3788,44 @@ function handleScriptedStaffReply(text) {
     state.turn += 1;
     addMessage("customer", customerReply.text, { audioId: customerReply.audioId });
     els.speechNote.textContent = "走行距離は約3万kmです。続けて、作業時間と店内で待てるかをご案内ください。";
+    renderProgress();
+    return;
+  }
+
+  // 工程順が前後していても、走行距離確認後に作業時間だけが案内された場合は、
+  // 中立の「はい。」ではなく不足している店内待ちだけを一度確認する。
+  // すでに同じ確認をした後は質問を繰り返さず、マイクを継続する。
+  const durationOnlyWithoutWaiting = state.inspectionMileageAsked
+    && !state.proposedAppointment
+    && hasSupportedInspectionDuration(text)
+    && !/(?:待|店内)/.test(normalizeScriptedText(text));
+  if (durationOnlyWithoutWaiting && step.key !== "explained_duration_and_wait") {
+    const retryKey = "inspection-retry:explained_duration_and_wait:waiting";
+    const durationStep = scenario.steps.find(
+      (candidate) => candidate.key === "explained_duration_and_wait"
+    );
+    const priorEvidence = state.scriptedPartialReplies[durationStep?.key]?.text || "";
+    if (durationStep) {
+      state.scriptedPartialReplies[durationStep.key] = {
+        text: `${priorEvidence} ${text}`.trim(),
+        missingDetail: "waiting"
+      };
+    }
+    if ((state.questionRepeats[retryKey] || 0) > 0) {
+      els.speechNote.textContent = "店内待ちは一度確認済みです。同じ質問を繰り返さず、会話の続きを待っています。";
+      renderProgress();
+      continueSpeechInputWithoutCustomerReply("音声入力中です。会話の続きを話してください。");
+      return;
+    }
+    const waitingQuestion = customerQuestionTurn(retryKey, [{
+      text: "お店で待つことはできますか？",
+      audioId: "inspection_duration_wait_missing_retry"
+    }]);
+    state.turn += 1;
+    addMessage("customer", waitingQuestion.text, {
+      audioId: waitingQuestion.audioId
+    });
+    els.speechNote.textContent = "作業時間は確認できました。店内で待てるかを案内してください。";
     renderProgress();
     return;
   }

@@ -60,8 +60,23 @@ assert.match(
 );
 assert.match(
   source,
-  /availabilityStepIndex > state\.scriptStep[\s\S]*?hasInspectionAvailabilityRequest\(decisionText\)[\s\S]*?お願いしたいんですけど、いつできますか？/,
-  "前工程と同じ発話内の都合確認より定型返答を優先しています"
+  /asksGeneralInspectionAvailability[\s\S]*?!hasDirectInspectionBookingInvitation\(decisionText\)[\s\S]*?availabilityStepIndex >= 0[\s\S]*?お願いしたいんですけど、いつできますか？/,
+  "現在工程の前後を問わず、一般的な都合確認への返答を優先できません"
+);
+assert.match(
+  source,
+  /inspection-general-availability-answer[\s\S]*?questionRepeats\[availabilityReplyKey\][\s\S]*?同じ返答を繰り返さず[\s\S]*?continueSpeechInputWithoutCustomerReply/,
+  "回答済みの都合確認に同じお客様発話を繰り返しています"
+);
+assert.match(
+  source,
+  /durationOnlyWithoutWaiting[\s\S]*?step\.key !== "explained_duration_and_wait"[\s\S]*?お店で待つことはできますか？[\s\S]*?inspection_duration_wait_missing_retry/,
+  "順序が前後した作業時間案内から、店内待ちだけを確認できません"
+);
+assert.match(
+  source,
+  /questionRepeats\[retryKey\][\s\S]*?同じ質問を繰り返さず[\s\S]*?continueSpeechInputWithoutCustomerReply/,
+  "店内待ち確認を一度だけに制限できません"
 );
 assert.match(
   source,

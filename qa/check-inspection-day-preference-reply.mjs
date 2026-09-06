@@ -11,6 +11,12 @@ assert.notEqual(preferenceStart, -1, "曜日希望質問の判定関数が見つ
 assert.notEqual(preferenceEnd, -1, "曜日希望質問の判定関数の終端が見つかりません");
 
 const preferenceContext = {
+  normalizeScriptedText: (text) => String(text || "")
+    .replace(/[０-９]/g, (character) =>
+      String.fromCharCode(character.charCodeAt(0) - 0xFEE0)
+    )
+    .replace(/\s+/g, "")
+    .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1"),
   isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|ませんか|ございませんか|[?？])/.test(text)
 };
 vm.createContext(preferenceContext);
@@ -32,7 +38,9 @@ for (const phrase of [
 for (const phrase of [
   "平日と週末があります。",
   "車検はいつまでですか？",
-  "9月30日が満了日です。"
+  "9月30日が満了日です。",
+  "9月 の 12日 土曜日はいかがでしょうか？",
+  "9月の12日土曜日の10時はいかがでしょうか？"
 ]) {
   assert.equal(
     preferenceContext.asksInspectionDayPreference(phrase),

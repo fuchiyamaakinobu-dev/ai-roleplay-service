@@ -77,6 +77,18 @@ assert.equal(firstDayAppointment?.month, "9", "漢字の『一日』を含む予
 assert.equal(firstDayAppointment?.day, "1", "漢字の『一日』を含む予約日時の日が一致しません");
 assert.equal(firstDayAppointment?.hour, "10", "漢字の『一日』を含む予約日時の時刻が一致しません");
 assert.equal(firstDayAppointment?.minute, 0, "分指定のない予約日時を0分として保持できません");
+const spokenDateOnlyCandidates = proposalContext.inspectionAppointmentDateCandidates(
+  "9月 の 12日 土曜日はいかがでしょうか？"
+);
+assert.equal(spokenDateOnlyCandidates.length, 1, "『9月 の 12日 土曜日』を具体日として認識できません");
+assert.equal(spokenDateOnlyCandidates[0].month, "9", "分割認識された予約月が一致しません");
+assert.equal(spokenDateOnlyCandidates[0].day, "12", "分割認識された予約日が一致しません");
+const spokenDateTimeAppointment = proposalContext.inspectionAppointmentProposalMatch(
+  "9月 の 12日 土曜日の10時はいかがでしょうか？"
+);
+assert.equal(spokenDateTimeAppointment?.month, "9", "曜日を含む予約月が一致しません");
+assert.equal(spokenDateTimeAppointment?.day, "12", "曜日を含む予約日が一致しません");
+assert.equal(spokenDateTimeAppointment?.hour, "10", "曜日を含む予約時刻が一致しません");
 const kanaMonthFirstDayAppointment = proposalContext.inspectionAppointmentProposalMatch(
   "よろしければくがつの一日の10時半から作業できるのですが、いかがでしょうか？"
 );
@@ -195,6 +207,21 @@ assert.equal(
   firstDayOnlyRetry.missingDetail,
   "appointmentTime",
   "漢字の『一日』を認識した後の不足項目が時刻になっていません"
+);
+
+const spokenDateOnlyRetry = retryContext.scriptedRetryForMissingDetails(
+  "9月 の 12日 土曜日はいかがでしょうか？",
+  { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }
+);
+assert.equal(
+  spokenDateOnlyRetry.text,
+  "何時が空いていますか？",
+  "具体日を曜日希望質問と誤判定して『土日がいいです』を繰り返しています"
+);
+assert.equal(
+  spokenDateOnlyRetry.audioId,
+  "inspection_appointment_time_missing_retry",
+  "具体日の時刻確認に登録済みMP3を使用していません"
 );
 
 const timeOnlyRetry = retryContext.scriptedRetryForMissingDetails(
