@@ -36,7 +36,8 @@ for (const phrase of [
   "その他の追加作業はございますでしょうか？",
   "その他何か、追加する整備などはございますでしょうか？",
   "そのほかに整備しておくことはありますか？",
-  "かしこまりました。その他、気になるところはございませんでしょうか？"
+  "かしこまりました。その他、気になるところはございませんでしょうか？",
+  "その他、何か調子が悪いこととかはございますでしょうか？"
 ]) {
   assert.equal(
     additionalFollowUpContext.asksInspectionAdditionalServiceFollowUp(phrase),
@@ -150,7 +151,7 @@ assert.doesNotMatch(
 );
 
 const additionalServiceFollowUpStart = appSource.indexOf(
-  "if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(decisionText))"
+  "if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text))"
 );
 const currentStepAnalysisStart = appSource.indexOf(
   "const combinedText = combinedScriptedReply(text, step);",
@@ -169,6 +170,16 @@ const additionalServiceFollowUpBlock = appSource.slice(
 assert.match(additionalServiceFollowUpBlock, /そのほかは大丈夫です。/);
 assert.match(additionalServiceFollowUpBlock, /inspection_additional_service_none_customer/);
 assert.match(additionalServiceFollowUpBlock, /state\.scriptedPartialReplies\[step\.key\]/);
+assert.match(
+  additionalServiceFollowUpBlock,
+  /hasInspectionOilChangeRequest\(\)\s*&&\s*asksInspectionAdditionalServiceFollowUp\(text\)/,
+  "『その他、何か調子が悪いことは』の『その他』を疑問節抽出で失わないこと"
+);
+assert.match(
+  appSource,
+  /responseStep\.key === "asked_vehicle_concerns"[\s\S]*?hasInspectionOilChangeRequest\(\)[\s\S]*?そのほかは大丈夫です。/,
+  "回答済みのオイル交換希望を通常工程で繰り返さないこと"
+);
 assert.match(
   appSource,
   /asksInspectionForCustomerQuestions\(decisionText\)[\s\S]*?addMessage\("customer", "そのほかは大丈夫です。"[\s\S]*?inspection_additional_service_none_customer/,

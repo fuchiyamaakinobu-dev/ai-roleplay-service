@@ -4091,7 +4091,7 @@ function handleScriptedStaffReply(text) {
   // オイル交換希望に対して「その他の追加作業」を再確認された場合は、
   // 現在工程の店内待ち不足よりも実際に聞かれた質問への回答を優先する。
   // 作業時間など現在工程で説明済みの内容は保持し、回答後に同じ工程を継続する。
-  if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(decisionText)) {
+  if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text)) {
     state.scriptedPartialReplies[step.key] = {
       text: combinedScriptedReply(text, step),
       missingDetail: "additionalServiceReconfirmed"
@@ -4121,10 +4121,21 @@ function handleScriptedStaffReply(text) {
       missingDetail: "earlyVehicleConcernAnswered"
     };
     state.turn += 1;
-    addMessage("customer", "オイル交換もお願いしたいです。", {
-      audioId: "inspection_asked_vehicle_concerns_customer"
+    const earlyConcernResponse = hasInspectionOilChangeRequest()
+      ? {
+          text: "そのほかは大丈夫です。",
+          audioId: "inspection_additional_service_none_customer"
+        }
+      : {
+          text: "オイル交換もお願いしたいです。",
+          audioId: "inspection_asked_vehicle_concerns_customer"
+        };
+    addMessage("customer", earlyConcernResponse.text, {
+      audioId: earlyConcernResponse.audioId
     });
-    els.speechNote.textContent = "車両の気になる所を確認済みです。オイル交換希望を受け付け、現在の案内を続けてください。";
+    els.speechNote.textContent = hasInspectionOilChangeRequest()
+      ? "オイル交換希望は回答済みです。その他の気になる所はないことを確認しました。"
+      : "車両の気になる所を確認済みです。オイル交換希望を受け付け、現在の案内を続けてください。";
     renderProgress();
     return;
   }
@@ -4520,10 +4531,15 @@ function handleScriptedStaffReply(text) {
     };
   }
   if (!customerResponseOverride && responseStep.key === "asked_vehicle_concerns") {
-    customerResponseOverride = {
-      text: "オイル交換もお願いしたいです。",
-      audioId: "inspection_asked_vehicle_concerns_customer"
-    };
+    customerResponseOverride = hasInspectionOilChangeRequest()
+      ? {
+          text: "そのほかは大丈夫です。",
+          audioId: "inspection_additional_service_none_customer"
+        }
+      : {
+          text: "オイル交換もお願いしたいです。",
+          audioId: "inspection_asked_vehicle_concerns_customer"
+        };
   }
   if (
     !customerResponseOverride
