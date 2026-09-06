@@ -226,7 +226,7 @@ assert.equal(
 );
 assert.match(
   appSource,
-  /asksInspectionCallTimingPermission\(combinedText\)[\s\S]*?text: "大丈夫ですよ。"[\s\S]*?inspection_confirmed_booking_time_customer/,
+  /asksInspectionCallTimingPermission\(decisionText\)[\s\S]*?text: "大丈夫ですよ。"[\s\S]*?inspection_confirmed_booking_time_customer/,
   "名乗り・お礼と同時の通話可否確認へ『大丈夫ですよ。』と回答できません"
 );
 

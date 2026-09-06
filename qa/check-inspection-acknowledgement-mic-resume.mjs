@@ -69,6 +69,16 @@ assert.match(
   "予約確定後の単独受領表現から音声入力継続へ進みません"
 );
 assert.match(
+  handlerSource,
+  /isInspectionIncompleteOrNoiseUtterance\(text\)[\s\S]*?addMessage\("customer", "はい。"[\s\S]*?inspection_thanked_customer_retry/,
+  "未完了・ノイズ発話へ採点対象外の相づちを返していません"
+);
+assert.match(
+  handlerSource,
+  /!isInspectionOperationalNoiseUtterance\(text\)[\s\S]*?state\.scriptedPartialReplies\[fragmentKey\]/,
+  "有効な言いかけを次の発話と合わせるために保持していません"
+);
+assert.match(
   source,
   /isInspectionAcknowledgementOnlyAfterAppointment[\s\S]*?ありがとうございます/,
   "予約確定後の単独の『ありがとうございます。』を音声入力継続として扱えません"

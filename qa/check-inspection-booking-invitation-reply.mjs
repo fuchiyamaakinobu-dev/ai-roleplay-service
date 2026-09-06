@@ -56,6 +56,23 @@ assert.equal(
   "『決められましたか』を車検の予約意思確認として認識できません"
 );
 assert.equal(
+  context.hasInspectionBookingInvitation("ご予定はお決まりでしたでしょうか？"),
+  true,
+  "『予定＋お決まり＋疑問形』を都合確認として認識できません"
+);
+assert.equal(
+  context.hasInspectionBookingInvitation("ご予定でしょうか？"),
+  true,
+  "『予定＋疑問形』を都合確認として認識できません"
+);
+assert.equal(
+  context.hasInspectionAvailabilityRequest(
+    "ヤリスでございますが、派遣の満了日が9月30日と近づいてまいりました。ご予定はお決まりでしたでしょうか？"
+  ),
+  true,
+  "『車検』が『派遣』へ誤変換された実施ログで都合確認を優先できません"
+);
+assert.equal(
   context.hasInspectionBookingInvitation(
     "お使いのヤリスの車検満了日は9月30日で、8月1日以降作業可能です。ご予定はお決まりでしたでしょうか？"
   ),
@@ -73,6 +90,11 @@ assert.equal(
   context.hasInspectionBookingInvitation("車検は決まりました"),
   false,
   "質問ではない決定の言及を都合確認として誤認識しています"
+);
+assert.equal(
+  context.hasInspectionBookingInvitation("予定は決まりました"),
+  false,
+  "質問ではない予定の報告を都合確認として誤認識しています"
 );
 assert.equal(
   context.hasInspectionBookingInvitation("この電話で予約できます"),

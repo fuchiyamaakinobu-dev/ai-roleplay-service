@@ -51,7 +51,7 @@ assert.match(
 );
 assert.match(
   appSource,
-  /state\.inspectionWaitingRequested[\s\S]*?asksInspectionWaitingMethodConfirmation\(combinedText\)[\s\S]*?出かける可能性があるので、一応代車を用意してほしいんですが、できますか？[\s\S]*?inspection_waiting_followup_loaner_request/,
+  /state\.inspectionWaitingRequested[\s\S]*?asksInspectionWaitingMethodConfirmation\(decisionText\)[\s\S]*?出かける可能性があるので、一応代車を用意してほしいんですが、できますか？[\s\S]*?inspection_waiting_followup_loaner_request/,
   "お客様から店内待ちを確認した後に、外出に備えた代車希望へ進めません"
 );
 assert.match(

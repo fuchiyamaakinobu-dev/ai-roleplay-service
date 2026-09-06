@@ -36,7 +36,7 @@ const waitingBranchStart = appSource.indexOf("const waitingBranchLoanerStep = sc
 const waitingBranchEnd = appSource.indexOf("// スタッフが複数項目を一度に話した場合", waitingBranchStart);
 assert.notEqual(waitingBranchStart, -1, "待ち方から代車へ進む分岐が見つかりません");
 const waitingBranch = appSource.slice(waitingBranchStart, waitingBranchEnd);
-assert.match(waitingBranch, /asksInspectionWaitingMethodConfirmation\(combinedText\)/);
+assert.match(waitingBranch, /asksInspectionWaitingMethodConfirmation\(decisionText\)/);
 assert.match(waitingBranch, /出かける可能性があるので、一応代車を用意してほしいんですが、できますか？/);
 assert.match(waitingBranch, /inspection_waiting_followup_loaner_request/);
 

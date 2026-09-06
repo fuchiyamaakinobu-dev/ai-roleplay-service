@@ -150,7 +150,7 @@ assert.doesNotMatch(
 );
 
 const additionalServiceFollowUpStart = appSource.indexOf(
-  "if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text))"
+  "if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(decisionText))"
 );
 const currentStepAnalysisStart = appSource.indexOf(
   "const combinedText = combinedScriptedReply(text, step);",
@@ -171,7 +171,7 @@ assert.match(additionalServiceFollowUpBlock, /inspection_additional_service_none
 assert.match(additionalServiceFollowUpBlock, /state\.scriptedPartialReplies\[step\.key\]/);
 assert.match(
   appSource,
-  /asksInspectionForCustomerQuestions\(text\)[\s\S]*?addMessage\("customer", "そのほかは大丈夫です。"[\s\S]*?inspection_additional_service_none_customer/,
+  /asksInspectionForCustomerQuestions\(decisionText\)[\s\S]*?addMessage\("customer", "そのほかは大丈夫です。"[\s\S]*?inspection_additional_service_none_customer/,
   "不明点の有無確認へ『そのほかは大丈夫です。』と返す処理がありません"
 );
 assert.match(

@@ -20,7 +20,7 @@ assert.match(
 );
 assert.match(
   source,
-  /inspectionWaitingMethod === "loaner"[\s\S]*?asksInspectionWaitingMethodConfirmation\(text\)[\s\S]*?お願いします。[\s\S]*?inspection_booking_invitation_accept_customer/,
+  /inspectionWaitingMethod === "loaner"[\s\S]*?asksInspectionWaitingMethodConfirmation\(decisionText\)[\s\S]*?お願いします。[\s\S]*?inspection_booking_invitation_accept_customer/,
   "代車確定後に店内待ちへ変更しない分岐がありません"
 );
 assert.match(
@@ -60,8 +60,13 @@ assert.match(
 );
 assert.match(
   source,
-  /availabilityStepIndex > state\.scriptStep[\s\S]*?hasInspectionAvailabilityRequest\(text\)[\s\S]*?お願いしたいんですけど、いつできますか？/,
+  /availabilityStepIndex > state\.scriptStep[\s\S]*?hasInspectionAvailabilityRequest\(decisionText\)[\s\S]*?お願いしたいんですけど、いつできますか？/,
   "前工程と同じ発話内の都合確認より定型返答を優先しています"
+);
+assert.match(
+  source,
+  /asksWhetherInspectionPlanIsDecided = \/\(\?:ご\)\?予定\/[\s\S]*?if \(asksWhetherInspectionPlanIsDecided\) return true/,
+  "『予定＋疑問形』を車検語の誤変換に左右されず判定できません"
 );
 
 console.log("直近実施ログ・会話矛盾再発防止テスト: OK");

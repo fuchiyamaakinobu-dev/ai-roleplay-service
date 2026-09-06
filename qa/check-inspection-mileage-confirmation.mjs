@@ -118,7 +118,7 @@ assert.match(
 );
 assert.match(
   appSource,
-  /if \(asksCurrentMileage\(text\)\)[\s\S]*?askedDurationAlready = state\.inspectionDurationQuestionAsked[\s\S]*?inspection_current_mileage_customer[\s\S]*?inspection_current_mileage_and_duration_customer/,
+  /if \(asksCurrentMileage\(decisionText\)\)[\s\S]*?askedDurationAlready = state\.inspectionDurationQuestionAsked[\s\S]*?inspection_current_mileage_customer[\s\S]*?inspection_current_mileage_and_duration_customer/,
   "作業時間の質問済み状態に応じた走行距離回答分岐がありません"
 );
 assert.match(
@@ -136,7 +136,7 @@ assert.match(
   /inspectionDurationQuestionAsked:\s*false/,
   "初期状態に作業時間質問済みフラグがありません"
 );
-const mileageReplyIndex = appSource.indexOf("if (asksCurrentMileage(text))");
+const mileageReplyIndex = appSource.indexOf("if (asksCurrentMileage(decisionText))");
 const appointmentShortcutIndex = appSource.indexOf("const appointmentIndex = scenario.steps.findIndex");
 assert.ok(
   mileageReplyIndex >= 0 && mileageReplyIndex < appointmentShortcutIndex,

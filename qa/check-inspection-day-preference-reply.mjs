@@ -43,7 +43,7 @@ for (const phrase of [
 
 assert.match(
   appSource,
-  /asksInspectionDayPreference\(normalizeScriptedText\(text\)\)[\s\S]*?addMessage\("customer", "土日がいいです。"[\s\S]*?inspection_day_preference_answer/,
+  /asksInspectionDayPreference\(normalizeScriptedText\(decisionText\)\)[\s\S]*?addMessage\("customer", "土日がいいです。"[\s\S]*?inspection_day_preference_answer/,
   "満了日案内の有無にかかわらず曜日希望へ明確に回答できません"
 );
 assert.match(

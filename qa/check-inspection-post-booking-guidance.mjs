@@ -192,8 +192,8 @@ assert.match(
 );
 assert.match(
   appSource,
-  /splitGuidanceStep[\s\S]*?isInspectionGuidancePrefaceOrIncompleteFragment\(text\)[\s\S]*?continueSpeechInputWithoutCustomerReply\("音声入力中です。案内の続きを話してください。"\)/,
-  "言いかけの分割案内へAI音声を挟まずスタッフ入力を継続する処理がありません"
+  /isInspectionGuidancePrefaceOrIncompleteFragment\(text\)[\s\S]*?addMessage\("customer", "はい。"[\s\S]*?inspection_thanked_customer_retry/,
+  "言いかけの分割案内へ採点対象外の相づちを返す処理がありません"
 );
 assert.match(
   appSource,

@@ -1204,6 +1204,46 @@ function looksLikeCompleteJapaneseSentence(text) {
   return /(?:です|ございます|ます|ました|ません|でしょう|ください|お願いします|と思います|できます|できません|出来ます|出来ません|伺います|行きます|します|ですか|ますか|でしょうか)$/.test(withoutTrailingPunctuation);
 }
 
+// 一つの発話に説明と複数の質問が含まれる場合、AIお客様の返答は
+// 最後に実際に尋ねられた疑問節を優先する。採点には元の発話全体を残す。
+function inspectionLastQuestionClause(text) {
+  const source = String(text || "").trim();
+  const questionEnd = Math.max(source.lastIndexOf("？"), source.lastIndexOf("?"));
+  if (questionEnd < 0) return source;
+
+  const beforeQuestion = source.slice(0, questionEnd);
+  const previousQuestion = Math.max(
+    beforeQuestion.lastIndexOf("？"),
+    beforeQuestion.lastIndexOf("?")
+  );
+  const clauseStart = Math.max(
+    beforeQuestion.lastIndexOf("、"),
+    beforeQuestion.lastIndexOf(","),
+    beforeQuestion.lastIndexOf("。"),
+    beforeQuestion.lastIndexOf("！"),
+    beforeQuestion.lastIndexOf("!"),
+    previousQuestion
+  );
+  return source.slice(clauseStart + 1, questionEnd + 1).trim() || source;
+}
+
+function isInspectionOperationalNoiseUtterance(text) {
+  const normalized = normalizeScriptedText(text);
+  return /(?:送信ボタン|マイク(?:つけ|付け|入れ)|コメント転換|間違えた|なんで|多分|まあいいや|次.*(?:何|なん)でしたっけ|聞き忘れ)/.test(normalized);
+}
+
+function isInspectionIncompleteOrNoiseUtterance(text) {
+  const normalized = normalizeScriptedText(text);
+  if (!normalized) return true;
+  if (!looksLikeCompleteJapaneseSentence(text)) return true;
+
+  // 操作中の独り言や、単独では意味を確定できない疑問節は採点・工程判定へ渡さない。
+  if (isInspectionOperationalNoiseUtterance(text)) return true;
+  const questionClause = normalizeScriptedText(inspectionLastQuestionClause(text));
+  return normalized === questionClause
+    && /^(?:で)?(?:いらっしゃいます|ございます|よろしい)(?:か|でしょうか)?[?？]?$/.test(questionClause);
+}
+
 function startRoleplay() {
   stopSpeechInput();
   stopCustomerPlayback();
@@ -2337,11 +2377,11 @@ function hasInspectionBookingInvitation(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
   if (/(?:車検).{0,16}(?:お?決まり|決めて|決められ)/.test(normalized)) return true;
-  const asksWhetherInspectionPlanIsDecided = /(?:ご)?予定.{0,12}(?:お?決まり|決めて|決められ)/.test(normalized);
-  const includesConcreteInspectionTiming = normalized.includes("車検")
-    && /\d{1,2}月\d{1,2}日/.test(normalized)
-    && /(?:満了|まで|となり|となって)/.test(normalized);
-  if (asksWhetherInspectionPlanIsDecided && includesConcreteInspectionTiming) return true;
+  const asksWhetherInspectionPlanIsDecided = /(?:ご)?予定/.test(normalized);
+  // 「予定」と疑問形がそろえば都合確認として十分。
+  // 同じ発話内の「車検」が「派遣」などへ誤変換されても、中立の「はい」へ
+  // 落とさず、空き日時を尋ねる自然な返答へ進める。
+  if (asksWhetherInspectionPlanIsDecided) return true;
   if (!normalized.includes("予約")) return false;
   if (/(?:代車.{0,10}予約|予約.{0,10}代車)/.test(normalized)) return false;
   return /(?:この電話|お電話).{0,16}(?:ご)?予約/.test(normalized)
@@ -3468,6 +3508,8 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  const decisionText = inspectionLastQuestionClause(text);
+
   // 具体的な予約日時が確定済みなら、最終の「ありがとうございました」を
   // 連絡先確認などすべての個別判定より先に処理して確実に終話する。
   if (
@@ -3483,6 +3525,31 @@ function handleScriptedStaffReply(text) {
       audioId: "inspection_closed_politely_customer",
       onCommitted: () => finishRoleplay({ keepCustomerPlayback: true })
     });
+    renderProgress();
+    return;
+  }
+
+  // 発話途中や周囲のノイズは、確認済み・未確認の判定や減点回数へ加えない。
+  // 短い相づちを返した後も現在工程を保持し、MP3終了後にマイクを自動再開する。
+  if (
+    isInspectionIncompleteOrNoiseUtterance(text)
+    || isInspectionGuidancePrefaceOrIncompleteFragment(text)
+  ) {
+    if (!isInspectionOperationalNoiseUtterance(text)) {
+      const fragmentKey = state.proposedAppointment
+        ? inspectionSplitGuidanceFragmentKey(text) || step.key
+        : step.key;
+      const previousFragment = state.scriptedPartialReplies[fragmentKey]?.text || "";
+      state.scriptedPartialReplies[fragmentKey] = {
+        text: `${previousFragment} ${text}`.trim(),
+        missingDetail: "incompleteSpeech"
+      };
+    }
+    state.turn += 1;
+    addMessage("customer", "はい。", {
+      audioId: "inspection_thanked_customer_retry"
+    });
+    els.speechNote.textContent = `相づちのみです。未確認項目「${step.label || step.key}」の説明・確認を続けてください。`;
     renderProgress();
     return;
   }
@@ -3514,7 +3581,7 @@ function handleScriptedStaffReply(text) {
   const dayPreferenceAvailabilityIndex = scenario.steps.findIndex(
     (candidate) => candidate.key === "asked_availability"
   );
-  if (!state.proposedAppointment && asksInspectionDayPreference(normalizeScriptedText(text))) {
+  if (!state.proposedAppointment && asksInspectionDayPreference(normalizeScriptedText(decisionText))) {
     if (dayPreferenceAvailabilityIndex > state.scriptStep) {
       recordSkippedScriptedSteps(
         text,
@@ -3546,7 +3613,7 @@ function handleScriptedStaffReply(text) {
   if (
     !state.proposedAppointment
     && availabilityStepIndex > state.scriptStep
-    && hasInspectionAvailabilityRequest(text)
+    && hasInspectionAvailabilityRequest(decisionText)
   ) {
     recordSkippedScriptedSteps(text, state.scriptStep, availabilityStepIndex, "お客様の都合確認を優先");
     const availabilityStep = scenario.steps[availabilityStepIndex];
@@ -3566,7 +3633,7 @@ function handleScriptedStaffReply(text) {
   // 直接尋ねられた場合は、「はい」ではなく明確に「お願いします。」と答える。
   // 最初に店内待ちが確定済みなら、後から代車へ変更せず最初の待ち方を維持する。
   // この希望は会話状態へ保存し、後続の「ご用意します」で代車手配を確定する。
-  if (asksInspectionLoanerNeed(text)) {
+  if (asksInspectionLoanerNeed(decisionText)) {
     if (state.inspectionWaitingMethod === "store") {
       state.turn += 1;
       addMessage("customer", "待っています。", {
@@ -3594,7 +3661,7 @@ function handleScriptedStaffReply(text) {
   if (
     (state.inspectionLoanerRequested || state.inspectionLoanerConfirmed)
     && hasInspectionLoanerConfirmation(text, true)
-    && !asksInspectionVehicleConcerns(text)
+    && !asksInspectionVehicleConcerns(decisionText)
     && !hasInspectionAppointmentProposalEvidence(text)
     && !hasScriptedAppointmentRecapEvidence(text)
   ) {
@@ -3621,8 +3688,8 @@ function handleScriptedStaffReply(text) {
   // 両方を肯定せず、確定済みの代車希望を明確に返す。
   if (
     state.inspectionWaitingMethod === "loaner"
-    && asksInspectionWaitingMethodConfirmation(text)
-    && !asksInspectionLoanerNeed(text)
+    && asksInspectionWaitingMethodConfirmation(decisionText)
+    && !asksInspectionLoanerNeed(decisionText)
   ) {
     state.turn += 1;
     addMessage("customer", "お願いします。", {
@@ -3638,7 +3705,7 @@ function handleScriptedStaffReply(text) {
   if (
     state.inspectionWaitingMethod === "store"
     && hasInspectionLoanerConfirmation(text)
-    && !asksInspectionVehicleConcerns(text)
+    && !asksInspectionVehicleConcerns(decisionText)
   ) {
     state.turn += 1;
     addMessage("customer", "待っています。", {
@@ -3651,7 +3718,7 @@ function handleScriptedStaffReply(text) {
 
   // 「不明点等はございますか」は採点工程の質問ではなく、お客様側の質問有無確認。
   // 単独の「はい。」で質問があるような矛盾を作らず、現在工程を保持して回答する。
-  if (asksInspectionForCustomerQuestions(text)) {
+  if (asksInspectionForCustomerQuestions(decisionText)) {
     state.turn += 1;
     addMessage("customer", "そのほかは大丈夫です。", {
       audioId: "inspection_additional_service_none_customer"
@@ -3663,7 +3730,7 @@ function handleScriptedStaffReply(text) {
 
   // オイル交換の希望を直接尋ねられた場合は、現在の工程や質問順に左右されず、
   // 「はい」ではなく具体的な追加作業希望を返す。
-  if (!hasInspectionOilChangeRequest() && asksInspectionOilChangeOffer(text)) {
+  if (!hasInspectionOilChangeRequest() && asksInspectionOilChangeOffer(decisionText)) {
     const concernStep = scenario.steps.find((candidate) => candidate.key === "asked_vehicle_concerns");
     if (concernStep) markScriptedStepPassed(concernStep, text);
     state.turn += 1;
@@ -3678,7 +3745,7 @@ function handleScriptedStaffReply(text) {
   // 走行距離は作業時間を判断するための質問なので、予約日時の確定後など
   // どの工程で尋ねられても実際の質問を優先して回答する。お客様がすでに
   // 作業時間を質問済みなら距離だけを答え、未質問なら続けて時間も尋ねる。
-  if (asksCurrentMileage(text)) {
+  if (asksCurrentMileage(decisionText)) {
     state.inspectionMileageAsked = true;
     if (step.key === "explained_duration_and_wait") {
       state.scriptedPartialReplies[step.key] = {
@@ -3707,7 +3774,7 @@ function handleScriptedStaffReply(text) {
   // 連絡先としてよいか尋ねられた場合は、工程の位置にかかわらず明確に回答する。
   if (
     hasInspectionReminderContactConfirmation(text)
-    && asksInspectionReminderContactDestination(text)
+    && asksInspectionReminderContactDestination(decisionText)
   ) {
     if (state.inspectionReminderContactAnswered) {
       els.speechNote.textContent = "3日前の連絡先は確認済みです。予約復唱または終話へ進めてください。";
@@ -3796,7 +3863,7 @@ function handleScriptedStaffReply(text) {
 
   // 日時確定後に同じ日程・都合を尋ね直されても、過去工程へ戻ったり
   // 一語の「はい」だけで曖昧に答えたりしない。確定済みの予約を維持する。
-  if (state.proposedAppointment && asksInspectionAvailabilityAgainAfterAppointment(text)) {
+  if (state.proposedAppointment && asksInspectionAvailabilityAgainAfterAppointment(decisionText)) {
     state.turn += 1;
     addMessage("customer", "お願いします。", {
       audioId: "inspection_booking_invitation_accept_customer"
@@ -3806,14 +3873,11 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
-  // 予約確定後の単独の受領表現や、持参物案内の前置き・言いかけには
-  // AIお客様の音声を割り込ませない。会話位置を保ったままスタッフ入力を再開する。
+  // 予約確定後の単独の受領表現には返答を重ねず、会話位置を保ったまま
+  // スタッフ入力を再開する。案内の前置き・言いかけは上の相づち分岐で処理済み。
   if (
     state.proposedAppointment
-    && (
-      isInspectionAcknowledgementOnlyAfterAppointment(text)
-      || isInspectionGuidancePrefaceOrIncompleteFragment(text)
-    )
+    && isInspectionAcknowledgementOnlyAfterAppointment(text)
   ) {
     els.speechNote.textContent = "スタッフの案内の続きを待っています。";
     renderProgress();
@@ -3936,12 +4000,8 @@ function handleScriptedStaffReply(text) {
         ? "ロックナット用具または早めの来店案内を記憶しています。案内を続けてください。"
         : "3日前の確認連絡を記憶しています。連絡先の確認を続けてください。";
     renderProgress();
-    // 言いかけには割り込まないが、完結した案内を複数回に分けた場合は
+    // 言いかけは上の相づち分岐で処理済み。ここでは完結した分割案内へ
     // 採点対象外の「分かりました。」を返し、MP3終了後にマイクを確実に再開する。
-    if (isInspectionGuidancePrefaceOrIncompleteFragment(text)) {
-      continueSpeechInputWithoutCustomerReply("音声入力中です。案内の続きを話してください。");
-      return;
-    }
     state.turn += 1;
     addMessage("customer", "分かりました。", {
       audioId: "inspection_explained_lock_and_arrival_customer"
@@ -3971,7 +4031,7 @@ function handleScriptedStaffReply(text) {
   // オイル交換希望に対して「その他の追加作業」を再確認された場合は、
   // 現在工程の店内待ち不足よりも実際に聞かれた質問への回答を優先する。
   // 作業時間など現在工程で説明済みの内容は保持し、回答後に同じ工程を継続する。
-  if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text)) {
+  if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(decisionText)) {
     state.scriptedPartialReplies[step.key] = {
       text: combinedScriptedReply(text, step),
       missingDetail: "additionalServiceReconfirmed"
@@ -4292,7 +4352,7 @@ function handleScriptedStaffReply(text) {
   ) {
     if (
       state.inspectionWaitingRequested
-      || asksInspectionWaitingMethodConfirmation(combinedText)
+      || asksInspectionWaitingMethodConfirmation(decisionText)
     ) {
       customerResponseOverride = {
         text: "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？",
@@ -4379,7 +4439,7 @@ function handleScriptedStaffReply(text) {
       audioId: "inspection_asked_availability_customer"
     };
   }
-  if (!customerResponseOverride && asksInspectionCallTimingPermission(combinedText)) {
+  if (!customerResponseOverride && asksInspectionCallTimingPermission(decisionText)) {
     customerResponseOverride = {
       text: "大丈夫ですよ。",
       audioId: "inspection_confirmed_booking_time_customer"
@@ -4951,9 +5011,13 @@ function setupSpeech() {
           els.replyForm.requestSubmit();
           interactionDelayAlreadyElapsed = false;
         } else {
-          // Web Speech APIはスタッフの発話途中でも区切りをisFinalとして返すことがある。
-          // ここでAIの相づちを再生したり認識を中断したりせず、同じマイクで続きを待つ。
-          els.speechNote.textContent = "発言が途中のため、音声入力を続けています。";
+          // Web Speech APIが発話途中をisFinalにした場合も、その断片を採点せず
+          // AIお客様の短い相づちへ渡す。相づちMP3の終了後にマイクを再開する。
+          stopSpeechInput();
+          els.speechNote.textContent = "発言途中として相づちを返し、同じ未確認項目を継続します。";
+          interactionDelayAlreadyElapsed = true;
+          els.replyForm.requestSubmit();
+          interactionDelayAlreadyElapsed = false;
         }
       }, interactionDelayMs());
     } else {
