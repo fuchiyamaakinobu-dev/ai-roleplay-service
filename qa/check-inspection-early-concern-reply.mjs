@@ -53,7 +53,8 @@ assert.equal(
 for (const phrase of [
   "オイル交換などはいかがでしょうか？",
   "オイル交換のご希望はございますか？",
-  "オイル交換はどうしますか？"
+  "オイル交換はどうしますか？",
+  "お時間なんですけども。調子が悪いこととか気になるところ、あとオイル交換や。追加の作業などはございますでしょうか？"
 ]) {
   assert.equal(
     additionalFollowUpContext.asksInspectionOilChangeOffer(phrase),
@@ -179,6 +180,11 @@ assert.match(
   appSource,
   /responseStep\.key === "asked_vehicle_concerns"[\s\S]*?hasInspectionOilChangeRequest\(\)[\s\S]*?そのほかは大丈夫です。/,
   "回答済みのオイル交換希望を通常工程で繰り返さないこと"
+);
+assert.match(
+  appSource,
+  /!hasInspectionOilChangeRequest\(\)\s*&&\s*asksInspectionOilChangeOffer\(text\)/,
+  "句読点で分割されたオイル交換確認も発話全体から判定すること"
 );
 assert.match(
   appSource,

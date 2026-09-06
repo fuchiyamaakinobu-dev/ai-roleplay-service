@@ -1463,7 +1463,7 @@ function asksInspectionOilChangeOffer(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
   const hasOilChange = normalized.includes("オイル交換");
-  const asksPreference = /(?:いかが|希望|ご希望|しますか|されますか|ございますか|どうしますか)/.test(normalized);
+  const asksPreference = /(?:いかが|希望|ご希望|しますか|されますか|ございます(?:でしょう)?か|どうしますか)/.test(normalized);
   return hasOilChange && asksPreference;
 }
 
@@ -3752,7 +3752,9 @@ function handleScriptedStaffReply(text) {
 
   // オイル交換の希望を直接尋ねられた場合は、現在の工程や質問順に左右されず、
   // 「はい」ではなく具体的な追加作業希望を返す。
-  if (!hasInspectionOilChangeRequest() && asksInspectionOilChangeOffer(decisionText)) {
+  // 音声認識が「オイル交換や。追加の作業などはございますか」のように
+  // 途中へ句点を入れても、最後の疑問節だけでなく発話全体から希望確認を拾う。
+  if (!hasInspectionOilChangeRequest() && asksInspectionOilChangeOffer(text)) {
     const concernStep = scenario.steps.find((candidate) => candidate.key === "asked_vehicle_concerns");
     if (concernStep) markScriptedStepPassed(concernStep, text);
     state.turn += 1;
