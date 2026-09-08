@@ -230,6 +230,44 @@ const timeOnlyRetry = retryContext.scriptedRetryForMissingDetails(
 );
 assert.equal(timeOnlyRetry.text, "何日の予定ですか？", "時刻提示後に日付だけを確認できません");
 
+const partialProgressStart = appSource.indexOf("function hasNewInspectionAppointmentPartial");
+const partialProgressEnd = appSource.indexOf("function naturalScriptedRetryVariants", partialProgressStart);
+assert.notEqual(partialProgressStart, -1, "予約日時の部分情報進展判定が見つかりません");
+assert.notEqual(partialProgressEnd, -1, "予約日時の部分情報進展判定の終端が見つかりません");
+const partialProgressContext = {
+  normalizeScriptedText: proposalContext.normalizeScriptedText,
+  inspectionAppointmentDateCandidates: proposalContext.inspectionAppointmentDateCandidates
+};
+vm.createContext(partialProgressContext);
+vm.runInContext(
+  appSource.slice(partialProgressStart, partialProgressEnd),
+  partialProgressContext
+);
+assert.equal(
+  partialProgressContext.hasNewInspectionAppointmentPartial(
+    "9月10日はいかがでしょうか。",
+    "具体的な日時を教えてください。"
+  ),
+  true,
+  "一般的な日時確認後に提示された日付を新しい情報として保持できません"
+);
+assert.equal(
+  partialProgressContext.hasNewInspectionAppointmentPartial(
+    "10時はいかがでしょうか。",
+    "9月10日はいかがでしょうか。"
+  ),
+  true,
+  "先に提示された日付へ後続の時刻を合算できません"
+);
+assert.equal(
+  partialProgressContext.hasNewInspectionAppointmentPartial(
+    "9月10日でどうでしょうか。",
+    "9月10日はいかがでしょうか。"
+  ),
+  false,
+  "同じ日付の再提示を新しい部分情報として扱っています"
+);
+
 const weekdayTimePreferenceRetry = retryContext.scriptedRetryForMissingDetails(
   "ありがとうございます。土曜日。期間は何時ぐらいからご都合よろしいでしょう。",
   { key: "proposed_appointment", retryResponse: "具体的な日時を教えてください。" }

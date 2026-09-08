@@ -50,13 +50,13 @@ assert.match(
 );
 assert.match(
   source,
-  /confirmedInspectionAppointmentMatches\(text\)[\s\S]*?異なる日時でも再確認せず[\s\S]*?continueSpeechInputWithoutCustomerReply/,
-  "確定後に異なる予約日時を再確認せず進める処理がありません"
+  /confirmedInspectionAppointmentMatches\(text\)[\s\S]*?addMessage\("customer", "はい。"[\s\S]*?確定日時は変更せず/,
+  "予約確定後の日時再提示へ相づちを返し、確定日時を維持する制御がありません"
 );
 assert.match(
   source,
-  /const sameAppointment = confirmedInspectionAppointmentMatches\(text\);[\s\S]*?if \(sameAppointment\)[\s\S]*?continueSpeechInputWithoutCustomerReply/,
-  "確認済みの同一日時へAIが回答を繰り返しています"
+  /const sameAppointment = confirmedInspectionAppointmentMatches\(text\);[\s\S]*?addMessage\("customer", "はい。"[\s\S]*?if \(sameAppointment\)/,
+  "確認済みの同一日時へ音声認識継続用の相づちを返せません"
 );
 assert.match(
   source,

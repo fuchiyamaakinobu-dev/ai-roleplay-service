@@ -1456,7 +1456,10 @@ function asksInspectionAdditionalServiceFollowUp(text) {
   // オイル交換を受け付けた直後は「その他、気になるところはございませんか」も
   // 残る要望の再確認であるため、車両状態の語を含む言い換えも同じ扱いにする。
   const hasServiceContext = /(?:追加作業|追加整備|ご用命|オイル交換|作業|整備|気になる|不具合|不都合|調子|具合|症状|見てほしい)/.test(normalized);
-  return asksAboutOtherWork && hasServiceContext;
+  // 「あと気になるところございませんか」のように「その他」が省略されても、
+  // オイル交換受付後に残る要望を尋ねる否定疑問なら同じ再確認として扱う。
+  const asksWhetherConcernsRemain = /(?:あと.{0,8})?(?:気になる|不具合|不都合|調子|具合|症状|見てほしい).{0,24}(?:ございませんか|ありませんか|ないですか|ないでしょうか)/.test(normalized);
+  return (asksAboutOtherWork && hasServiceContext) || asksWhetherConcernsRemain;
 }
 
 function asksInspectionOilChangeOffer(text) {
@@ -2405,8 +2408,13 @@ function hasInspectionAvailabilityRequest(text) {
   // 「ご都合の良い日を教えていただければと思います」のように、
   // 疑問形ではなく依頼形で希望日を尋ねる自然な電話表現も都合確認とする。
   const hasAvailabilityContext = /(?:ご)?都合|(?:ご)?予定|希望(?:日|日時)|日程/.test(normalized);
-  const requestsCustomerChoice = /(?:いかが|よろしい|教えて|お聞かせ|伺え|お知らせ|ご提示|いただければ|お願い(?:いた)?します)/.test(normalized);
-  return hasAvailabilityContext && requestsCustomerChoice;
+  const requestsCustomerChoice = /(?:いかが|よろしい|教えて|お聞かせ|伺え|伺い|伺いた|お知らせ|ご提示|いただければ|お願い(?:いた)?します)/.test(normalized);
+  // 「いつがご都合良いでしょうか」のような一般的な疑問形は、
+  // 「よろしい」を含まなくても明確な都合確認である。
+  const asksWhenConvenient = /いつ/.test(normalized)
+    && /(?:ご)?都合/.test(normalized)
+    && /(?:でしょうか|ですか|ますか|[?？])/.test(normalized);
+  return hasAvailabilityContext && (requestsCustomerChoice || asksWhenConvenient);
 }
 
 function hasDirectInspectionBookingInvitation(text) {
@@ -3272,6 +3280,17 @@ function shouldUseInspectionTimeOnlyAppointmentResponse(text, step, analysis) {
     && /\d{1,2}時/.test(normalized);
 }
 
+function hasNewInspectionAppointmentPartial(text, pendingText = "") {
+  const current = normalizeScriptedText(text);
+  const pending = normalizeScriptedText(pendingText);
+  const currentHasDate = inspectionAppointmentDateCandidates(current).length > 0;
+  const pendingHasDate = inspectionAppointmentDateCandidates(pending).length > 0;
+  const currentHasTime = /\d{1,2}時/.test(current);
+  const pendingHasTime = /\d{1,2}時/.test(pending);
+  return (currentHasDate && !pendingHasDate)
+    || (currentHasTime && !pendingHasTime);
+}
+
 function naturalScriptedRetryVariants(retry, step) {
   const variants = retry.alternatives?.length
     ? retry.alternatives.map((item) => ({ ...item }))
@@ -3884,17 +3903,23 @@ function handleScriptedStaffReply(text) {
     state.proposedAppointment
     && hasInspectionAppointmentProposalEvidence(text)
     && !hasScriptedAppointmentRecapEvidence(text)
+    // 音声認識が複数発話を一つに結合した場合は、日時再提示より
+    // 最後に尋ねられた店内待ち・代車の質問への具体的な返答を優先する。
+    && !asksInspectionWaitingMethodConfirmation(decisionText)
+    && !asksInspectionLoanerNeed(decisionText)
   ) {
     const sameAppointment = confirmedInspectionAppointmentMatches(text);
+    state.turn += 1;
+    addMessage("customer", "はい。", {
+      audioId: "inspection_thanked_customer_retry"
+    });
     if (sameAppointment) {
-      els.speechNote.textContent = "予約日時は確認済みです。同じ日時への返答を繰り返さず、予約後の案内を続けてください。";
+      els.speechNote.textContent = "予約日時は確認済みです。相づち後、予約後の案内を続けてください。";
       renderProgress();
-      continueSpeechInputWithoutCustomerReply("音声入力中です。予約後の案内を続けてください。");
       return;
     }
-    els.speechNote.textContent = "予約日時は確定済みです。異なる日時でも再確認せず、当日の案内へ進めてください。";
+    els.speechNote.textContent = "予約日時は確定済みです。確定日時は変更せず、相づち後に当日の案内へ進めてください。";
     renderProgress();
-    continueSpeechInputWithoutCustomerReply("音声入力中です。予約後の案内を続けてください。");
     return;
   }
 
@@ -4301,7 +4326,15 @@ function handleScriptedStaffReply(text) {
     const retryKey = step.key === "proposed_appointment"
       ? "inspection-retry:proposed_appointment:general"
       : `inspection-retry:${step.key}:${retry.missingDetail || "general"}`;
-    const alreadyAsked = (state.questionRepeats[retryKey] || 0) > 0;
+    const appointmentPartialAdvanced = step.key === "proposed_appointment"
+      && hasNewInspectionAppointmentPartial(
+        text,
+        state.scriptedPartialReplies[step.key]?.text || ""
+      );
+    // 一般的な日時確認を一度返した後でも、新たに日付または時刻が提示された場合は
+    // 同じ質問の繰り返しとは扱わない。部分情報を保持し、残りの一方だけを確認する。
+    const alreadyAsked = (state.questionRepeats[retryKey] || 0) > 0
+      && !appointmentPartialAdvanced;
     const maySkipRepeatedQuestion = step.key !== "closed_politely";
     const optionalAfterAppointment = Boolean(state.proposedAppointment && step.optionalAfterAppointment);
 
