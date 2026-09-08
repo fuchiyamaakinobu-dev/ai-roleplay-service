@@ -13,6 +13,7 @@ import {
   getFirestore,
   orderBy,
   query,
+  where,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
@@ -43,6 +44,7 @@ const els = {
   logoutButton: document.querySelector("#logoutButton"),
   reloadButton: document.querySelector("#reloadButton"),
   csvButton: document.querySelector("#csvButton"),
+  deleteEmployeeButton: document.querySelector("#deleteEmployeeButton"),
   employeeFilter: document.querySelector("#employeeFilter"),
   scenarioFilter: document.querySelector("#scenarioFilter"),
   historyStatus: document.querySelector("#historyStatus"),
@@ -208,6 +210,57 @@ async function pruneHistory(collectionName, snapshot) {
   return excess.length;
 }
 
+async function deleteDocumentsInBatches(collectionName, documents) {
+  for (let index = 0; index < documents.length; index += 500) {
+    const batch = writeBatch(db);
+    documents.slice(index, index + 500).forEach((item) => {
+      batch.delete(doc(db, collectionName, item.id));
+    });
+    await batch.commit();
+  }
+}
+
+async function deleteFilteredEmployeeHistory() {
+  const employeeCode = els.employeeFilter.value.trim();
+  if (!/^[0-9]{6}$/.test(employeeCode)) {
+    els.historyStatus.textContent = "削除する社員コードを6桁で入力してください。";
+    return;
+  }
+
+  els.deleteEmployeeButton.disabled = true;
+  els.historyStatus.textContent = `社員コード ${employeeCode} の削除対象を確認しています…`;
+  try {
+    const [resultSnapshot, activitySnapshot] = await Promise.all([
+      getDocs(query(collection(db, "roleplayResults"), where("employeeCode", "==", employeeCode))),
+      getDocs(query(collection(db, "roleplayActivity"), where("employeeCode", "==", employeeCode)))
+    ]);
+    const resultCount = resultSnapshot.size;
+    const activityCount = activitySnapshot.size;
+    const totalCount = resultCount + activityCount;
+    if (totalCount === 0) {
+      els.historyStatus.textContent = `社員コード ${employeeCode} の履歴はありません。`;
+      return;
+    }
+
+    const approved = window.confirm(
+      `社員コード ${employeeCode} の採点結果 ${resultCount}件と開始履歴 ${activityCount}件を削除します。\nこの操作は元に戻せません。よろしいですか？`
+    );
+    if (!approved) {
+      els.historyStatus.textContent = "履歴の削除を中止しました。";
+      return;
+    }
+
+    await deleteDocumentsInBatches("roleplayResults", resultSnapshot.docs);
+    await deleteDocumentsInBatches("roleplayActivity", activitySnapshot.docs);
+    els.historyStatus.textContent = `社員コード ${employeeCode} の履歴 ${totalCount}件を削除しました。`;
+    await loadHistory();
+  } catch (error) {
+    els.historyStatus.textContent = `履歴を削除できませんでした：${error.message}`;
+  } finally {
+    els.deleteEmployeeButton.disabled = !/^[0-9]{6}$/.test(els.employeeFilter.value.trim());
+  }
+}
+
 function csvCell(value) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
@@ -245,8 +298,10 @@ els.loginButton.addEventListener("click", async () => {
 els.logoutButton.addEventListener("click", () => signOut(auth));
 els.reloadButton.addEventListener("click", loadHistory);
 els.csvButton.addEventListener("click", exportCsv);
+els.deleteEmployeeButton.addEventListener("click", deleteFilteredEmployeeHistory);
 els.employeeFilter.addEventListener("input", () => {
   els.employeeFilter.value = els.employeeFilter.value.replace(/\D/g, "").slice(0, 6);
+  els.deleteEmployeeButton.disabled = !/^[0-9]{6}$/.test(els.employeeFilter.value);
   render();
 });
 els.scenarioFilter.addEventListener("change", render);
