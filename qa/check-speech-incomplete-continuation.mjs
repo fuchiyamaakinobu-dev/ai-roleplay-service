@@ -16,7 +16,7 @@ assert.match(
 );
 assert.match(
   resultHandler,
-  /stopSpeechInput\(\)[\s\S]*?replyForm\.requestSubmit\(\)/,
+  /stopSpeechInput\(\{ preserveSession: true \}\)[\s\S]*?replyForm\.requestSubmit\(\)/,
   "未完了発話を記録して相づち処理へ渡していません"
 );
 assert.doesNotMatch(

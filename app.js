@@ -5,13 +5,14 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 
 let speechRecognition = null;
 let speechListening = false;
+let speechSessionActive = false;
 let speechBaseText = "";
 let speechRestartTimer = null;
 let speechDecisionTimer = null;
-let interactionDelayAlreadyElapsed = false;
 let activeCustomerAudio = null;
 let customerPlaybackGeneration = 0;
 let speechInputStartTimer = null;
+let speechSessionRecoveryTimer = null;
 let customerReplyTimer = null;
 
 const state = {
@@ -81,6 +82,7 @@ const els = {
   voiceSelect: document.querySelector("#voiceSelect"),
   voiceCredit: document.querySelector("#voiceCredit"),
   interactionDelaySelect: document.querySelector("#interactionDelaySelect"),
+  speechDecisionDelaySelect: document.querySelector("#speechDecisionDelaySelect"),
   replyForm: document.querySelector("#replyForm"),
   staffInput: document.querySelector("#staffInput"),
   micButton: document.querySelector("#micButton"),
@@ -588,7 +590,7 @@ function handleInspectionCheckpointTest(event) {
   const audioId = button.dataset.inspectionAudioId || "";
   if (!buttonKey || !staffText || !responseText) return;
 
-  stopSpeechInput();
+  stopSpeechInput({ preserveSession: true });
   stopCustomerPlayback();
   addMessage("staff", staffText, { immediate: true, hiddenFromConversation: true });
   state.inspectionButtonChecks[buttonKey] = true;
@@ -718,6 +720,11 @@ function interactionDelayMs() {
   return [500, 800, 1000, 1500, 2000].includes(selected) ? selected : 1500;
 }
 
+function speechDecisionDelayMs() {
+  const selected = Number(els.speechDecisionDelaySelect?.value);
+  return [1500, 2000, 2500, 3000, 4000].includes(selected) ? selected : 3000;
+}
+
 function setCustomerReplyPending(pending) {
   state.customerReplyPending = pending;
   els.replyForm?.setAttribute("aria-busy", String(pending));
@@ -808,7 +815,6 @@ function addMessage(role, text, options = {}) {
   const delay = role === "customer"
     && previousMessage?.role === "staff"
     && options.immediate !== true
-    && !interactionDelayAlreadyElapsed
       ? interactionDelayMs()
       : 0;
 
@@ -946,6 +952,13 @@ function beginAutomaticSpeechInput(noteText, retryCount = 0) {
   }
 
   clearStaffInput();
+  if (scenario.id === "vehicle-inspection-phone-followup") {
+    speechSessionActive = true;
+  }
+  if (speechSessionRecoveryTimer) {
+    window.clearTimeout(speechSessionRecoveryTimer);
+    speechSessionRecoveryTimer = null;
+  }
   speechListening = true;
   updateMicButton(true);
   els.speechNote.textContent = noteText;
@@ -954,7 +967,7 @@ function beginAutomaticSpeechInput(noteText, retryCount = 0) {
     return true;
   } catch (error) {
     speechListening = false;
-    updateMicButton(false);
+    updateMicButton(speechSessionActive && !state.ended);
     // recognition.stop()の完了前にstart()すると、ブラウザーによっては
     // InvalidStateErrorになる。予約確定後の「かしこまりました」など、
     // AI音声を挟まず入力を続ける場面でもマイクをOFFのままにしない。
@@ -972,9 +985,43 @@ function beginAutomaticSpeechInput(noteText, retryCount = 0) {
       }, 120);
       return false;
     }
+    if (
+      error?.name === "InvalidStateError"
+      && speechSessionActive
+      && state.started
+      && !state.ended
+    ) {
+      els.speechNote.textContent = "音声入力の再開を続けています。";
+      speechSessionRecoveryTimer = window.setTimeout(() => {
+        speechSessionRecoveryTimer = null;
+        beginAutomaticSpeechInput(noteText, 0);
+      }, 600);
+      return false;
+    }
+    speechSessionActive = false;
+    updateMicButton(false);
     els.speechNote.textContent = "音声入力を開始できませんでした。マイクボタンを押してください。";
     return false;
   }
+}
+
+function scheduleSpeechSessionRecovery(noteText, delay = 2500) {
+  if (speechSessionRecoveryTimer) {
+    window.clearTimeout(speechSessionRecoveryTimer);
+  }
+  if (!speechSessionActive || !state.started || state.ended) {
+    speechSessionRecoveryTimer = null;
+    return;
+  }
+  speechSessionRecoveryTimer = window.setTimeout(() => {
+    speechSessionRecoveryTimer = null;
+    if (!speechSessionActive || !state.started || state.ended || speechListening) return;
+    if (state.customerReplyPending || activeCustomerAudio) {
+      scheduleSpeechSessionRecovery(noteText, 500);
+      return;
+    }
+    beginAutomaticSpeechInput(noteText);
+  }, delay);
 }
 
 function startSpeechInputAfterCustomer() {
@@ -2596,9 +2643,10 @@ function hasInspectionSelfIntroduction(text) {
   if (!endingMatch || endingMatch.index === undefined) return false;
 
   let beforeEnding = afterStore.slice(0, endingMatch.index);
-  // 店舗側の単語は氏名候補から除外する。本別店の「店」省略と読点誤認も許容する。
+  // 店舗側の単語は氏名候補から除外する。本別店の「店」省略と、
+  // 音声認識が「本。別店」「本、別店」と区切る誤認も許容する。
   beforeEnding = beforeEnding
-    .replace(/^本[、,]?別(?:店)?/, "")
+    .replace(/^本[、,。．.]?別(?:店)?/, "")
     .replace(/^[一-龯々ぁ-んァ-ヶー]{1,12}店(?=(?:の|、|,))/, "")
     .replace(/^(?:の|、|,)+/, "");
 
@@ -3052,10 +3100,14 @@ function hasCourtesyExpression(text) {
   const hasDirectPatronage = /(?:ご利用|ご愛顧)/.test(normalized);
   const hasAlwaysThanks = normalized.includes("いつも") && hasThanks;
   const hasEstablishedGreeting = /お世話になって(?:おります|います|ます)/.test(normalized);
+  // 「日頃」が人名などへ誤変換されても、「お世話になり」と感謝が
+  // 同じ発話にあれば、継続利用へのお礼として意味が成立している。
+  const hasRelationshipThanks = /お世話になり(?:まして)?/.test(normalized) && hasThanks;
   const hasOngoingRelationship = /(?:日頃|いつも|平素)/.test(normalized)
     && /お世話にな(?:って(?:おります|います|ます)|り(?:まして)?)/.test(normalized);
   return hasAlwaysThanks
     || hasEstablishedGreeting
+    || hasRelationshipThanks
     || (hasThanks && (hasDirectPatronage || hasOngoingRelationship));
 }
 
@@ -3633,7 +3685,8 @@ function handleScriptedStaffReply(text) {
     (candidate) => candidate.key === "asked_availability"
   );
   const asksGeneralInspectionAvailability = hasInspectionAvailabilityRequest(decisionText)
-    && !hasDirectInspectionBookingInvitation(decisionText);
+    && !hasDirectInspectionBookingInvitation(decisionText)
+    && !hasInspectionAppointmentProposalEvidence(text);
   if (
     !state.proposedAppointment
     && availabilityStepIndex >= 0
@@ -4635,7 +4688,7 @@ function handleReply(event) {
   const text = normalizeLoanerHomophone(els.staffInput.value.trim());
   if (!text) return;
 
-  stopSpeechInput();
+  stopSpeechInput({ preserveSession: scenario.id === "vehicle-inspection-phone-followup" });
   stopCustomerPlayback();
   clearStaffInput();
   addMessage("staff", text);
@@ -5098,6 +5151,13 @@ function setupSpeech() {
         speechRestartTimer = window.setTimeout(() => restartRecognition(retryCount + 1), 120);
         return;
       }
+      if (error?.name === "InvalidStateError" && speechSessionActive && !state.ended) {
+        speechRestartTimer = window.setTimeout(() => restartRecognition(0), 600);
+        updateMicButton(true);
+        els.speechNote.textContent = "音声入力の再開を続けています。";
+        return;
+      }
+      speechSessionActive = false;
       speechListening = false;
       updateMicButton(false);
       els.speechNote.textContent = "音声入力を再開できませんでした。マイクボタンを押してください。";
@@ -5116,21 +5176,17 @@ function setupSpeech() {
       speechDecisionTimer = window.setTimeout(() => {
         if (!speechListening || state.ended) return;
         if (looksLikeCompleteJapaneseSentence(fullText)) {
-          stopSpeechInput();
+          stopSpeechInput({ preserveSession: true });
           els.speechNote.textContent = "発言が完了したため、自動的に次へ進みます。";
-          interactionDelayAlreadyElapsed = true;
           els.replyForm.requestSubmit();
-          interactionDelayAlreadyElapsed = false;
         } else {
           // Web Speech APIが発話途中をisFinalにした場合も、その断片を採点せず
           // AIお客様の短い相づちへ渡す。相づちMP3の終了後にマイクを再開する。
-          stopSpeechInput();
+          stopSpeechInput({ preserveSession: true });
           els.speechNote.textContent = "発言途中として相づちを返し、同じ未確認項目を継続します。";
-          interactionDelayAlreadyElapsed = true;
           els.replyForm.requestSubmit();
-          interactionDelayAlreadyElapsed = false;
         }
-      }, interactionDelayMs());
+      }, speechDecisionDelayMs());
     } else {
       els.speechNote.textContent = "音声入力中です。話し終えると自動的に次へ進みます。";
     }
@@ -5138,7 +5194,7 @@ function setupSpeech() {
 
   speechRecognition.addEventListener("end", () => {
     if (!speechListening || state.ended) {
-      updateMicButton(false);
+      updateMicButton(speechSessionActive && !state.ended);
       return;
     }
 
@@ -5152,12 +5208,14 @@ function setupSpeech() {
 
   speechRecognition.addEventListener("error", (event) => {
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+      speechSessionActive = false;
       speechListening = false;
       updateMicButton(false);
       els.speechNote.textContent = "マイクの利用が許可されていません。ブラウザの設定を確認してください。";
       return;
     }
     if (event.error === "audio-capture") {
+      speechSessionActive = false;
       speechListening = false;
       updateMicButton(false);
       els.speechNote.textContent = "マイクを使用できません。Windowsとブラウザのマイク設定を確認してください。";
@@ -5171,7 +5229,7 @@ function setupSpeech() {
   });
 
   els.micButton.addEventListener("click", () => {
-    if (speechListening) {
+    if (speechListening || speechSessionActive) {
       stopSpeechInput();
       els.speechNote.textContent = "音声入力を停止しました。内容を確認して送信してください。";
       return;
@@ -5182,6 +5240,7 @@ function setupSpeech() {
       return;
     }
 
+    speechSessionActive = scenario.id === "vehicle-inspection-phone-followup";
     speechListening = true;
     speechBaseText = els.staffInput.value.trim();
     updateMicButton(true);
@@ -5189,6 +5248,7 @@ function setupSpeech() {
     try {
       speechRecognition.start();
     } catch (_) {
+      speechSessionActive = false;
       speechListening = false;
       updateMicButton(false);
     }
@@ -5202,7 +5262,13 @@ function updateMicButton(listening) {
   els.micButton.setAttribute("aria-pressed", listening ? "true" : "false");
 }
 
-function stopSpeechInput() {
+function stopSpeechInput(options = {}) {
+  const preserveSession = options.preserveSession === true
+    && speechSessionActive
+    && scenario.id === "vehicle-inspection-phone-followup"
+    && state.started
+    && !state.ended;
+  speechSessionActive = preserveSession;
   speechListening = false;
   if (speechInputStartTimer) {
     window.clearTimeout(speechInputStartTimer);
@@ -5216,6 +5282,10 @@ function stopSpeechInput() {
     window.clearTimeout(speechDecisionTimer);
     speechDecisionTimer = null;
   }
+  if (speechSessionRecoveryTimer) {
+    window.clearTimeout(speechSessionRecoveryTimer);
+    speechSessionRecoveryTimer = null;
+  }
   speechBaseText = "";
   if (speechRecognition) {
     try {
@@ -5224,7 +5294,10 @@ function stopSpeechInput() {
       // すでに停止している場合は何もしない
     }
   }
-  updateMicButton(false);
+  updateMicButton(preserveSession);
+  if (preserveSession) {
+    scheduleSpeechSessionRecovery("音声入力を自動再開しました。案内を続けてください。");
+  }
 }
 
 els.startButton.addEventListener("click", startRoleplay);
@@ -5244,6 +5317,9 @@ els.requiredCustomerSpeech?.addEventListener("click", handleInspectionCheckpoint
 els.voiceSelect?.addEventListener("change", updateVoiceSelection);
 els.interactionDelaySelect?.addEventListener("change", () => {
   localStorage.setItem("roleplayInteractionDelayMs", String(interactionDelayMs()));
+});
+els.speechDecisionDelaySelect?.addEventListener("change", () => {
+  localStorage.setItem("roleplaySpeechDecisionDelayMs", String(speechDecisionDelayMs()));
 });
 els.replyForm.addEventListener("submit", handleReply);
 els.scenarioList.addEventListener("click", (event) => {
@@ -5278,7 +5354,9 @@ els.conversation.addEventListener("click", (event) => {
   const message = state.transcript[Number(button.dataset.audioIndex)];
   if (message?.role === "customer") {
     const shouldRestartMic = message.role === "customer" && state.started && !state.ended;
-    if (shouldRestartMic) stopSpeechInput();
+    if (shouldRestartMic) {
+      stopSpeechInput({ preserveSession: scenario.id === "vehicle-inspection-phone-followup" });
+    }
     const onFinished = shouldRestartMic ? startSpeechInputAfterCustomer : null;
     if (message.audioSrc) {
       playAudio(message.audioSrc, message.text, true, onFinished);
@@ -5293,13 +5371,19 @@ if (savedVoice && audioDb.voices?.[savedVoice] && els.voiceSelect) {
   els.voiceSelect.value = savedVoice;
 }
 const savedInteractionDelay = localStorage.getItem("roleplayInteractionDelayMs")
-  || localStorage.getItem("roleplaySpeechDecisionDelayMs")
   || localStorage.getItem("roleplayCustomerReplyDelayMs");
 if (
   els.interactionDelaySelect
   && ["500", "800", "1000", "1500", "2000"].includes(savedInteractionDelay)
 ) {
   els.interactionDelaySelect.value = savedInteractionDelay;
+}
+const savedSpeechDecisionDelay = localStorage.getItem("roleplaySpeechDecisionDelayMs");
+if (
+  els.speechDecisionDelaySelect
+  && ["1500", "2000", "2500", "3000", "4000"].includes(savedSpeechDecisionDelay)
+) {
+  els.speechDecisionDelaySelect.value = savedSpeechDecisionDelay;
 }
 window.addEventListener?.("roleplay-history-status", (event) => {
   if (!els.resultSaveStatus) return;

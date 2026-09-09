@@ -14,8 +14,10 @@ let startCount = 0;
 const invalidState = new Error("recognition is still stopping");
 invalidState.name = "InvalidStateError";
 const context = {
+  scenario: { id: "vehicle-inspection-phone-followup" },
   state: { started: true, ended: false },
   speechListening: false,
+  speechSessionActive: false,
   speechRecognition: {
     start() {
       startCount += 1;
@@ -23,6 +25,7 @@ const context = {
     }
   },
   speechInputStartTimer: null,
+  speechSessionRecoveryTimer: null,
   els: { speechNote: { textContent: "" } },
   clearStaffInput() {},
   updateMicButton(listening) {

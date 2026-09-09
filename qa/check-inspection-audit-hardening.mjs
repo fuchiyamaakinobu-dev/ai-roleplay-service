@@ -50,6 +50,8 @@ assert.equal(context.hasInspectionWaitingChoiceOffer("店内ではお待ちい�
 assert.equal(context.asksInspectionWaitingMethodConfirmation("店内ではお待ちいただけません。"), false);
 
 assert.equal(context.hasInspectionSelfIntroduction("トヨタモビリティ帯広本別店の寺屋と申します"), true);
+assert.equal(context.hasInspectionSelfIntroduction("私、トヨタモビリティ帯広本。別店の寺屋といいます。"), true);
+assert.equal(context.hasInspectionSelfIntroduction("私、トヨタモビリティ帯広本、別店の小寺でございます。"), true);
 assert.equal(context.hasInspectionSelfIntroduction("トヨタモビリヒロの寺屋と申します"), true);
 assert.equal(context.hasInspectionSelfIntroduction("トヨタモビリテ帯広の寺屋と申します"), true);
 assert.equal(context.hasInspectionSelfIntroduction("トヨタモビリティ帯広本別店と申します"), false);
