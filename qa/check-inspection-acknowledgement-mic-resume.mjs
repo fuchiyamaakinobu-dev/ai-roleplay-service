@@ -17,6 +17,8 @@ const context = {
   scenario: { id: "vehicle-inspection-phone-followup" },
   state: { started: true, ended: false },
   speechListening: false,
+  speechRecognitionRunning: false,
+  speechRecognitionHasStarted: true,
   speechSessionActive: false,
   speechRecognition: {
     start() {
@@ -26,10 +28,14 @@ const context = {
   },
   speechInputStartTimer: null,
   speechSessionRecoveryTimer: null,
+  speechStartWatchdogTimer: null,
   els: { speechNote: { textContent: "" } },
   clearStaffInput() {},
   updateMicButton(listening) {
     micStates.push(listening);
+  },
+  updateMicButtonPaused() {
+    micStates.push("paused");
   },
   window: {
     clearTimeout(timer) {
@@ -61,7 +67,8 @@ assert.equal(context.els.speechNote.textContent, "音声入力の再開を待っ
 timers.shift().callback();
 assert.equal(startCount, 2, "音声認識を再試行していません");
 assert.equal(context.speechListening, true, "再試行成功後もマイク状態がOFFです");
-assert.equal(micStates.at(-1), true, "再試行成功後にマイクボタンがONへ戻りません");
+assert.equal(micStates.at(-1), "paused", "開始イベント前にマイクを入力中表示へ切り替えています");
+assert.equal(timers.at(-1).delay, 1800, "認識開始イベントの監視が予約されていません");
 
 const handlerStart = source.indexOf("function handleScriptedStaffReply");
 const handlerEnd = source.indexOf("function handleReply", handlerStart);

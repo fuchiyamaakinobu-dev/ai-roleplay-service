@@ -20,6 +20,21 @@ assert.match(
 );
 assert.match(
   source,
+  /function scheduleSpeechStartWatchdog[\s\S]*?!speechRecognitionHasStarted[\s\S]*?speechRecognitionRunning[\s\S]*?speechRecognition\.abort\(\)[\s\S]*?scheduleSpeechSessionRecovery/,
+  "開始イベントが返らず固まった音声認識を検知・再接続できません"
+);
+assert.match(
+  source,
+  /speechRecognition\.addEventListener\("start"[\s\S]*?speechRecognitionRunning = true;[\s\S]*?updateMicButton\(true\)/,
+  "実際の認識開始前に入力中表示へ切り替わる可能性があります"
+);
+assert.match(
+  source,
+  /function updateMicButtonPaused\(\)[\s\S]*?is-paused[\s\S]*?音声入力の自動再開待ち/,
+  "AI音声中と認識中を画面上で区別できません"
+);
+assert.match(
+  source,
   /function handleReply[\s\S]*?stopSpeechInput\(\{ preserveSession: scenario\.id === "vehicle-inspection-phone-followup" \}\)/,
   "スタッフ発話の送信時に車検ロープレの音声入力セッションが終了します"
 );

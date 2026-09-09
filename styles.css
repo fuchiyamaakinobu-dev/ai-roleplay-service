@@ -1009,6 +1009,13 @@ h1 {
   box-shadow: 0 0 0 4px rgba(199, 53, 43, 0.14);
 }
 
+.icon-button.is-paused {
+  color: #5f6f86;
+  background: #eef3f9;
+  border-color: #aebbd0;
+  box-shadow: 0 0 0 4px rgba(95, 111, 134, 0.1);
+}
+
 textarea {
   width: 100%;
   min-height: 46px;

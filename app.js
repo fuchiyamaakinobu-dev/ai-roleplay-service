@@ -5,6 +5,8 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 
 let speechRecognition = null;
 let speechListening = false;
+let speechRecognitionRunning = false;
+let speechRecognitionHasStarted = false;
 let speechSessionActive = false;
 let speechBaseText = "";
 let speechRestartTimer = null;
@@ -13,6 +15,7 @@ let activeCustomerAudio = null;
 let customerPlaybackGeneration = 0;
 let speechInputStartTimer = null;
 let speechSessionRecoveryTimer = null;
+let speechStartWatchdogTimer = null;
 let customerReplyTimer = null;
 
 const state = {
@@ -960,14 +963,16 @@ function beginAutomaticSpeechInput(noteText, retryCount = 0) {
     speechSessionRecoveryTimer = null;
   }
   speechListening = true;
-  updateMicButton(true);
-  els.speechNote.textContent = noteText;
+  updateMicButtonPaused();
+  els.speechNote.textContent = "音声入力を開始しています。";
   try {
     speechRecognition.start();
+    scheduleSpeechStartWatchdog(noteText);
     return true;
   } catch (error) {
     speechListening = false;
-    updateMicButton(speechSessionActive && !state.ended);
+    if (speechSessionActive && !state.ended) updateMicButtonPaused();
+    else updateMicButton(false);
     // recognition.stop()の完了前にstart()すると、ブラウザーによっては
     // InvalidStateErrorになる。予約確定後の「かしこまりました」など、
     // AI音声を挟まず入力を続ける場面でもマイクをOFFのままにしない。
@@ -1003,6 +1008,33 @@ function beginAutomaticSpeechInput(noteText, retryCount = 0) {
     els.speechNote.textContent = "音声入力を開始できませんでした。マイクボタンを押してください。";
     return false;
   }
+}
+
+function clearSpeechStartWatchdog() {
+  if (!speechStartWatchdogTimer) return;
+  window.clearTimeout(speechStartWatchdogTimer);
+  speechStartWatchdogTimer = null;
+}
+
+function scheduleSpeechStartWatchdog(noteText) {
+  clearSpeechStartWatchdog();
+  // 初回はブラウザーのマイク許可操作に時間がかかるため監視しない。
+  // 一度正常開始した後の、会話途中の再開停止だけを自動復旧する。
+  if (!speechRecognitionHasStarted) return;
+  speechStartWatchdogTimer = window.setTimeout(() => {
+    speechStartWatchdogTimer = null;
+    if (!speechListening || speechRecognitionRunning || !speechSessionActive || state.ended) return;
+    // start()が例外を出さず、startイベントも返さないブラウザー停止を復旧する。
+    speechListening = false;
+    updateMicButtonPaused();
+    els.speechNote.textContent = "音声入力の応答がないため、自動的に再接続しています。";
+    try {
+      speechRecognition.abort();
+    } catch (_) {
+      // すでに停止している場合も復旧タイマーへ進む。
+    }
+    scheduleSpeechSessionRecovery(noteText, 350);
+  }, 1800);
 }
 
 function scheduleSpeechSessionRecovery(noteText, delay = 2500) {
@@ -5142,10 +5174,12 @@ function setupSpeech() {
 
   const restartRecognition = (retryCount = 0) => {
     if (!speechListening || state.ended) return;
+    updateMicButtonPaused();
+    els.speechNote.textContent = "音声入力を再開しています。";
     try {
       speechRecognition.start();
       speechRestartTimer = null;
-      els.speechNote.textContent = "音声入力中です。話し終えると自動的に次へ進みます。";
+      scheduleSpeechStartWatchdog("音声入力中です。話し終えると自動的に次へ進みます。");
     } catch (error) {
       if (error?.name === "InvalidStateError" && retryCount < 6) {
         speechRestartTimer = window.setTimeout(() => restartRecognition(retryCount + 1), 120);
@@ -5153,7 +5187,7 @@ function setupSpeech() {
       }
       if (error?.name === "InvalidStateError" && speechSessionActive && !state.ended) {
         speechRestartTimer = window.setTimeout(() => restartRecognition(0), 600);
-        updateMicButton(true);
+        updateMicButtonPaused();
         els.speechNote.textContent = "音声入力の再開を続けています。";
         return;
       }
@@ -5163,6 +5197,22 @@ function setupSpeech() {
       els.speechNote.textContent = "音声入力を再開できませんでした。マイクボタンを押してください。";
     }
   };
+
+  speechRecognition.addEventListener("start", () => {
+    speechRecognitionRunning = true;
+    speechRecognitionHasStarted = true;
+    clearSpeechStartWatchdog();
+    if (!speechListening || state.ended) {
+      try {
+        speechRecognition.stop();
+      } catch (_) {
+        // 遅れて届いた開始イベントの停止に失敗しても終了処理へ委ねる。
+      }
+      return;
+    }
+    updateMicButton(true);
+    els.speechNote.textContent = "音声入力中です。話し終えると自動的に次へ進みます。";
+  });
 
   speechRecognition.addEventListener("result", (event) => {
     if (!speechListening || state.ended) return;
@@ -5193,8 +5243,11 @@ function setupSpeech() {
   });
 
   speechRecognition.addEventListener("end", () => {
+    speechRecognitionRunning = false;
+    clearSpeechStartWatchdog();
     if (!speechListening || state.ended) {
-      updateMicButton(speechSessionActive && !state.ended);
+      if (speechSessionActive && !state.ended) updateMicButtonPaused();
+      else updateMicButton(false);
       return;
     }
 
@@ -5207,6 +5260,8 @@ function setupSpeech() {
   });
 
   speechRecognition.addEventListener("error", (event) => {
+    speechRecognitionRunning = false;
+    clearSpeechStartWatchdog();
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       speechSessionActive = false;
       speechListening = false;
@@ -5243,10 +5298,11 @@ function setupSpeech() {
     speechSessionActive = scenario.id === "vehicle-inspection-phone-followup";
     speechListening = true;
     speechBaseText = els.staffInput.value.trim();
-    updateMicButton(true);
-    els.speechNote.textContent = "音声入力中です。話し終えたら停止ボタンか送信を押してください。";
+    updateMicButtonPaused();
+    els.speechNote.textContent = "音声入力を開始しています。";
     try {
       speechRecognition.start();
+      scheduleSpeechStartWatchdog("音声入力中です。話し終えたら停止ボタンか送信を押してください。");
     } catch (_) {
       speechSessionActive = false;
       speechListening = false;
@@ -5258,8 +5314,17 @@ function setupSpeech() {
 function updateMicButton(listening) {
   els.micButton.textContent = listening ? "■" : "🎙";
   els.micButton.classList.toggle("is-listening", listening);
+  els.micButton.classList.remove("is-paused");
   els.micButton.setAttribute("aria-label", listening ? "音声入力を停止" : "音声入力を開始");
   els.micButton.setAttribute("aria-pressed", listening ? "true" : "false");
+}
+
+function updateMicButtonPaused() {
+  els.micButton.textContent = "…";
+  els.micButton.classList.remove("is-listening");
+  els.micButton.classList.add("is-paused");
+  els.micButton.setAttribute("aria-label", "音声入力の自動再開待ち");
+  els.micButton.setAttribute("aria-pressed", "true");
 }
 
 function stopSpeechInput(options = {}) {
@@ -5286,6 +5351,8 @@ function stopSpeechInput(options = {}) {
     window.clearTimeout(speechSessionRecoveryTimer);
     speechSessionRecoveryTimer = null;
   }
+  clearSpeechStartWatchdog();
+  speechRecognitionRunning = false;
   speechBaseText = "";
   if (speechRecognition) {
     try {
@@ -5294,7 +5361,8 @@ function stopSpeechInput(options = {}) {
       // すでに停止している場合は何もしない
     }
   }
-  updateMicButton(preserveSession);
+  if (preserveSession) updateMicButtonPaused();
+  else updateMicButton(false);
   if (preserveSession) {
     scheduleSpeechSessionRecovery("音声入力を自動再開しました。案内を続けてください。");
   }
