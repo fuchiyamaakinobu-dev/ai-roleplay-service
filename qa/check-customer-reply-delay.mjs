@@ -5,14 +5,15 @@ const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const voiceSpec = readFileSync(new URL("../docs/VOICE_AND_MIC_SPEC.md", import.meta.url), "utf8");
 
-for (const value of ["500", "800", "1000", "1500", "2000"]) {
+for (const value of ["200", "300", "500", "800", "1000", "1500"]) {
   assert.match(html, new RegExp(`<option value="${value}"`));
 }
 
 assert.match(html, /id="interactionDelaySelect"/);
 assert.doesNotMatch(html, /id="replyDelaySelect"/);
 assert.match(html, /id="speechDecisionDelaySelect"/);
-assert.match(html, /<option value="1500" selected>1\.5秒（推奨）<\/option>/);
+assert.match(html, /<option value="500" selected>0\.5秒（推奨）<\/option>/);
+assert.match(html, /<option value="500">0\.5秒（最速）<\/option>/);
 assert.match(html, /<option value="3000" selected>3秒（推奨）<\/option>/);
 assert.match(html, /id="sendButton"/);
 assert.match(app, /roleplayInteractionDelayMs/);

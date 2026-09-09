@@ -717,12 +717,12 @@ function updateVoiceSelection() {
 
 function interactionDelayMs() {
   const selected = Number(els.interactionDelaySelect?.value);
-  return [500, 800, 1000, 1500, 2000].includes(selected) ? selected : 1500;
+  return [200, 300, 500, 800, 1000, 1500].includes(selected) ? selected : 500;
 }
 
 function speechDecisionDelayMs() {
   const selected = Number(els.speechDecisionDelaySelect?.value);
-  return [1500, 2000, 2500, 3000, 4000].includes(selected) ? selected : 3000;
+  return [500, 800, 1000, 1500, 2000, 2500, 3000, 4000].includes(selected) ? selected : 3000;
 }
 
 function setCustomerReplyPending(pending) {
@@ -5374,14 +5374,14 @@ const savedInteractionDelay = localStorage.getItem("roleplayInteractionDelayMs")
   || localStorage.getItem("roleplayCustomerReplyDelayMs");
 if (
   els.interactionDelaySelect
-  && ["500", "800", "1000", "1500", "2000"].includes(savedInteractionDelay)
+  && ["200", "300", "500", "800", "1000", "1500"].includes(savedInteractionDelay)
 ) {
   els.interactionDelaySelect.value = savedInteractionDelay;
 }
 const savedSpeechDecisionDelay = localStorage.getItem("roleplaySpeechDecisionDelayMs");
 if (
   els.speechDecisionDelaySelect
-  && ["1500", "2000", "2500", "3000", "4000"].includes(savedSpeechDecisionDelay)
+  && ["500", "800", "1000", "1500", "2000", "2500", "3000", "4000"].includes(savedSpeechDecisionDelay)
 ) {
   els.speechDecisionDelaySelect.value = savedSpeechDecisionDelay;
 }
