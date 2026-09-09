@@ -152,7 +152,7 @@ assert.doesNotMatch(
 );
 
 const additionalServiceFollowUpStart = appSource.indexOf(
-  "if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text))"
+  "if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(decisionText))"
 );
 const currentStepAnalysisStart = appSource.indexOf(
   "const combinedText = combinedScriptedReply(text, step);",
@@ -173,8 +173,8 @@ assert.match(additionalServiceFollowUpBlock, /inspection_additional_service_none
 assert.match(additionalServiceFollowUpBlock, /state\.scriptedPartialReplies\[step\.key\]/);
 assert.match(
   additionalServiceFollowUpBlock,
-  /hasInspectionOilChangeRequest\(\)\s*&&\s*asksInspectionAdditionalServiceFollowUp\(text\)/,
-  "『その他、何か調子が悪いことは』の『その他』を疑問節抽出で失わないこと"
+  /hasInspectionOilChangeRequest\(\)\s*&&\s*asksInspectionAdditionalServiceFollowUp\(decisionText\)/,
+  "追加作業再確認は発話全文ではなく最後の疑問節から判定すること"
 );
 assert.match(
   appSource,

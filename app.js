@@ -3898,6 +3898,27 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
+  // 「その他特別なければ、90分程度です。お待ちになりますか？」のように、
+  // 前半へ追加作業の説明があっても、返答は最後の待ち方質問を優先する。
+  // 採点証拠は上のrememberFutureScriptedAchievementsで発話全文から保持する。
+  if (
+    !state.inspectionWaitingMethod
+    && asksInspectionWaitingMethodConfirmation(decisionText)
+    && !asksInspectionLoanerNeed(decisionText)
+  ) {
+    state.inspectionWaitingMethod = "loaner";
+    state.inspectionLoanerRequested = true;
+    const waitingStep = scenario.steps.find((candidate) => candidate.key === "confirmed_waiting");
+    markScriptedStepPassed(waitingStep, "お客様が外出の可能性を伝えて代車利用を希望");
+    state.turn += 1;
+    addMessage("customer", "出かける可能性があるので、一応代車を用意してほしいんですが、できますか？", {
+      audioId: "inspection_waiting_followup_loaner_request"
+    });
+    els.speechNote.textContent = "最後の店内待ち確認へ回答しました。代車を用意できるか案内してください。";
+    renderProgress();
+    return;
+  }
+
   // 工程順が前後していても、走行距離確認後に作業時間だけが案内された場合は、
   // 中立の「はい。」ではなく不足している店内待ちだけを一度確認する。
   // すでに同じ確認をした後は質問を繰り返さず、マイクを継続する。
@@ -4203,7 +4224,7 @@ function handleScriptedStaffReply(text) {
   // オイル交換希望に対して「その他の追加作業」を再確認された場合は、
   // 現在工程の店内待ち不足よりも実際に聞かれた質問への回答を優先する。
   // 作業時間など現在工程で説明済みの内容は保持し、回答後に同じ工程を継続する。
-  if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(text)) {
+  if (hasInspectionOilChangeRequest() && asksInspectionAdditionalServiceFollowUp(decisionText)) {
     state.scriptedPartialReplies[step.key] = {
       text: combinedScriptedReply(text, step),
       missingDetail: "additionalServiceReconfirmed"
