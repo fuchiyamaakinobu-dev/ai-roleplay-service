@@ -58,6 +58,7 @@ assert.equal(context.hasInspectionSelfIntroduction("トヨタモビリティ帯�
 assert.equal(context.hasInspectionSelfIntroduction("トヨタモビリティの寺屋と申します"), false);
 
 assert.equal(context.asksInspectionIdentityConfirmation("佐藤様のお電話でしょうか？"), true);
+assert.equal(context.asksInspectionIdentityConfirmation("もしもし、佐藤様のお電話でよろしいですか？"), true);
 assert.equal(context.asksInspectionIdentityConfirmation("佐藤様のお車の調子はいかがですか？"), false);
 assert.equal(context.asksInspectionIdentityConfirmation("佐藤様の予約はいつですか？"), false);
 

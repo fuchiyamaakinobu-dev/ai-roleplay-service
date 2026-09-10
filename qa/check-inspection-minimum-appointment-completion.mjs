@@ -25,6 +25,16 @@ assert.equal(
   "具体的な月日・時刻の予約提案を認識できません"
 );
 assert.equal(
+  context.hasCompleteInspectionAppointmentProposal("車検満了は9月30日です。もしよろしければ9月12日10時30分。"),
+  true,
+  "『もしよろしければ』に続く具体的日時を予約提案として認識できません"
+);
+assert.equal(
+  context.hasInspectionAppointmentProposalEvidence("10時30分から作業開始になります。"),
+  true,
+  "日付確認後の時刻・作業開始案内を日時調整として認識できません"
+);
+assert.equal(
   context.hasCompleteInspectionAppointmentProposal("8月20日はいかがでしょうか？"),
   false,
   "日付だけで入庫日時確定へ進んでいます"

@@ -40,6 +40,19 @@ for (const phrase of [
 ]) {
   assert.equal(context.hasBookingContinuationConfirmation(phrase), true, `${phrase}を了承確認として認識できません`);
 }
+for (const phrase of [
+  "代車は必要でございますか",
+  "お店で待ちますか",
+  "どうされるか"
+]) {
+  assert.equal(context.isScriptedQuestion(phrase), true, `${phrase}を疑問形として認識できません`);
+}
+assert.equal(
+  context.isScriptedQuestion("可能かと思います"),
+  false,
+  "文中の『か』を疑問形として誤認識しています"
+);
+assert.equal(context.isScriptedQuestion("何か"), false, "言いかけの『何か』を疑問形として誤認識しています");
 
 for (const phrase of [
   "予約手続きには10分かかります。",

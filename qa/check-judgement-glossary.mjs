@@ -14,7 +14,7 @@ assert.match(html, /id="glossarySearch"/, "単語帳の検索欄がありませ�
 assert.match(html, /data-filter="score"/, "採点項目の絞り込みがありません");
 assert.match(html, /data-filter="alias"/, "音声認識補正の絞り込みがありません");
 assert.match(html, /単語1つだけでは達成になりません/, "複数条件を必要とする注意書きがありません");
-assert.match(html, /judgement-glossary\.js\?v=20260903-3/, "公開後に古い判定単語帳がキャッシュされる可能性があります");
+assert.match(html, /judgement-glossary\.js\?v=20260910-1/, "公開後に古い判定単語帳がキャッシュされる可能性があります");
 assert.match(css, /\.card-grid/, "単語帳カードの表示スタイルがありません");
 
 const context = { window: {} };

@@ -51,7 +51,8 @@ for (const phrase of [
 }
 for (const phrase of [
   "お使いのヤリスが9月30日に車検満了を迎えます。",
-  "当日は車検証をお持ちください。"
+  "当日は車検証をお持ちください。",
+  "代車はどうされるか"
 ]) {
   assert.equal(
     context.looksLikeCompleteJapaneseSentence(phrase),

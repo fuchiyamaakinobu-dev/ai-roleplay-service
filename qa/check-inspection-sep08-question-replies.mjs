@@ -55,6 +55,11 @@ const combinedWaitingQuestion = "オイル交換ですね。その他特別な�
 const finalWaitingClause = context.inspectionLastQuestionClause(combinedWaitingQuestion);
 assert.equal(finalWaitingClause, "お待ちになりますか？");
 assert.equal(
+  context.inspectionLastQuestionClause("作業は90分です。お待ちになりますか"),
+  "お待ちになりますか",
+  "疑問符のない音声認識結果から最後の質問節を抽出できません"
+);
+assert.equal(
   context.asksInspectionAdditionalServiceFollowUp(finalWaitingClause),
   false,
   "最後の店内待ち質問を追加作業再確認として誤判定しています"
