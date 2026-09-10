@@ -1580,8 +1580,12 @@ function asksInspectionCallTimingPermission(text) {
   if (!isScriptedQuestion(normalized)) return false;
   const hasCurrentCallContext = /(?:今|ただいま|現在).{0,10}(?:お?電話|お話)/.test(normalized)
     || /(?:お?電話|お話).{0,10}(?:今|ただいま|現在)/.test(normalized);
+  // 「お時間よろしいですか？」だけでも、具体的な日時を含まなければ
+  // 冒頭の通話継続確認として扱う。予約日時や10分の手続き時間とは区別する。
+  const hasBareTimePermission = /(?:お時間|時間)(?:の方)?(?:は)?(?:よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized)
+    && !/(?:\d{1,2}(?:月|日|時|分)|午前|午後)/.test(normalized);
   const asksPermission = /(?:よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized);
-  return hasCurrentCallContext && asksPermission;
+  return (hasCurrentCallContext || hasBareTimePermission) && asksPermission;
 }
 
 function analyzeStaff(text) {
@@ -3781,7 +3785,27 @@ function handleScriptedStaffReply(text) {
 
   // 「今お電話よろしいですか」のような通話可否は、現在の採点工程に
   // 関係なく実際の質問へ明確に回答する。
-  if (asksInspectionCallTimingPermission(decisionText)) {
+  if (
+    asksInspectionCallTimingPermission(decisionText)
+    && !hasInspectionAppointmentProposalEvidence(text)
+  ) {
+    // 車検案内など現在工程の説明と通話可否確認が同じ発話に含まれる場合、
+    // 「大丈夫ですよ」と答えても説明済みの工程を失わない。
+    const completedCurrentStep = scriptedStepMatches(text, step)
+      || (step.key === "thanked_customer" && hasCourtesyExpression(text));
+    if (completedCurrentStep) {
+      markScriptedStepPassed(step, text);
+      state.scriptStep += 1;
+      while (
+        state.scriptStep < scenario.steps.length
+        && state.analyses.some((item) =>
+          item.stepKey === scenario.steps[state.scriptStep].key && item.passed
+        )
+      ) {
+        state.scriptStep += 1;
+      }
+      state.currentState = scenario.steps[state.scriptStep]?.state || state.currentState;
+    }
     state.turn += 1;
     addMessage("customer", "大丈夫ですよ。", {
       audioId: "inspection_confirmed_booking_time_customer"
@@ -4782,7 +4806,11 @@ function handleScriptedStaffReply(text) {
       audioId: "inspection_asked_availability_customer"
     };
   }
-  if (!customerResponseOverride && asksInspectionCallTimingPermission(decisionText)) {
+  if (
+    !customerResponseOverride
+    && asksInspectionCallTimingPermission(decisionText)
+    && !hasInspectionAppointmentProposalEvidence(text)
+  ) {
     customerResponseOverride = {
       text: "大丈夫ですよ。",
       audioId: "inspection_confirmed_booking_time_customer"

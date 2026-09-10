@@ -220,6 +220,16 @@ assert.equal(
   "現在の通話可否確認を認識できません"
 );
 assert.equal(
+  callTimingContext.asksInspectionCallTimingPermission("お時間よろしいですか？"),
+  true,
+  "『お時間よろしいですか』を通話可否確認として認識できません"
+);
+assert.equal(
+  callTimingContext.asksInspectionCallTimingPermission("9月12日10時のお時間でよろしいですか？"),
+  false,
+  "具体的な予約日時を通話可否確認として誤認識しています"
+);
+assert.equal(
   callTimingContext.asksInspectionCallTimingPermission("このまま予約を進めてもよろしいでしょうか？"),
   false,
   "予約手続き確認を現在の通話可否確認として誤認識しています"
@@ -228,6 +238,11 @@ assert.match(
   appSource,
   /asksInspectionCallTimingPermission\(decisionText\)[\s\S]*?text: "大丈夫ですよ。"[\s\S]*?inspection_confirmed_booking_time_customer/,
   "名乗り・お礼と同時の通話可否確認へ『大丈夫ですよ。』と回答できません"
+);
+assert.match(
+  appSource,
+  /completedCurrentStep = scriptedStepMatches\(text, step\)[\s\S]*?markScriptedStepPassed\(step, text\)[\s\S]*?state\.scriptStep \+= 1/,
+  "通話可否と同時に説明した現在工程を確認済みとして保持できません"
 );
 
 console.log("携帯電話発信・本人確認省略テスト: OK");

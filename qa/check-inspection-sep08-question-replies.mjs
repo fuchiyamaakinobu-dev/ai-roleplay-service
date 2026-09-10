@@ -60,6 +60,11 @@ assert.equal(
   "疑問符のない音声認識結果から最後の質問節を抽出できません"
 );
 assert.equal(
+  context.inspectionLastQuestionClause("佐藤様のヤリスは9月30日満了で、ご案内のお電話をしました。お時間よろしいですか？"),
+  "お時間よろしいですか？",
+  "車検案内と通話可否確認を結合した発話から最後の質問を抽出できません"
+);
+assert.equal(
   context.asksInspectionAdditionalServiceFollowUp(finalWaitingClause),
   false,
   "最後の店内待ち質問を追加作業再確認として誤判定しています"
