@@ -1578,6 +1578,12 @@ function asksInspectionForCustomerQuestions(text) {
 function asksInspectionCallTimingPermission(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
+  // 「今おかけしている電話番号でよろしいですか」は、冒頭の通話可否ではなく
+  // 3日前確認連絡の連絡先質問として扱う。電話番号・携帯・連絡先を含む質問を
+  // ここで除外し、専用の連絡先回答分岐へ渡す。
+  if (/(?:電話番号|携帯|連絡先|この電話|同じ電話|今の電話|こちらの番号|この番号|今かけている番号)/.test(normalized)) {
+    return false;
+  }
   const hasCurrentCallContext = /(?:今|ただいま|現在).{0,10}(?:お?電話|お話)/.test(normalized)
     || /(?:お?電話|お話).{0,10}(?:今|ただいま|現在)/.test(normalized);
   // 「お時間よろしいですか？」だけでも、具体的な日時を含まなければ
@@ -4015,7 +4021,13 @@ function handleScriptedStaffReply(text) {
         missingDetail: "mileageAnswered"
       };
     }
-    const askedDurationAlready = state.inspectionDurationQuestionAsked;
+    // お客様が時間を質問済みの場合だけでなく、スタッフが先に90分などを
+    // 説明済みの場合も、同じ時間質問を重ねず走行距離だけを回答する。
+    // 採点条件は scriptedStepMatches 側で従来どおり判定するため変更しない。
+    const durationAlreadyExplained = state.transcript.some((message) =>
+      message.role === "staff" && hasSupportedInspectionDuration(message.text)
+    ) || hasSupportedInspectionDuration(text);
+    const askedDurationAlready = state.inspectionDurationQuestionAsked || durationAlreadyExplained;
     const customerReply = askedDurationAlready
       ? {
           text: "今、3万キロくらいです。",
@@ -4112,33 +4124,38 @@ function handleScriptedStaffReply(text) {
     return;
   }
 
-  // 「3日前に確認連絡」まで説明したうえで、現在の携帯・電話番号を
-  // 連絡先としてよいか尋ねられた場合は、工程の位置にかかわらず明確に回答する。
-  if (
-    hasInspectionReminderContactConfirmation(text)
-    && asksInspectionReminderContactDestination(decisionText)
-  ) {
+  // 現在の携帯・電話番号を連絡先としてよいか尋ねられた場合は、3日前の案内が
+  // 同じ発話や過去発話にあるかを問わず、質問自体へ明確に回答する。ただし、
+  // 3日前の案内がない場合は返答だけを行い、採点項目は未達のまま保持する。
+  if (asksInspectionReminderContactDestination(decisionText)) {
+    const hasCompleteReminderConfirmation = hasInspectionReminderContactConfirmation(text);
+    if (hasCompleteReminderConfirmation) {
+      const reminderStepIndex = scenario.steps.findIndex(
+        (candidate) => candidate.key === "confirmed_reminder_contact"
+      );
+      const reminderStep = scenario.steps[reminderStepIndex];
+      markScriptedStepPassed(reminderStep, text);
+      if (reminderStepIndex === state.scriptStep) {
+        state.scriptStep += 1;
+        state.currentState = scenario.steps[state.scriptStep]?.state || "CLOSING";
+      }
+    }
     if (state.inspectionReminderContactAnswered) {
-      els.speechNote.textContent = "3日前の連絡先は確認済みです。予約復唱または終話へ進めてください。";
+      els.speechNote.textContent = hasCompleteReminderConfirmation
+        ? "3日前の連絡先は確認済みです。予約復唱または終話へ進めてください。"
+        : "連絡先は回答済みです。現在の会話位置から続けてください。";
       renderProgress();
       continueSpeechInputWithoutCustomerReply("音声入力中です。会話の続きを話してください。");
       return;
-    }
-    const reminderStepIndex = scenario.steps.findIndex(
-      (candidate) => candidate.key === "confirmed_reminder_contact"
-    );
-    const reminderStep = scenario.steps[reminderStepIndex];
-    markScriptedStepPassed(reminderStep, text);
-    if (reminderStepIndex === state.scriptStep) {
-      state.scriptStep += 1;
-      state.currentState = scenario.steps[state.scriptStep]?.state || "CLOSING";
     }
     state.inspectionReminderContactAnswered = true;
     state.turn += 1;
     addMessage("customer", "この携帯にお願いします。", {
       audioId: "inspection_confirmed_reminder_contact_customer"
     });
-    els.speechNote.textContent = "3日前の確認連絡は、現在おかけの携帯への連絡で確認しました。";
+    els.speechNote.textContent = hasCompleteReminderConfirmation
+      ? "3日前の確認連絡は、現在おかけの携帯への連絡で確認しました。"
+      : "現在おかけの携帯を連絡先として回答しました。3日前の確認連絡は未達のままです。";
     renderProgress();
     return;
   }
