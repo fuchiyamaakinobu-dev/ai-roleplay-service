@@ -145,6 +145,17 @@ const renderedButtons = [...els.requiredCustomerSpeech.innerHTML.matchAll(
   inspectionAudioId: decodeAttribute(match[4])
 }));
 assert.equal(renderedButtons.length, 19);
+assert.deepEqual(
+  renderedButtons.slice(6, 14).map((item) => item.inspectionButtonKey),
+  ["mileage", "concerns", "additionalWork", "duration", "appointment", "waiting", "loaner", "bookingTime"],
+  "進行ボタンが実務に近い順序で並んでいません"
+);
+assert.match(els.requiredCustomerSpeech.innerHTML, /入庫日時案内/);
+assert.match(els.requiredCustomerSpeech.innerHTML, /来店・待ち方確認/);
+assert.match(els.requiredCustomerSpeech.innerHTML, /入庫日時最終確認/);
+const loanerButton = renderedButtons.find((item) => item.inspectionButtonKey === "loaner");
+assert.equal(loanerButton?.inspectionResponse, "お願いします。");
+assert.equal(loanerButton?.inspectionAudioId, "inspection_booking_invitation_accept_customer");
 
 state.scriptStep = 0;
 state.analyses = [];
