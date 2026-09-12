@@ -2562,7 +2562,8 @@ function isInspectionDeadlineDateCandidate(normalized, date) {
   const hasDeadlineLabel = /(?:満了日?|車検期限|有効期限)[^月日]{0,8}$/.test(precedingText);
   const hasVehicleDeadlineWording = /車検[^予約日程]{0,10}$/.test(precedingText)
     && /^(?:まで|となり|となって)/.test(followingText);
-  return hasDeadlineLabel || hasVehicleDeadlineWording;
+  return hasDeadlineLabel || hasVehicleDeadlineWording
+    || /^[、,。.]*(?:が|で)?満了/.test(followingText);
 }
 
 function inspectionAppointmentDateCandidates(text) {
@@ -3746,7 +3747,7 @@ function handleScriptedStaffReply(text) {
   // 発話途中や周囲のノイズは、確認済み・未確認の判定や減点回数へ加えない。
   // 短い相づちを返した後も現在工程を保持し、MP3終了後にマイクを自動再開する。
   if (
-    isInspectionIncompleteOrNoiseUtterance(text)
+    (isInspectionIncompleteOrNoiseUtterance(text) && !asksInspectionLoanerNeed(text))
     || isInspectionGuidancePrefaceOrIncompleteFragment(text)
   ) {
     if (!isInspectionOperationalNoiseUtterance(text)) {
@@ -3882,9 +3883,10 @@ function handleScriptedStaffReply(text) {
       continueSpeechInputWithoutCustomerReply("音声入力中です。具体的な入庫日と時刻を案内してください。");
       return;
     }
+    const asksExistingPlan = /車検.*(?:予定|決まり|決まって)/.test(normalizeScriptedText(text));
     const availabilityReply = customerQuestionTurn(availabilityReplyKey, [{
-      text: "お願いしたいんですけど、いつできますか？",
-      audioId: "inspection_asked_availability_customer"
+      text: asksExistingPlan ? "案内のはがきが来ていましたよ。" : "お願いしたいんですけど、いつできますか？",
+      audioId: asksExistingPlan ? "inspection_explained_inspection_notice_customer" : "inspection_asked_availability_customer"
     }]);
     state.turn += 1;
     addMessage("customer", availabilityReply.text, {
@@ -3914,8 +3916,9 @@ function handleScriptedStaffReply(text) {
     const waitingStep = scenario.steps.find((candidate) => candidate.key === "confirmed_waiting");
     markScriptedStepPassed(waitingStep, "お客様が代車利用を希望");
     state.turn += 1;
-    addMessage("customer", "お願いします。", {
-      audioId: "inspection_booking_invitation_accept_customer"
+    const preparationOffer = /(?:用意|準備|手配).*(?:ますか|ましょうか|でしょうか)/.test(normalizeScriptedText(text));
+    addMessage("customer", preparationOffer ? "代車を用意してもらえますか？" : "お願いします。", {
+      audioId: preparationOffer ? "inspection_explained_loaner_retry" : "inspection_booking_invitation_accept_customer"
     });
     els.speechNote.textContent = "代車の利用希望を記憶しました。代車を用意できることを案内してください。";
     renderProgress();
@@ -4866,6 +4869,10 @@ function handleScriptedStaffReply(text) {
       text: "分かりました。",
       audioId: "inspection_explained_lock_and_arrival_customer"
     };
+  }
+  if (!customerResponseOverride && responseStep.key === "thanked_customer"
+    && /お世話になって/.test(text) && !/(?:ありがとう|感謝)/.test(text)) {
+    customerResponseOverride = { text: "お世話になっております。", audioId: "inspection_introduced_self_customer" };
   }
   const partialPhaseResponse = skippedIncompleteStep
     ? inspectionPartialPhaseResponse(responseStep, text)
