@@ -85,6 +85,16 @@ assert.equal(context.inspectionConversationMetricAchieved("asked_availability"),
 assert.equal(context.inspectionConversationMetricAchieved("explained_duration_and_wait"), true);
 assert.equal(context.inspectionConversationMetricAchieved("explained_loaner"), true);
 
+context.state.inspectionLoanerRequested = false;
+context.state.transcript = [
+  { role: "staff", text: "早期のご予約で代車をご用意できます。" }
+];
+assert.equal(
+  context.inspectionConversationMetricAchieved("explained_loaner"),
+  true,
+  "『早期のご予約』を通常の代車案内として採点できません"
+);
+
 context.state.transcript = [
   { role: "staff", text: "恐れ入ります。佐藤様のお電話でしょうか。" },
   { role: "staff", text: "9月5日午前10時30分はいかがでしょうか。" },

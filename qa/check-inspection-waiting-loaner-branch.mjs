@@ -30,7 +30,7 @@ assert.equal(
 );
 assert.match(
   scenarioSource,
-  /key:\s*"explained_loaner"[\s\S]*?requiredGroups:\s*\[\["代車"\],\s*\["早め",\s*"お早め"\],\s*\["予約"\],\s*\["用意",\s*"ご用意"\]\]/,
+  /key:\s*"explained_loaner"[\s\S]*?requiredGroups:\s*\[\["代車"\],\s*\["早め",\s*"お早め",\s*"早期"\],\s*\["予約"\],\s*\["用意",\s*"ご用意"\]\]/,
   "『台車』『代車』だけで達成せず、既存の代車予約条件を維持してください"
 );
 assert.match(

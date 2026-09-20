@@ -255,8 +255,8 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     {
       state: "SERVICE_EXPLANATION",
       key: "explained_loaner",
-      expected: "早めの予約で代車を用意できると伝える",
-      requiredGroups: [["代車"], ["早め", "お早め"], ["予約"], ["用意", "ご用意"]],
+      expected: "早め・早期の予約で代車を用意できると伝える",
+      requiredGroups: [["代車"], ["早め", "お早め", "早期"], ["予約"], ["用意", "ご用意"]],
       customerResponse: "予約しようかな。",
       retryResponse: "代車を用意してもらえますか？"
     },

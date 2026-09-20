@@ -1155,7 +1155,7 @@ function inspectionHighlightPatterns(text) {
     add("explained_duration_and_wait", [/(?:走行距離|何\s*キロ|[0-9０-９]+\s*(?:万)?\s*(?:km|キロ))/gi, /(?:[6６][0０]\s*分|六十分|[7７][5５]\s*分|七十五分|[9９][0０]\s*分|九十分|[1１]\s*時間|一時間)/g, /(?:店内|店舗で|お待ち|待て|待つ)/g]);
   }
   if (/(?:代車|代わりのお車|代替車)/.test(normalized)) {
-    add("explained_loaner", [/(?:代車|代わりのお車|代替車)/g, /(?:ご用意|用意|準備|手配)/g, /(?:早め|お早め|予約)/g]);
+    add("explained_loaner", [/(?:代車|代わりのお車|代替車)/g, /(?:ご用意|用意|準備|手配)/g, /(?:早め|お早め|早期|予約)/g]);
   }
   if (hasBookingContinuationConfirmation(normalized)) {
     add("confirmed_booking_time", [/(?:このまま|予約手続き|予約|手続き|進め|続け)/g, /(?:[1１][0０]\s*分|十分|もう少し|お時間|時間)/g]);
@@ -2277,7 +2277,10 @@ function normalizeScriptedText(text) {
     .replace(/(\d{1,2}月)の?一日(?!間)/g, (match, month) => `${month}1日`)
     // 「くがつの30日」のように月だけがひらがなの場合、月を数値化した後で
     // 残る「の」を除去し、登録済みの「9月30日」と同じ判定値にそろえる。
-    .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1");
+    .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1")
+    // 音声認識が「くがつ、26日」のように月と日の間へ読点を入れても、
+    // 予約日としては「9月26日」と同じ値にそろえる。
+    .replace(/(\d{1,2}月)[、,](?=\d{1,2}日)/g, "$1");
 
   // ひらがなの月を数値化した後で、「8月ついたち」のような日付読みを変換する。
   specialDayReadings.forEach(([reading, value]) => {
@@ -3901,7 +3904,7 @@ function handleScriptedStaffReply(text) {
   // 直接尋ねられた場合は、「はい」ではなく明確に「お願いします。」と答える。
   // 最初に店内待ちが確定済みなら、後から代車へ変更せず最初の待ち方を維持する。
   // この希望は会話状態へ保存し、後続の「ご用意します」で代車手配を確定する。
-  if (asksInspectionLoanerNeed(decisionText)) {
+  if (asksInspectionLoanerNeed(decisionText) || asksInspectionLoanerNeed(text)) {
     if (state.inspectionWaitingMethod === "store") {
       state.turn += 1;
       addMessage("customer", "待っています。", {
@@ -4016,7 +4019,7 @@ function handleScriptedStaffReply(text) {
   // 走行距離は作業時間を判断するための質問なので、予約日時の確定後など
   // どの工程で尋ねられても実際の質問を優先して回答する。お客様がすでに
   // 作業時間を質問済みなら距離だけを答え、未質問なら続けて時間も尋ねる。
-  if (asksCurrentMileage(decisionText)) {
+  if (asksCurrentMileage(decisionText) || asksCurrentMileage(text)) {
     state.inspectionMileageAsked = true;
     if (step.key === "explained_duration_and_wait") {
       state.scriptedPartialReplies[step.key] = {
@@ -5157,7 +5160,12 @@ function inspectionConversationMetricAchieved(metricKey) {
       && waitingWasExplained;
   }
   if (metricKey === "explained_loaner") {
-    return customerRequestedLoaner && loanerWasConfirmed;
+    const standardLoanerReservationWasExplained = /(?:代車|代わりのお車|代替車)/.test(staffEvidence)
+      && /(?:用意|ご用意|準備|手配)/.test(staffEvidence)
+      && /(?:早め|お早め|早期)/.test(staffEvidence)
+      && /予約/.test(staffEvidence);
+    return standardLoanerReservationWasExplained
+      || customerRequestedLoaner && loanerWasConfirmed;
   }
   if (metricKey === "confirmed_booking_time") {
     return staffUtterances.some((text) => hasExplicitBookingContinuationConfirmation(text));
