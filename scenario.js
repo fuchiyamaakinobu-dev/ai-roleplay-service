@@ -343,7 +343,39 @@ window.VEHICLE_INSPECTION_SCENARIO = {
     "模範進行は、本人確認、店舗名と担当者名、日頃のお礼、ヤリスと9月30日の車検満了案内、予約意思確認、作業時間、気になる点とオイル交換、走行距離、変更後の作業時間と待ち方、代車、予約手続き時間、8月30日午前10時の確定、荷物と必要書類、ロックナット、15分前来店、3日前確認連絡、予約復唱、終話です。具体的な入庫日と時刻が不足した場合は一度だけ確認して会話を進め、予約日時未確定として大幅減点します。"
 };
 
+// 既存の車検誘致フローを保持したまま、引取納車の相談だけを追加した応用シナリオ。
+// 深い複製により、応用シナリオの調整が安定稼働中の既存シナリオへ波及しない。
+window.VEHICLE_INSPECTION_PICKUP_SCENARIO = JSON.parse(
+  JSON.stringify(window.VEHICLE_INSPECTION_SCENARIO)
+);
+Object.assign(window.VEHICLE_INSPECTION_PICKUP_SCENARIO, {
+  id: "vehicle-inspection-pickup-delivery",
+  type: "車検誘致・応用",
+  title: "車検誘致・引取納車対応",
+  description: "通常の車検誘致に加え、引取納車の希望理由を確認し、来店提案または引取受付へ進む練習",
+  pickupBranchEnabled: true,
+  recommendedTalk:
+    "通常の車検誘致を進め、お客様から引取納車を希望されたら理由を確認します。事情を受け止め、土日・時間帯・近隣店舗・家族同伴・来店説明の利点など理由に合う来店案を提示し、来店と引取の選択肢を残します。来店が難しく引取を希望する場合は無理に来店へ誘導せず、引取場所と日時を確認して受付を続けます。"
+});
+
+const pickupDurationStep = window.VEHICLE_INSPECTION_PICKUP_SCENARIO.steps.find(
+  (step) => step.key === "explained_duration_and_wait"
+);
+if (pickupDurationStep) {
+  pickupDurationStep.customerResponse = "できれば、車を取りに来てもらえませんか？";
+  pickupDurationStep.customerAudioId = "inspection_pickup_request_customer";
+}
+
+window.VEHICLE_INSPECTION_PICKUP_SCENARIO.scoring.push(
+  { key: "pickup_reason_confirmed", label: "引取理由確認", action: "引取納車を希望する理由を確認する", points: 8 },
+  { key: "pickup_circumstance_acknowledged", label: "事情の受け止め", action: "お客様の事情を受け止める", points: 6 },
+  { key: "pickup_alternative_proposed", label: "来店代替案", action: "理由に合う来店方法を提案する", points: 6 },
+  { key: "pickup_choice_preserved", label: "選択肢の保持", action: "来店と引取の選択肢を残す", points: 5 },
+  { key: "pickup_next_action", label: "次の約束", action: "来店日時または引取場所と日時を具体化する", points: 5 }
+);
+
 window.ROLEPLAY_SCENARIOS = [
   window.ROLEPLAY_SCENARIO,
-  window.VEHICLE_INSPECTION_SCENARIO
+  window.VEHICLE_INSPECTION_SCENARIO,
+  window.VEHICLE_INSPECTION_PICKUP_SCENARIO
 ];

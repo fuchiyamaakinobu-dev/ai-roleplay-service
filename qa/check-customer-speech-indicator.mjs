@@ -71,6 +71,7 @@ const context = {
   els,
   scenario,
   state,
+  isVehicleInspectionScenario: () => scenario.id.startsWith("vehicle-inspection-"),
   escapeHtml: (text) => String(text),
   normalizeScriptedText: (text) => String(text).replace(/\s+/g, ""),
   isScriptedQuestion: (text) => /(?:でしょうか|ますか|ですか|[?？])/.test(text),

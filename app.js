@@ -57,6 +57,10 @@ const state = {
   inspectionLoanerConfirmed: false,
   inspectionClosingPending: false,
   inspectionReminderContactAnswered: false,
+  inspectionPickupActive: false,
+  inspectionPickupPhase: null,
+  inspectionPickupReason: null,
+  inspectionPickupOutcome: null,
   inspectionButtonChecks: {},
   usedVariants: {},
   questionRepeats: {},
@@ -161,6 +165,15 @@ const lexicon = {
 
 function includesAny(text, words) {
   return words.some((word) => text.includes(word));
+}
+
+function isVehicleInspectionScenario(candidate = scenario) {
+  return candidate?.mode === "staff-led-scripted";
+}
+
+function isPickupInspectionScenario(candidate = scenario) {
+  return candidate?.id === "vehicle-inspection-pickup-delivery"
+    && candidate?.pickupBranchEnabled === true;
 }
 
 function hasNegativeOptionExpression(text) {
@@ -349,6 +362,10 @@ function selectScenario(scenarioId) {
   state.inspectionLoanerConfirmed = false;
   state.inspectionClosingPending = false;
   state.inspectionReminderContactAnswered = false;
+  state.inspectionPickupActive = false;
+  state.inspectionPickupPhase = null;
+  state.inspectionPickupReason = null;
+  state.inspectionPickupOutcome = null;
   state.inspectionButtonChecks = {};
   state.usedVariants = {};
   state.questionRepeats = {};
@@ -473,7 +490,7 @@ function scriptedProgressStatus(item) {
 }
 
 function renderCustomerInfo() {
-  const visible = scenario.id === "vehicle-inspection-phone-followup";
+  const visible = isVehicleInspectionScenario();
   if (els.customerInfoPanel) els.customerInfoPanel.hidden = !visible;
   if (!visible || !els.customerInfoText) return visible;
 
@@ -488,7 +505,7 @@ function renderCustomerInfo() {
 }
 
 function renderCustomerSpeechIndicator(progressVisible) {
-  const visible = progressVisible && scenario.id === "vehicle-inspection-phone-followup";
+  const visible = progressVisible && isVehicleInspectionScenario();
   if (els.customerSpeechPanel) els.customerSpeechPanel.hidden = !visible;
   if (!visible) return;
 
@@ -581,7 +598,7 @@ function handleInspectionCheckpointTest(event) {
   const button = event.target.closest("[data-inspection-button-key]");
   if (
     !button
-    || scenario.id !== "vehicle-inspection-phone-followup"
+    || !isVehicleInspectionScenario()
     || !state.started
     || state.ended
     || state.customerReplyPending
@@ -659,7 +676,7 @@ function handleInspectionCheckpointTest(event) {
 function renderProgress() {
   const visible = els.progressEnabled?.checked !== false;
   const customerVisible = renderCustomerInfo();
-  const usesInspectionCheckpoints = scenario.id === "vehicle-inspection-phone-followup";
+  const usesInspectionCheckpoints = isVehicleInspectionScenario();
   if (els.stickyContext) els.stickyContext.hidden = !customerVisible && !visible;
   if (els.progressPanel) els.progressPanel.hidden = !visible || usesInspectionCheckpoints;
   if (els.stateLabel) els.stateLabel.hidden = !visible;
@@ -709,7 +726,7 @@ function updateVoiceSelection() {
   const voice = audioDb.voices?.[voiceKey];
   if (!voice) return;
   localStorage.setItem("roleplayVoice", voiceKey);
-  const usesInspectionVoice = scenario.id === "vehicle-inspection-phone-followup";
+  const usesInspectionVoice = isVehicleInspectionScenario();
   if (els.voiceSelect) els.voiceSelect.disabled = !usesInspectionVoice;
   if (els.voiceCredit) {
     els.voiceCredit.textContent = usesInspectionVoice ? voice.credit : "従来音声";
@@ -778,14 +795,14 @@ function commitMessage(role, text, options = {}) {
   state.transcript.push(message);
   if (
     role === "customer"
-    && scenario.id === "vehicle-inspection-phone-followup"
+    && isVehicleInspectionScenario()
     && /代車.*(?:貸して|用意して|借りたい|お願い|ほしい)/.test(normalizeScriptedText(message.text))
   ) {
     state.inspectionLoanerRequested = true;
   }
   if (
     role === "customer"
-    && scenario.id === "vehicle-inspection-phone-followup"
+    && isVehicleInspectionScenario()
     && /どれ(?:くらい|ぐらい).*時間.*かか/.test(normalizeScriptedText(message.text))
   ) {
     state.inspectionDurationQuestionAsked = true;
@@ -801,7 +818,7 @@ function commitMessage(role, text, options = {}) {
     } else if (
       els.audioEnabled.checked
       && scenario.id !== "service-12month-visit-promotion"
-      && scenario.id !== "vehicle-inspection-phone-followup"
+      && !isVehicleInspectionScenario()
     ) {
       speakCustomerText(message.text, onCustomerFinished);
     } else if (onCustomerFinished) {
@@ -837,7 +854,7 @@ function addMessage(role, text, options = {}) {
 
 function renderConversation() {
   if (els.conversationHighlightLegend) {
-    els.conversationHighlightLegend.hidden = scenario.id !== "vehicle-inspection-phone-followup";
+    els.conversationHighlightLegend.hidden = !isVehicleInspectionScenario();
   }
   if (state.transcript.length === 0) {
     els.conversation.innerHTML = `
@@ -861,7 +878,7 @@ function renderConversation() {
         ? `<button class="report-audio" type="button" data-report-audio-index="${index}" aria-label="矛盾または不足音声として記録">矛盾・音声不足を記録</button>`
         : "";
       const messageText = message.role === "staff"
-        && scenario.id === "vehicle-inspection-phone-followup"
+        && isVehicleInspectionScenario()
           ? renderInspectionConversationHighlights(message.text)
           : escapeHtml(message.text);
       return `
@@ -955,7 +972,7 @@ function beginAutomaticSpeechInput(noteText, retryCount = 0) {
   }
 
   clearStaffInput();
-  if (scenario.id === "vehicle-inspection-phone-followup") {
+  if (isVehicleInspectionScenario()) {
     speechSessionActive = true;
   }
   if (speechSessionRecoveryTimer) {
@@ -1073,7 +1090,7 @@ function startSpeechInputForStaffOpening() {
 }
 
 function startStaffLedOpening() {
-  const isVehicleInspection = scenario.id === "vehicle-inspection-phone-followup";
+  const isVehicleInspection = isVehicleInspectionScenario();
   const ringbackAudioId = scenario.ringbackAudioId
     || (isVehicleInspection ? "inspection_call_ringback" : "");
   const openingCustomerMessage = scenario.openingCustomerMessage
@@ -1100,7 +1117,7 @@ function startStaffLedOpening() {
 
 function staffLedStartInstruction() {
   if (
-    scenario.id === "vehicle-inspection-phone-followup"
+    isVehicleInspectionScenario()
     && !scenario.ringbackAudioId
   ) {
     return "電話をかけています。呼び出し音の後にお客様が『はい、もしもし』と応答します。顧客情報は『佐藤様／ヤリス／車検満了日9月30日／8月1日以降作業可能』です。応答後に『佐藤様でしょうか』と本人確認を始めてください。";
@@ -1398,6 +1415,10 @@ function startRoleplay() {
   state.inspectionLoanerConfirmed = false;
   state.inspectionClosingPending = false;
   state.inspectionReminderContactAnswered = false;
+  state.inspectionPickupActive = false;
+  state.inspectionPickupPhase = null;
+  state.inspectionPickupReason = null;
+  state.inspectionPickupOutcome = null;
   state.inspectionButtonChecks = {};
   state.usedVariants = {};
   state.questionRepeats = {};
@@ -3667,7 +3688,8 @@ function advancePastPassedScriptedSteps(responseStep, options = {}) {
   while (
     state.scriptStep < scenario.steps.length
     && state.analyses.some((item) =>
-      item.stepKey === scenario.steps[state.scriptStep].key && item.passed
+      item.stepKey === scenario.steps[state.scriptStep].key
+      && (item.passed || item.notApplicable)
     )
   ) {
     // 同じ発話で先の工程も達成済みなら、実際に最後に達成した工程の
@@ -3704,6 +3726,205 @@ function findFurthestMatchingOptionalStepIndex(text, startIndex) {
     }
   }
   return targetIndex;
+}
+
+const inspectionPickupReasons = [
+  {
+    key: "work",
+    text: "仕事があるので、なかなかお店まで持って行けないんです。",
+    audioId: "inspection_pickup_reason_work",
+    alternatives: ["土日", "週末", "時間帯", "仕事の前", "仕事の後", "夕方"]
+  },
+  {
+    key: "distance",
+    text: "家から少し遠いので、持って行くのが大変なんです。",
+    audioId: "inspection_pickup_reason_distance",
+    alternatives: ["近い店舗", "近くの店舗", "最寄り", "他店舗", "家族"]
+  },
+  {
+    key: "driving",
+    text: "運転に自信がないので、お店まで持って行くのが不安なんです。",
+    audioId: "inspection_pickup_reason_driving",
+    alternatives: ["近い店舗", "近くの店舗", "最寄り", "他店舗", "家族", "ご主人"]
+  },
+  {
+    key: "competitor",
+    text: "ほかのお店では、取りに来てくれると聞いたんですが。",
+    audioId: "inspection_pickup_reason_competitor",
+    alternatives: ["お車を見ながら", "点検内容", "整備内容", "詳しく", "説明"]
+  },
+  {
+    key: "misunderstanding",
+    text: "以前は取りに来てもらえると聞いたような気がするんですが。",
+    audioId: "inspection_pickup_reason_misunderstanding",
+    alternatives: ["申し訳", "すみません", "説明", "確認"]
+  }
+];
+
+function markInspectionPickupMetric(key, passed, evidence) {
+  if (state.analyses.some((analysis) => analysis.stepKey === key && analysis[key] === true)) return;
+  const analysis = {
+    scripted: true,
+    stepKey: key,
+    expected: scenario.scoring.find((metric) => metric.key === key)?.action || key,
+    passed: Boolean(passed),
+    canAdvance: true,
+    blocked: false,
+    confidence: passed ? 0.95 : 0.6,
+    evidence: evidence ? [evidence] : []
+  };
+  analysis[key] = Boolean(passed);
+  state.analyses.push(analysis);
+}
+
+function inspectionPickupReasonQuestion(text) {
+  const normalized = normalizeScriptedText(text);
+  return isScriptedQuestion(normalized)
+    && /(?:なぜ|どうして|理由|事情|差し支え|どのような)/.test(normalized);
+}
+
+function inspectionPickupProposalEvidence(text, reason) {
+  const normalized = normalizeScriptedText(text);
+  const reasonDefinition = inspectionPickupReasons.find((item) => item.key === reason);
+  const acknowledged = /(?:そうなんですね|なのですね|承知|かしこまり|分かり|わかり|ご不安|大変|ご負担)/.test(normalized);
+  const alternative = Boolean(
+    reasonDefinition?.alternatives.some((word) => normalized.includes(word))
+  );
+  const choicePreserved = /(?:引取|引き取り|取りに)/.test(normalized)
+    && /(?:来店|お越し|持って)/.test(normalized)
+    || /(?:どちら|選べ|ご都合|難しい場合|無理な場合)/.test(normalized);
+  const proposal = alternative
+    && (isScriptedQuestion(normalized) || /(?:できます|可能|案内|提案)/.test(normalized));
+  return { acknowledged, alternative, choicePreserved, proposal };
+}
+
+function markPickupRouteBaseStepsNotApplicable() {
+  ["explained_loaner", "confirmed_waiting", "explained_lock_and_arrival"].forEach((key) => {
+    const step = scenario.steps.find((candidate) => candidate.key === key);
+    markScriptedStepNotApplicable(step, "引取納車を受付したため対象外");
+  });
+  while (
+    state.scriptStep < scenario.steps.length
+    && state.analyses.some((analysis) =>
+      analysis.stepKey === scenario.steps[state.scriptStep].key
+      && (analysis.passed || analysis.notApplicable)
+    )
+  ) {
+    state.scriptStep += 1;
+  }
+  state.currentState = scenario.steps[state.scriptStep]?.state || state.currentState;
+}
+
+function inspectionPickupVisitResponse(reason) {
+  if (reason === "work") {
+    return state.variantSeed % 2 === 0
+      ? { text: "土日なら持って行けるかもしれません。", audioId: "inspection_pickup_visit_weekend" }
+      : { text: "その時間なら持って行けそうです。", audioId: "inspection_pickup_visit_time" };
+  }
+  return {
+    text: "それなら、お店に持って行きます。",
+    audioId: "inspection_pickup_visit_agreement"
+  };
+}
+
+function handleInspectionPickupBranchReply(text) {
+  if (!isPickupInspectionScenario() || !state.inspectionPickupActive) return false;
+
+  const normalized = normalizeScriptedText(text);
+  const directlyAcceptsPickup = /(?:引取|引き取り|取りに).{0,16}(?:承知|かしこまり|受付|手配|伺います|行きます|可能)/.test(normalized)
+    || /(?:承知|かしこまり).{0,16}(?:引取|引き取り|取りに)/.test(normalized);
+  if (
+    directlyAcceptsPickup
+    && ["reason", "proposal", "location"].includes(state.inspectionPickupPhase)
+  ) {
+    state.inspectionPickupOutcome = "pickup";
+    state.inspectionPickupPhase = "confirmation";
+    state.turn += 1;
+    addMessage("customer", "自宅に取りに来てもらえますか？", {
+      audioId: "inspection_pickup_location_customer"
+    });
+    els.speechNote.textContent = "引取希望を受け付けました。引取場所は自宅です。受付を確認して具体的な日時へ進んでください。";
+    renderProgress();
+    return true;
+  }
+
+  if (state.inspectionPickupPhase === "reason") {
+    if (!inspectionPickupReasonQuestion(text)) return false;
+    const reason = inspectionPickupReasons[state.variantSeed % inspectionPickupReasons.length];
+    state.inspectionPickupReason = reason.key;
+    state.inspectionPickupPhase = "proposal";
+    markInspectionPickupMetric("pickup_reason_confirmed", true, text);
+    state.turn += 1;
+    addMessage("customer", reason.text, { audioId: reason.audioId });
+    els.speechNote.textContent = "引取希望の理由を確認しました。事情を受け止め、理由に合う来店方法を提案してください。";
+    renderProgress();
+    return true;
+  }
+
+  if (state.inspectionPickupPhase === "proposal") {
+    const evidence = inspectionPickupProposalEvidence(text, state.inspectionPickupReason);
+    if (!evidence.acknowledged && !evidence.alternative && !evidence.choicePreserved) return false;
+    markInspectionPickupMetric("pickup_circumstance_acknowledged", evidence.acknowledged, text);
+    markInspectionPickupMetric("pickup_alternative_proposed", evidence.alternative, text);
+    markInspectionPickupMetric("pickup_choice_preserved", evidence.choicePreserved, text);
+    if (!evidence.proposal) {
+      state.turn += 1;
+      addMessage("customer", "はい。", { audioId: "inspection_thanked_customer_retry" });
+      els.speechNote.textContent = "事情の受け止めを確認しました。来店方法と引取の選択肢を案内してください。";
+      renderProgress();
+      return true;
+    }
+
+    const keepsPickup = state.variantSeed % 3 === 0;
+    state.inspectionPickupOutcome = keepsPickup ? "pickup" : "visit";
+    state.turn += 1;
+    if (keepsPickup) {
+      state.inspectionPickupPhase = "location";
+      addMessage("customer", "今回は引き取りでお願いしたいです。", {
+        audioId: "inspection_pickup_still_requested"
+      });
+      els.speechNote.textContent = "お客様は引取を希望しています。希望を尊重し、引取場所を確認してください。";
+    } else {
+      state.inspectionPickupActive = false;
+      state.inspectionPickupPhase = "resolved";
+      const response = inspectionPickupVisitResponse(state.inspectionPickupReason);
+      addMessage("customer", response.text, { audioId: response.audioId });
+      els.speechNote.textContent = "来店で進めることに同意しました。通常の車検予約へ続けてください。";
+    }
+    renderProgress();
+    return true;
+  }
+
+  if (state.inspectionPickupPhase === "location") {
+    const asksLocation = isScriptedQuestion(normalized)
+      && /(?:どこ|どちら|場所|自宅|職場|住所|引取先|引き取り先)/.test(normalized);
+    if (!asksLocation) return false;
+    state.inspectionPickupPhase = "confirmation";
+    state.turn += 1;
+    addMessage("customer", "自宅に取りに来てもらえますか？", {
+      audioId: "inspection_pickup_location_customer"
+    });
+    els.speechNote.textContent = "引取場所は自宅です。受付可否を伝えて、具体的な日時調整へ進んでください。";
+    renderProgress();
+    return true;
+  }
+
+  if (state.inspectionPickupPhase === "confirmation") {
+    const accepted = /(?:かしこまり|承知|伺います|取りに行きます|お取りに|引取.{0,8}(?:可能|受付|手配|用意))/.test(normalized);
+    if (!accepted) return false;
+    state.inspectionPickupActive = false;
+    state.inspectionPickupPhase = "resolved";
+    markPickupRouteBaseStepsNotApplicable();
+    state.turn += 1;
+    addMessage("customer", "はい、お願いします。", {
+      audioId: "inspection_pickup_confirmed_customer"
+    });
+    els.speechNote.textContent = "自宅への引取を受け付けました。具体的な引取日と時刻を確定してください。";
+    renderProgress();
+    return true;
+  }
+
+  return false;
 }
 
 function handleScriptedStaffReply(text) {
@@ -3746,6 +3967,9 @@ function handleScriptedStaffReply(text) {
     renderProgress();
     return;
   }
+
+  // 引取納車の応用分岐は新シナリオでのみ有効。既存の車検誘致には影響させない。
+  if (handleInspectionPickupBranchReply(text)) return;
 
   // 発話途中や周囲のノイズは、確認済み・未確認の判定や減点回数へ加えない。
   // 短い相づちを返した後も現在工程を保持し、MP3終了後にマイクを自動再開する。
@@ -4883,6 +5107,15 @@ function handleScriptedStaffReply(text) {
   const finalCustomerResponseText = customerResponseOverride?.text
     || partialPhaseResponse?.text
     || (skippedIncompleteStep ? "はい。" : responseStep.customerResponse);
+  if (
+    isPickupInspectionScenario()
+    && responseStep.key === "explained_duration_and_wait"
+    && finalCustomerResponseText === "できれば、車を取りに来てもらえませんか？"
+  ) {
+    state.inspectionPickupActive = true;
+    state.inspectionPickupPhase = "reason";
+    state.inspectionPickupOutcome = null;
+  }
   if (!state.inspectionWaitingMethod && finalCustomerResponseText === "待っています。") {
     state.inspectionWaitingMethod = "store";
   }
@@ -4895,6 +5128,7 @@ function handleScriptedStaffReply(text) {
   addMessage("customer", finalCustomerResponseText, {
     audioId: customerResponseOverride?.audioId
       || partialPhaseResponse?.audioId
+      || responseStep.customerAudioId
       || (skippedIncompleteStep
         ? "inspection_thanked_customer_retry"
         : `inspection_${responseStep.key}_customer`),
@@ -4932,7 +5166,7 @@ function handleReply(event) {
   const text = normalizeLoanerHomophone(els.staffInput.value.trim());
   if (!text) return;
 
-  stopSpeechInput({ preserveSession: scenario.id === "vehicle-inspection-phone-followup" });
+  stopSpeechInput({ preserveSession: isVehicleInspectionScenario() });
   stopCustomerPlayback();
   clearStaffInput();
   addMessage("staff", text);
@@ -5122,6 +5356,14 @@ function inspectionConversationMetricAchieved(metricKey) {
     return previousWasLoanerRequest
       && hasInspectionLoanerConfirmation(message.text, true);
   });
+
+  if (metricKey === "pickup_next_action") {
+    return Boolean(
+      state.proposedAppointment
+      && ["visit", "pickup"].includes(state.inspectionPickupOutcome)
+      && state.inspectionPickupPhase === "resolved"
+    );
+  }
 
   // 最終採点は会話の順番ではなく、「確認したか・説明したか」を会話全体で判定する。
   // 質問であることが必要な項目は個々の発話で確認し、説明項目だけを発話間で合算する。
@@ -5512,7 +5754,7 @@ function setupSpeech() {
       return;
     }
 
-    speechSessionActive = scenario.id === "vehicle-inspection-phone-followup";
+    speechSessionActive = isVehicleInspectionScenario();
     speechListening = true;
     speechBaseText = els.staffInput.value.trim();
     updateMicButtonPaused();
@@ -5547,7 +5789,7 @@ function updateMicButtonPaused() {
 function stopSpeechInput(options = {}) {
   const preserveSession = options.preserveSession === true
     && speechSessionActive
-    && scenario.id === "vehicle-inspection-phone-followup"
+    && isVehicleInspectionScenario()
     && state.started
     && !state.ended;
   speechSessionActive = preserveSession;
@@ -5640,7 +5882,7 @@ els.conversation.addEventListener("click", (event) => {
   if (message?.role === "customer") {
     const shouldRestartMic = message.role === "customer" && state.started && !state.ended;
     if (shouldRestartMic) {
-      stopSpeechInput({ preserveSession: scenario.id === "vehicle-inspection-phone-followup" });
+      stopSpeechInput({ preserveSession: isVehicleInspectionScenario() });
     }
     const onFinished = shouldRestartMic ? startSpeechInputAfterCustomer : null;
     if (message.audioSrc) {

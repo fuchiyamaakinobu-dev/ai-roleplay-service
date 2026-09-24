@@ -15,6 +15,7 @@ const invalidState = new Error("recognition is still stopping");
 invalidState.name = "InvalidStateError";
 const context = {
   scenario: { id: "vehicle-inspection-phone-followup" },
+  isVehicleInspectionScenario: () => true,
   state: { started: true, ended: false },
   speechListening: false,
   speechRecognitionRunning: false,

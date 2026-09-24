@@ -35,7 +35,7 @@ assert.match(
 );
 assert.match(
   source,
-  /function handleReply[\s\S]*?stopSpeechInput\(\{ preserveSession: scenario\.id === "vehicle-inspection-phone-followup" \}\)/,
+  /function handleReply[\s\S]*?stopSpeechInput\(\{ preserveSession: isVehicleInspectionScenario\(\) \}\)/,
   "スタッフ発話の送信時に車検ロープレの音声入力セッションが終了します"
 );
 assert.match(

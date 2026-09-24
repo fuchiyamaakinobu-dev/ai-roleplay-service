@@ -2,7 +2,8 @@
   const endpoint = "https://firestore.googleapis.com/v1/projects/ai-roleplay-editor/databases/(default)/documents/roleplay/public";
   const localScenarios = (window.ROLEPLAY_SCENARIOS || [
     window.ROLEPLAY_SCENARIO,
-    window.VEHICLE_INSPECTION_SCENARIO
+    window.VEHICLE_INSPECTION_SCENARIO,
+    window.VEHICLE_INSPECTION_PICKUP_SCENARIO
   ]).filter(Boolean);
   const audioItems = new Map(
     (window.ROLEPLAY_AUDIO_DB?.items || []).map((item) => [item.id, item])
@@ -88,7 +89,7 @@
     scenario.steps = (localScenario.steps || []).map((localStep) => {
       const publishedStep = publishedSteps.find((step) => step.key === localStep.key);
       const step = mergeMissingDefaults(localStep, publishedStep);
-      const customerAudioId = `inspection_${localStep.key}_customer`;
+      const customerAudioId = localStep.customerAudioId || `inspection_${localStep.key}_customer`;
       const retryAudioId = `inspection_${localStep.key}_retry`;
       step.customerResponse = readyAudioText(customerAudioId, localStep.customerResponse);
       step.retryResponse = readyAudioText(retryAudioId, localStep.retryResponse);
@@ -118,7 +119,7 @@
 
   function startApp() {
     const script = document.createElement("script");
-    script.src = "./app.js?v=20260910-2";
+    script.src = "./app.js?v=20260924-1";
     document.body.appendChild(script);
   }
 
@@ -135,10 +136,19 @@
         throw new Error("シナリオ形式が正しくありません");
       }
       const normalizedScenarios = normalizePublishedScenarios(parsed.scenarios);
+      // 公開Firestoreが旧2シナリオのままでも、新しいローカルシナリオを失わない。
+      localScenarios.forEach((localScenario) => {
+        if (!normalizedScenarios.some((item) => item.id === localScenario.id)) {
+          normalizedScenarios.push(localScenario);
+        }
+      });
       window.ROLEPLAY_SCENARIOS = normalizedScenarios;
       window.ROLEPLAY_SCENARIO = normalizedScenarios[0];
       window.VEHICLE_INSPECTION_SCENARIO =
-        normalizedScenarios.find((item) => item.mode === "staff-led-scripted") || normalizedScenarios[1];
+        normalizedScenarios.find((item) => item.id === "vehicle-inspection-phone-followup") || normalizedScenarios[1];
+      window.VEHICLE_INSPECTION_PICKUP_SCENARIO =
+        normalizedScenarios.find((item) => item.id === "vehicle-inspection-pickup-delivery")
+        || window.VEHICLE_INSPECTION_PICKUP_SCENARIO;
       const status = document.querySelector("#connectionStatus");
       if (status) status.textContent = "クラウド公開データ";
     })

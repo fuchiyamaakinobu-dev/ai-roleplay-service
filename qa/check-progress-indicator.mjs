@@ -33,7 +33,7 @@ assert.match(
 assert.match(source, /roleplayProgressVisible/);
 assert.match(
   source,
-  /function renderCustomerInfo\(\)[\s\S]*?vehicle-inspection-phone-followup[\s\S]*?車検満了日\$\{scenario\.expiryDate\}[\s\S]*?\$\{scenario\.availableFrom\}以降作業可能/,
+  /function renderCustomerInfo\(\)[\s\S]*?isVehicleInspectionScenario\(\)[\s\S]*?車検満了日\$\{scenario\.expiryDate\}[\s\S]*?\$\{scenario\.availableFrom\}以降作業可能/,
   "車検誘致のお客様情報をシナリオデータから作成できません"
 );
 assert.match(
@@ -50,8 +50,8 @@ assert.match(
 const checkpointLabels = [
   "開始挨拶", "本人確認", "店舗・担当者名", "日頃のお礼", "車検期日案内",
   "ご都合確認", "調子確認", "追加作業確認", "走行距離確認", "作業時間案内",
-  "店内待ち確認", "代車案内", "予約手続き時間", "入庫日時確定", "荷物・必要書類",
-  "ロックナット・15分前", "3日前確認連絡", "予約内容復唱", "終了挨拶"
+  "来店・待ち方確認", "代車案内", "予約手続き時間", "入庫日時案内", "荷物・必要書類",
+  "ロックナット・15分前", "3日前確認連絡", "入庫日時最終確認", "終了挨拶"
 ];
 checkpointLabels.forEach((label) => {
   assert.match(source, new RegExp(`label: "${label}"`), `チェック項目「${label}」がありません`);

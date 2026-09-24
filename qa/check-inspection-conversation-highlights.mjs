@@ -113,7 +113,7 @@ assert.match(styleSource, /\.conversation-keyword\.is-confirmed/);
 assert.match(styleSource, /\.conversation-keyword\.is-partial/);
 assert.match(
   appSource,
-  /message\.role === "staff"[\s\S]*?scenario\.id === "vehicle-inspection-phone-followup"[\s\S]*?renderInspectionConversationHighlights/,
+  /message\.role === "staff"[\s\S]*?isVehicleInspectionScenario\(\)[\s\S]*?renderInspectionConversationHighlights/,
   "車検誘致のスタッフ発話だけに限定されていません"
 );
 

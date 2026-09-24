@@ -447,7 +447,19 @@ const vehicleInspectionAudioLines = [
   ["inspection_closed_politely_retry", "終話・聞き返し", "はい。"],
   ["inspection_missing_appointment_angry", "入庫日時未確定・少し怒り気味", "いつ行けばいいんですか？"],
   ["inspection_missing_appointment_repeat", "入庫日時未確定・再確認", "入庫する日と時間を教えてください。"],
-  ["inspection_missing_appointment_specific", "入庫日時未確定・具体確認", "何月何日の何時に行けばよいですか？"]
+  ["inspection_missing_appointment_specific", "入庫日時未確定・具体確認", "何月何日の何時に行けばよいですか？"],
+  ["inspection_pickup_request_customer", "引取納車・お客様希望", "できれば、車を取りに来てもらえませんか？"],
+  ["inspection_pickup_reason_work", "引取理由・仕事", "仕事があるので、なかなかお店まで持って行けないんです。"],
+  ["inspection_pickup_reason_distance", "引取理由・距離", "家から少し遠いので、持って行くのが大変なんです。"],
+  ["inspection_pickup_reason_driving", "引取理由・運転不安", "運転に自信がないので、お店まで持って行くのが不安なんです。"],
+  ["inspection_pickup_reason_competitor", "引取理由・他店比較", "ほかのお店では、取りに来てくれると聞いたんですが。"],
+  ["inspection_pickup_reason_misunderstanding", "引取理由・認識違い", "以前は取りに来てもらえると聞いたような気がするんですが。"],
+  ["inspection_pickup_visit_weekend", "来店提案・土日了承", "土日なら持って行けるかもしれません。"],
+  ["inspection_pickup_visit_time", "来店提案・時間帯了承", "その時間なら持って行けそうです。"],
+  ["inspection_pickup_visit_agreement", "来店提案・了承", "それなら、お店に持って行きます。"],
+  ["inspection_pickup_still_requested", "引取希望・継続", "今回は引き取りでお願いしたいです。"],
+  ["inspection_pickup_location_customer", "引取場所・自宅", "自宅に取りに来てもらえますか？"],
+  ["inspection_pickup_confirmed_customer", "引取受付・了承", "はい、お願いします。"]
 ];
 
 window.ROLEPLAY_AUDIO_DB.items.push(...vehicleInspectionAudioLines.map(([id, label, text, status = "ready"]) => ({
