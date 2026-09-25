@@ -3827,6 +3827,49 @@ function inspectionPickupVisitResponse(reason) {
   };
 }
 
+function shouldStartInspectionPickupAfterDuration(step, analysis) {
+  return isPickupInspectionScenario()
+    && step?.key === "explained_duration_and_wait"
+    && analysis?.passed === true
+    && !state.inspectionPickupActive
+    && !state.inspectionPickupPhase;
+}
+
+function shouldStartInspectionPickupFallback(text, step) {
+  if (
+    !isPickupInspectionScenario()
+    || state.inspectionPickupActive
+    || state.inspectionPickupPhase
+    || state.proposedAppointment
+    // 作業時間・店内待ち工程では、通常達成または一度の不足確認後に処理する。
+    || step?.key === "explained_duration_and_wait"
+  ) {
+    return false;
+  }
+  const decisionText = inspectionLastQuestionClause(text);
+  return hasInspectionAppointmentCoordinationEvidence(text)
+    || hasExplicitBookingContinuationConfirmation(text)
+    || asksInspectionWaitingMethodConfirmation(decisionText)
+    || hasInspectionWaitingChoiceOffer(text);
+}
+
+function startInspectionPickupRequest(note) {
+  const pickupDurationStep = scenario.steps.find(
+    (candidate) => candidate.key === "explained_duration_and_wait"
+  );
+  state.inspectionPickupActive = true;
+  state.inspectionPickupPhase = "reason";
+  state.inspectionPickupOutcome = null;
+  state.turn += 1;
+  addMessage(
+    "customer",
+    pickupDurationStep?.customerResponse || "できれば、車を取りに来てもらえませんか？",
+    { audioId: pickupDurationStep?.customerAudioId || "inspection_pickup_request_customer" }
+  );
+  els.speechNote.textContent = note;
+  renderProgress();
+}
+
 function handleInspectionPickupBranchReply(text) {
   if (!isPickupInspectionScenario() || !state.inspectionPickupActive) return false;
 
@@ -4016,6 +4059,16 @@ function handleScriptedStaffReply(text) {
   // 後工程へ到達した際に、すでに聞いた内容を再質問しないための記録であり、
   // この時点で会話順序を強制的に進めるものではない。
   rememberFutureScriptedAchievements(text, state.scriptStep);
+
+  // 走行距離・作業時間などを案内し忘れても、スタッフが予約日時・予約手続き・
+  // 来店時の待ち方へ進もうとした時点で、引取相談を一度だけ開始する。
+  // 不足項目は達成扱いにせず、そのまま終話後の採点へ残す。
+  if (shouldStartInspectionPickupFallback(text, step)) {
+    startInspectionPickupRequest(
+      "未確認項目は採点へ残し、引取納車の相談を開始しました。引取希望の理由を確認してください。"
+    );
+    return;
+  }
 
   // 「今お電話よろしいですか」のような通話可否は、現在の採点工程に
   // 関係なく実際の質問へ明確に回答する。
@@ -4799,6 +4852,10 @@ function handleScriptedStaffReply(text) {
     && (state.questionRepeats["inspection-retry:confirmed_booking_time:general"] || 0) > 0;
   const combinedText = combinedScriptedReply(text, step);
   const analysis = analyzeScriptedStaff(combinedText, step);
+  const shouldStartPickupAfterDuration = shouldStartInspectionPickupAfterDuration(
+    step,
+    analysis
+  );
   if (naturalDurationProgression && !analysis.passed) {
     analysis.noClarificationDeduction = true;
     analysis.evidence.push("予約意思確認後の自然な作業時間質問へ進行");
@@ -4881,6 +4938,17 @@ function handleScriptedStaffReply(text) {
       } else {
         state.currentState = scenario.steps[state.scriptStep].state;
       }
+      if (
+        isPickupInspectionScenario()
+        && step.key === "explained_duration_and_wait"
+        && !state.inspectionPickupActive
+        && !state.inspectionPickupPhase
+      ) {
+        startInspectionPickupRequest(
+          "走行距離・作業時間・店内待ちの不足は採点へ残し、同じ確認を繰り返さず引取納車の相談へ進みました。"
+        );
+        return;
+      }
       const skippedCustomerResponse = step.key === "proposed_appointment"
         ? "分かりました。"
         : "はい。";
@@ -4961,7 +5029,8 @@ function handleScriptedStaffReply(text) {
   // お客様から店内待ちを確認した場合は、外出に備えた代車希望へ進める。
   const waitingBranchLoanerStep = scenario.steps[state.scriptStep];
   if (
-    waitingBranchLoanerStep?.key === "explained_loaner"
+    !shouldStartPickupAfterDuration
+    && waitingBranchLoanerStep?.key === "explained_loaner"
     && !scriptedStepMatches(combinedText, waitingBranchLoanerStep)
   ) {
     if (
@@ -5100,6 +5169,19 @@ function handleScriptedStaffReply(text) {
   if (!customerResponseOverride && responseStep.key === "thanked_customer"
     && /お世話になって/.test(text) && !/(?:ありがとう|感謝)/.test(text)) {
     customerResponseOverride = { text: "お世話になっております。", audioId: "inspection_introduced_self_customer" };
+  }
+  // 引取納車対応では、走行距離・作業時間・店内待ちがそろった最初の発話直後を
+  // 引取相談の開始点とする。通常車検用の「予約しようかな」や代車分岐より優先し、
+  // 同じ発話に後工程の案内が含まれても引取依頼を一度だけ返す。
+  if (shouldStartPickupAfterDuration) {
+    const pickupDurationResponseStep = scenario.steps.find(
+      (candidate) => candidate.key === "explained_duration_and_wait"
+    ) || step;
+    responseStep = pickupDurationResponseStep;
+    customerResponseOverride = {
+      text: pickupDurationResponseStep.customerResponse,
+      audioId: pickupDurationResponseStep.customerAudioId
+    };
   }
   const partialPhaseResponse = skippedIncompleteStep
     ? inspectionPartialPhaseResponse(responseStep, text)

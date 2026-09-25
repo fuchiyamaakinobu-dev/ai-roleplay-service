@@ -54,6 +54,9 @@ for (const id of expectedAudio) {
 }
 
 assert.match(appSource, /function handleInspectionPickupBranchReply\(text\)/);
+assert.match(appSource, /function shouldStartInspectionPickupAfterDuration\(step, analysis\)/);
+assert.match(appSource, /function shouldStartInspectionPickupFallback\(text, step\)/);
+assert.match(appSource, /function startInspectionPickupRequest\(note\)/);
 assert.match(appSource, /state\.inspectionPickupPhase === "reason"/);
 assert.match(appSource, /state\.inspectionPickupPhase === "proposal"/);
 assert.match(appSource, /state\.inspectionPickupPhase === "location"/);
@@ -61,6 +64,143 @@ assert.match(appSource, /state\.inspectionPickupPhase === "confirmation"/);
 assert.match(appSource, /markPickupRouteBaseStepsNotApplicable\(\)/);
 assert.match(appSource, /responseStep\.customerAudioId/);
 assert.match(appSource, /function isVehicleInspectionScenario\(candidate = scenario\)/);
+
+const timingStart = appSource.indexOf("function shouldStartInspectionPickupAfterDuration");
+const timingEnd = appSource.indexOf("function handleInspectionPickupBranchReply", timingStart);
+assert.notEqual(timingStart, -1, "引取依頼の開始タイミング判定が見つかりません");
+assert.notEqual(timingEnd, -1, "引取依頼の開始タイミング判定の終端が見つかりません");
+
+function timingContext({ pickupScenario, active = false, phase = null } = {}) {
+  const context = {
+    state: {
+      inspectionPickupActive: active,
+      inspectionPickupPhase: phase
+    },
+    isPickupInspectionScenario: () => Boolean(pickupScenario)
+  };
+  vm.createContext(context);
+  vm.runInContext(appSource.slice(timingStart, timingEnd), context);
+  return context;
+}
+
+const pickupTiming = timingContext({ pickupScenario: true });
+assert.equal(
+  pickupTiming.shouldStartInspectionPickupAfterDuration(
+    { key: "explained_duration_and_wait" },
+    { passed: true }
+  ),
+  true,
+  "引取納車対応で作業時間・店内待ち達成直後に引取依頼へ進みません"
+);
+assert.equal(
+  pickupTiming.shouldStartInspectionPickupAfterDuration(
+    { key: "explained_duration_and_wait" },
+    { passed: false }
+  ),
+  false,
+  "作業時間・店内待ちが未達なのに引取依頼へ進んでいます"
+);
+assert.equal(
+  timingContext({ pickupScenario: false }).shouldStartInspectionPickupAfterDuration(
+    { key: "explained_duration_and_wait" },
+    { passed: true }
+  ),
+  false,
+  "通常車検へ引取納車の開始タイミングを適用しています"
+);
+assert.equal(
+  timingContext({ pickupScenario: true, active: true, phase: "reason" })
+    .shouldStartInspectionPickupAfterDuration(
+      { key: "explained_duration_and_wait" },
+      { passed: true }
+    ),
+  false,
+  "同じ引取依頼を繰り返しています"
+);
+assert.match(
+  appSource,
+  /if \(shouldStartPickupAfterDuration\) \{[\s\S]*?customerResponseOverride = \{[\s\S]*?pickupDurationResponseStep\.customerResponse[\s\S]*?pickupDurationResponseStep\.customerAudioId/,
+  "引取依頼が通常の予約・代車返答より優先されていません"
+);
+
+const fallbackStart = appSource.indexOf("function shouldStartInspectionPickupFallback");
+const fallbackEnd = appSource.indexOf("function startInspectionPickupRequest", fallbackStart);
+assert.notEqual(fallbackStart, -1, "案内漏れ時の引取依頼判定が見つかりません");
+assert.notEqual(fallbackEnd, -1, "案内漏れ時の引取依頼判定の終端が見つかりません");
+
+function fallbackContext({ pickupScenario, active = false, phase = null, appointment = null } = {}) {
+  const context = {
+    state: {
+      inspectionPickupActive: active,
+      inspectionPickupPhase: phase,
+      proposedAppointment: appointment
+    },
+    isPickupInspectionScenario: () => Boolean(pickupScenario),
+    inspectionLastQuestionClause: (text) => text,
+    hasInspectionAppointmentCoordinationEvidence: (text) => /9月|何時|ご希望の日/.test(text),
+    hasExplicitBookingContinuationConfirmation: (text) => /予約手続き|このまま予約/.test(text),
+    asksInspectionWaitingMethodConfirmation: (text) => /待ち.*(?:ますか|でしょうか)/.test(text),
+    hasInspectionWaitingChoiceOffer: (text) => /店内.*待/.test(text)
+  };
+  vm.createContext(context);
+  vm.runInContext(appSource.slice(fallbackStart, fallbackEnd), context);
+  return context;
+}
+
+const fallbackTiming = fallbackContext({ pickupScenario: true });
+assert.equal(
+  fallbackTiming.shouldStartInspectionPickupFallback(
+    "では、9月30日の10時半はいかがでしょうか？",
+    { key: "explained_loaner" }
+  ),
+  true,
+  "案内漏れのまま具体的な日時へ進んだ際に引取依頼へ進みません"
+);
+assert.equal(
+  fallbackTiming.shouldStartInspectionPickupFallback(
+    "このまま予約手続きを進めてもよろしいでしょうか？",
+    { key: "explained_loaner" }
+  ),
+  true,
+  "案内漏れのまま予約手続きへ進んだ際に引取依頼へ進みません"
+);
+assert.equal(
+  fallbackTiming.shouldStartInspectionPickupFallback(
+    "当日は店内でお待ちになりますか？",
+    { key: "explained_loaner" }
+  ),
+  true,
+  "案内漏れのまま待ち方確認へ進んだ際に引取依頼へ進みません"
+);
+assert.equal(
+  fallbackTiming.shouldStartInspectionPickupFallback(
+    "ありがとうございます。",
+    { key: "explained_loaner" }
+  ),
+  false,
+  "予約・来店へ進んでいない相づちで引取依頼を開始しています"
+);
+assert.equal(
+  fallbackTiming.shouldStartInspectionPickupFallback(
+    "9月30日の10時半はいかがでしょうか？",
+    { key: "explained_duration_and_wait" }
+  ),
+  false,
+  "作業時間工程の一度目の不足確認を飛ばしています"
+);
+assert.equal(
+  fallbackContext({ pickupScenario: false }).shouldStartInspectionPickupFallback(
+    "9月30日の10時半はいかがでしょうか？",
+    { key: "explained_loaner" }
+  ),
+  false,
+  "通常車検へ案内漏れ時の引取分岐を適用しています"
+);
+assert.match(
+  appSource,
+  /step\.key === "explained_duration_and_wait"[\s\S]*?startInspectionPickupRequest\([\s\S]*?不足は採点へ残し/,
+  "作業時間工程の不足確認後に引取依頼へ進む処理が見つかりません"
+);
 
 const branchStart = appSource.indexOf("const inspectionPickupReasons");
 const branchEnd = appSource.indexOf("function handleScriptedStaffReply", branchStart);
