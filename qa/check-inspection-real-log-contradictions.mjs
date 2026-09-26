@@ -70,6 +70,11 @@ assert.match(
 );
 assert.match(
   source,
+  /postcardAlreadyMentioned[\s\S]*?asksExistingPlan && !postcardAlreadyMentioned[\s\S]*?お願いしたいんですけど、いつできますか/,
+  "案内はがきへの返答を一度使った後も同じ返答を繰り返します"
+);
+assert.match(
+  source,
   /durationOnlyWithoutWaiting[\s\S]*?step\.key !== "explained_duration_and_wait"[\s\S]*?お店で待つことはできますか？[\s\S]*?inspection_duration_wait_missing_retry/,
   "順序が前後した作業時間案内から、店内待ちだけを確認できません"
 );

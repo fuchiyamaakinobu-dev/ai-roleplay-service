@@ -3850,6 +3850,15 @@ function shouldStartInspectionPickupAfterDuration(step, analysis) {
     && !state.inspectionPickupPhase;
 }
 
+function asksInspectionDirectVisitInvitation(text) {
+  const normalized = normalizeScriptedText(text);
+  const hasVisitWording = /(?:ご入庫|入庫|ご入校|入校|ご来店|来店|お越し)/.test(normalized);
+  const asksOrRequestsVisit = /(?:お願い|いただけ|いただき|できます|可能|いかが|よろしい)/.test(normalized);
+  return hasVisitWording
+    && asksOrRequestsVisit
+    && (isScriptedQuestion(normalized) || /(?:お願いしたい|お願いでき)/.test(normalized));
+}
+
 function shouldStartInspectionPickupFallback(text, step) {
   if (
     !isPickupInspectionScenario()
@@ -3865,7 +3874,8 @@ function shouldStartInspectionPickupFallback(text, step) {
   return hasInspectionAppointmentCoordinationEvidence(text)
     || hasExplicitBookingContinuationConfirmation(text)
     || asksInspectionWaitingMethodConfirmation(decisionText)
-    || hasInspectionWaitingChoiceOffer(text);
+    || hasInspectionWaitingChoiceOffer(text)
+    || asksInspectionDirectVisitInvitation(text);
 }
 
 function startInspectionPickupRequest(note) {
@@ -3883,6 +3893,19 @@ function startInspectionPickupRequest(note) {
   );
   els.speechNote.textContent = note;
   renderProgress();
+}
+
+function inspectionCustomerResponseAudioId(
+  customerResponseOverride,
+  partialPhaseResponse,
+  responseStep,
+  skippedIncompleteStep
+) {
+  return customerResponseOverride?.audioId
+    || partialPhaseResponse?.audioId
+    || (skippedIncompleteStep
+      ? "inspection_thanked_customer_retry"
+      : responseStep.customerAudioId || `inspection_${responseStep.key}_customer`);
 }
 
 function handleInspectionPickupBranchReply(text) {
@@ -4202,9 +4225,17 @@ function handleScriptedStaffReply(text) {
       return;
     }
     const asksExistingPlan = /車検.*(?:予定|決まり|決まって)/.test(normalizeScriptedText(text));
+    const postcardAlreadyMentioned = state.transcript.some((message) =>
+      message.role === "customer"
+      && normalizeScriptedText(message.text).includes("案内のはがきが来ていましたよ")
+    );
     const availabilityReply = customerQuestionTurn(availabilityReplyKey, [{
-      text: asksExistingPlan ? "案内のはがきが来ていましたよ。" : "お願いしたいんですけど、いつできますか？",
-      audioId: asksExistingPlan ? "inspection_explained_inspection_notice_customer" : "inspection_asked_availability_customer"
+      text: asksExistingPlan && !postcardAlreadyMentioned
+        ? "案内のはがきが来ていましたよ。"
+        : "お願いしたいんですけど、いつできますか？",
+      audioId: asksExistingPlan && !postcardAlreadyMentioned
+        ? "inspection_explained_inspection_notice_customer"
+        : "inspection_asked_availability_customer"
     }]);
     state.turn += 1;
     addMessage("customer", availabilityReply.text, {
@@ -5246,12 +5277,12 @@ function handleScriptedStaffReply(text) {
     state.inspectionWaitingMethod = "loaner";
   }
   addMessage("customer", finalCustomerResponseText, {
-    audioId: customerResponseOverride?.audioId
-      || partialPhaseResponse?.audioId
-      || responseStep.customerAudioId
-      || (skippedIncompleteStep
-        ? "inspection_thanked_customer_retry"
-        : `inspection_${responseStep.key}_customer`),
+    audioId: inspectionCustomerResponseAudioId(
+      customerResponseOverride,
+      partialPhaseResponse,
+      responseStep,
+      skippedIncompleteStep
+    ),
     onCommitted: finished
       ? () => finishRoleplay({ keepCustomerPlayback: true })
       : null

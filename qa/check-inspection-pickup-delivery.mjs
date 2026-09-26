@@ -123,7 +123,7 @@ assert.match(
   "引取依頼が通常の予約・代車返答より優先されていません"
 );
 
-const fallbackStart = appSource.indexOf("function shouldStartInspectionPickupFallback");
+const fallbackStart = appSource.indexOf("function asksInspectionDirectVisitInvitation");
 const fallbackEnd = appSource.indexOf("function startInspectionPickupRequest", fallbackStart);
 assert.notEqual(fallbackStart, -1, "案内漏れ時の引取依頼判定が見つかりません");
 assert.notEqual(fallbackEnd, -1, "案内漏れ時の引取依頼判定の終端が見つかりません");
@@ -137,6 +137,8 @@ function fallbackContext({ pickupScenario, active = false, phase = null, appoint
     },
     isPickupInspectionScenario: () => Boolean(pickupScenario),
     inspectionLastQuestionClause: (text) => text,
+    normalizeScriptedText: (text) => String(text || "").replace(/[\s、。,.!！?？]/g, ""),
+    isScriptedQuestion: (text) => /(?:いかが|よろしい|できます|ですか|ますか|でしょうか|か)$/.test(String(text || "")),
     hasInspectionAppointmentCoordinationEvidence: (text) => /9月|何時|ご希望の日/.test(text),
     hasExplicitBookingContinuationConfirmation: (text) => /予約手続き|このまま予約/.test(text),
     asksInspectionWaitingMethodConfirmation: (text) => /待ち.*(?:ますか|でしょうか)/.test(text),
@@ -174,6 +176,22 @@ assert.equal(
 );
 assert.equal(
   fallbackTiming.shouldStartInspectionPickupFallback(
+    "ぜひご入庫お願いしたいと思いますが、いかがでしょうか？",
+    { key: "explained_available_period" }
+  ),
+  true,
+  "来店・入庫依頼へ進んだ際に引取依頼を開始できません"
+);
+assert.equal(
+  fallbackTiming.shouldStartInspectionPickupFallback(
+    "ぜひご入校お願いしたいと思いますが、いかがでしょうか？",
+    { key: "explained_available_period" }
+  ),
+  true,
+  "音声認識された『入校』を入庫依頼として扱えません"
+);
+assert.equal(
+  fallbackTiming.shouldStartInspectionPickupFallback(
     "ありがとうございます。",
     { key: "explained_loaner" }
   ),
@@ -200,6 +218,33 @@ assert.match(
   appSource,
   /step\.key === "explained_duration_and_wait"[\s\S]*?startInspectionPickupRequest\([\s\S]*?不足は採点へ残し/,
   "作業時間工程の不足確認後に引取依頼へ進む処理が見つかりません"
+);
+
+const audioSelectorStart = appSource.indexOf("function inspectionCustomerResponseAudioId");
+const audioSelectorEnd = appSource.indexOf("function handleInspectionPickupBranchReply", audioSelectorStart);
+assert.notEqual(audioSelectorStart, -1, "表示文に対応する音声選択処理が見つかりません");
+const audioSelectorContext = {};
+vm.createContext(audioSelectorContext);
+vm.runInContext(appSource.slice(audioSelectorStart, audioSelectorEnd), audioSelectorContext);
+assert.equal(
+  audioSelectorContext.inspectionCustomerResponseAudioId(
+    null,
+    null,
+    { key: "explained_duration_and_wait", customerAudioId: "inspection_pickup_request_customer" },
+    true
+  ),
+  "inspection_thanked_customer_retry",
+  "表示が『はい。』なのに引取依頼MP3を選択しています"
+);
+assert.equal(
+  audioSelectorContext.inspectionCustomerResponseAudioId(
+    { text: "できれば、車を取りに来てもらえませんか？", audioId: "inspection_pickup_request_customer" },
+    null,
+    { key: "explained_duration_and_wait", customerAudioId: "inspection_pickup_request_customer" },
+    false
+  ),
+  "inspection_pickup_request_customer",
+  "表示が引取依頼のときに対応するMP3を選択できません"
 );
 
 const branchStart = appSource.indexOf("const inspectionPickupReasons");
