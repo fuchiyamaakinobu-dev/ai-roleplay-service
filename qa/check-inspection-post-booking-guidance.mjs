@@ -93,6 +93,11 @@ assert.equal(
   true,
   "『こちらの番号』を現在の連絡先質問として認識できません"
 );
+assert.equal(
+  context.asksInspectionReminderContactDestination("今、佐藤様のお電話でよろしかったですか？"),
+  true,
+  "『今、佐藤様のお電話』を現在の連絡先質問として認識できません"
+);
 context.state.transcript = [
   { role: "staff", text: "入庫日の3日前に確認のお電話をいたします。" }
 ];

@@ -116,6 +116,11 @@ assert.equal(
   "『作業できます』を含む具体的日時提案を認識できません"
 );
 assert.equal(
+  proposalContext.hasInspectionAppointmentProposalEvidence("9月30日10時半にご来店いただいて、お待ちいただけますか？"),
+  true,
+  "日時と来店・店内待ちをまとめた予約提案を認識できません"
+);
+assert.equal(
   proposalContext.hasInspectionAppointmentProposalEvidence("このまま予約を進めてもよろしいでしょうか？"),
   false,
   "具体的な日時のない予約手続き確認を日時提案として扱っています"

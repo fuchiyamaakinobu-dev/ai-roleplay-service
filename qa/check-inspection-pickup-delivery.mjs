@@ -228,6 +228,7 @@ function branchContext(variantSeed) {
     normalizeScriptedText: (text) => String(text || "").replace(/[\s、。,.!！?？]/g, ""),
     isScriptedQuestion: (text) => /(?:なぜ|どうして|理由|事情|差し支え|どのような|どこ|どちら|場所|ですか|ますか|でしょうか|か)$/.test(String(text || "")),
     isPickupInspectionScenario: () => true,
+    hasCompleteInspectionAppointmentProposal: (text) => /\d{1,2}月\d{1,2}日.*\d{1,2}時/.test(String(text || "")),
     markScriptedStepNotApplicable(step, reason) {
       if (!step) return;
       state.analyses.push({ stepKey: step.key, notApplicable: true, evidence: [reason] });
@@ -273,6 +274,62 @@ assert.equal(
   directAcceptance.state.analyses.some((item) => item.stepKey === "pickup_reason_confirmed" && item.passed),
   false,
   "理由確認を省略した直接受付に理由確認点を与えています"
+);
+
+// 高得点の通常車検で実際に使われている、理由を仮定した聞き方にも対応する。
+const naturalReasonQuestion = branchContext(3);
+assert.equal(
+  naturalReasonQuestion.context.handleInspectionPickupBranchReply("お仕事か何かで、ご来店の都合が悪いですか？"),
+  true
+);
+assert.equal(naturalReasonQuestion.state.inspectionPickupReason, "work");
+assert.equal(naturalReasonQuestion.messages.at(-1).audioId, "inspection_pickup_reason_work");
+
+for (const testCase of [
+  ["ご自宅からお店まで距離があって遠いですか？", "distance", "inspection_pickup_reason_distance"],
+  ["運転にご不安がありますか？", "driving", "inspection_pickup_reason_driving"],
+  ["ほかのお店では取りに来ると聞かれましたか？", "competitor", "inspection_pickup_reason_competitor"],
+  ["以前は引き取りできると聞いた認識でしょうか？", "misunderstanding", "inspection_pickup_reason_misunderstanding"]
+]) {
+  const [staffText, reasonKey, audioId] = testCase;
+  const branch = branchContext(0);
+  assert.equal(branch.context.handleInspectionPickupBranchReply(staffText), true, staffText);
+  assert.equal(branch.state.inspectionPickupReason, reasonKey, staffText);
+  assert.equal(branch.messages.at(-1).audioId, audioId, staffText);
+}
+
+// 引取希望を一度維持した後でも、来店可否を具体的に確認されたら通常予約へ復帰する。
+const laterVisit = branchContext(0);
+laterVisit.context.handleInspectionPickupBranchReply("引取をご希望の理由を教えていただけますか？");
+laterVisit.context.handleInspectionPickupBranchReply("お仕事で大変なのですね。土日の来店もできます。引取と来店のどちらがよろしいですか？");
+assert.equal(laterVisit.state.inspectionPickupPhase, "location");
+assert.equal(laterVisit.context.handleInspectionPickupBranchReply("土曜日にご来店いただくことは可能でしょうか？"), true);
+assert.equal(laterVisit.state.inspectionPickupOutcome, "visit");
+assert.equal(laterVisit.state.inspectionPickupPhase, "resolved");
+assert.equal(laterVisit.messages.at(-1).audioId, "inspection_pickup_visit_weekend");
+
+// 日時と来店確認を一文で案内した場合は、その日時を了承して分岐を完了する。
+const datedVisit = branchContext(0);
+datedVisit.context.handleInspectionPickupBranchReply("引取をご希望の理由を教えていただけますか？");
+datedVisit.context.handleInspectionPickupBranchReply("お仕事で大変なのですね。土日の来店もできます。引取と来店のどちらがよろしいですか？");
+assert.equal(datedVisit.context.handleInspectionPickupBranchReply("9月30日10時半にご来店いただけますか？"), true);
+assert.equal(datedVisit.state.inspectionPickupOutcome, "visit");
+assert.equal(datedVisit.messages.at(-1).text, "では、その日でお願いします。");
+
+assert.match(
+  appSource,
+  /(?:ませんか\|[^\n]*)|(?:ませんか)/,
+  "『ございませんか』を完成した質問として扱う条件がありません"
+);
+assert.match(
+  appSource,
+  /ご来店\|来店いただ\|お越し\|お待ち/,
+  "日時と来店確認をまとめた予約提案の表現が登録されていません"
+);
+assert.match(
+  appSource,
+  /\(\?:今\|現在\)\.\{0,10\}\(\?:お電話\|電話\)/,
+  "『今、佐藤様のお電話でよろしいですか』の連絡先確認表現が登録されていません"
 );
 
 console.log("車検誘致・引取納車対応: シナリオ、分岐、採点、音声12件を確認しました");
