@@ -272,6 +272,12 @@ function branchContext(variantSeed) {
     els: { speechNote: { textContent: "" } },
     normalizeScriptedText: (text) => String(text || "").replace(/[\s、。,.!！?？]/g, ""),
     isScriptedQuestion: (text) => /(?:なぜ|どうして|理由|事情|差し支え|どのような|どこ|どちら|場所|ですか|ますか|でしょうか|か)$/.test(String(text || "")),
+    asksCurrentMileage: (text) => /(?:走行距離|距離数|何(?:キロ|km)|距離.{0,12}(?:乗|走))/.test(String(text || "")),
+    asksInspectionDirectVisitInvitation: (text) => {
+      const normalized = String(text || "");
+      return /(?:ご入庫|入庫|ご入校|入校|ご来店|来店|お越し)/.test(normalized)
+        && /(?:お願い|いただけ|いただき|できます|可能|いかが|よろしい)/.test(normalized);
+    },
     isPickupInspectionScenario: () => true,
     hasCompleteInspectionAppointmentProposal: (text) => /\d{1,2}月\d{1,2}日.*\d{1,2}時/.test(String(text || "")),
     markScriptedStepNotApplicable(step, reason) {
@@ -330,6 +336,50 @@ assert.equal(
 assert.equal(naturalReasonQuestion.state.inspectionPickupReason, "work");
 assert.equal(naturalReasonQuestion.messages.at(-1).audioId, "inspection_pickup_reason_work");
 
+// 引取理由待ちでも「走行距離」の距離を、自宅からの距離理由と誤認しない。
+const mileageBeforeReason = branchContext(1);
+assert.equal(
+  mileageBeforeReason.context.handleInspectionPickupBranchReply(
+    "佐藤様、ヤリスの現在の走行距離はどのくらい乗られていますか？"
+  ),
+  false
+);
+assert.equal(mileageBeforeReason.state.inspectionPickupReason, null);
+assert.equal(mileageBeforeReason.messages.length, 0);
+
+// 理由を聞かずに来店を勧めた場合は「はい」と承諾せず、理由を伝える。
+// ただしスタッフは理由を確認していないため、理由確認の得点は付けない。
+const visitBeforeReason = branchContext(1);
+assert.equal(
+  visitBeforeReason.context.handleInspectionPickupBranchReply(
+    "お店で待っていただいて車検できますが、ご来店はいかがでしょうか？"
+  ),
+  true
+);
+assert.equal(visitBeforeReason.state.inspectionPickupReason, "distance");
+assert.equal(visitBeforeReason.state.inspectionPickupPhase, "proposal");
+assert.equal(visitBeforeReason.messages.at(-1).audioId, "inspection_pickup_reason_distance");
+assert.equal(
+  visitBeforeReason.state.analyses.some((item) => item.stepKey === "pickup_reason_confirmed" && item.passed),
+  false
+);
+
+// 運転不安に対して理由に合う代替案も引取選択肢もない来店依頼なら、
+// 来店を承諾せず引取希望を維持する。
+const unfitDrivingProposal = branchContext(2);
+unfitDrivingProposal.context.handleInspectionPickupBranchReply("運転にご不安がありますか？");
+assert.equal(unfitDrivingProposal.state.inspectionPickupReason, "driving");
+assert.equal(
+  unfitDrivingProposal.context.handleInspectionPickupBranchReply(
+    "工場から整備内容をご説明したいので、ご来店いただけますか？"
+  ),
+  true
+);
+assert.equal(unfitDrivingProposal.state.inspectionPickupOutcome, "pickup");
+assert.equal(unfitDrivingProposal.state.inspectionPickupPhase, "location");
+assert.equal(unfitDrivingProposal.messages.at(-1).text, "今回は引き取りでお願いしたいです。");
+assert.equal(unfitDrivingProposal.messages.at(-1).audioId, "inspection_pickup_still_requested");
+
 for (const testCase of [
   ["ご自宅からお店まで距離があって遠いですか？", "distance", "inspection_pickup_reason_distance"],
   ["運転にご不安がありますか？", "driving", "inspection_pickup_reason_driving"],
@@ -375,6 +425,29 @@ assert.match(
   appSource,
   /\(\?:今\|現在\)\.\{0,10\}\(\?:お電話\|電話\)/,
   "『今、佐藤様のお電話でよろしいですか』の連絡先確認表現が登録されていません"
+);
+
+const availableRangeStart = appSource.indexOf("function inspectionAppointmentBeforeAvailableFrom");
+const availableRangeEnd = appSource.indexOf("function isInspectionDeadlineDateCandidate", availableRangeStart);
+assert.notEqual(availableRangeStart, -1, "作業可能日前の日時判定が見つかりません");
+const availableRangeContext = {
+  scenario: { availableFrom: "8月1日" },
+  normalizeScriptedText: (text) => String(text || "").replace(/\s/g, ""),
+  hasInspectionAppointmentProposalEvidence: (text) => /(?:いかが|よろしい|作業可能|予約)/.test(String(text || "")),
+  inspectionAppointmentProposalMatch: (text) => {
+    const match = String(text || "").match(/(\d{1,2})月(\d{1,2})日.*?(\d{1,2})時/);
+    return match ? { month: match[1], day: match[2], hour: match[3] } : null;
+  }
+};
+vm.createContext(availableRangeContext);
+vm.runInContext(appSource.slice(availableRangeStart, availableRangeEnd), availableRangeContext);
+assert.equal(availableRangeContext.inspectionAppointmentBeforeAvailableFrom("6月30日10時半はいかがでしょうか"), true);
+assert.equal(availableRangeContext.inspectionAppointmentBeforeAvailableFrom("8月1日10時半はいかがでしょうか"), false);
+assert.equal(availableRangeContext.inspectionAppointmentBeforeAvailableFrom("9月30日10時半はいかがでしょうか"), false);
+assert.match(
+  appSource,
+  /inspectionAppointmentBeforeAvailableFrom\(text\)[\s\S]*?inspection_appointment_date_missing_retry/,
+  "作業可能日前の日付を確定せず再確認する処理がありません"
 );
 
 console.log("車検誘致・引取納車対応: シナリオ、分岐、採点、音声12件を確認しました");

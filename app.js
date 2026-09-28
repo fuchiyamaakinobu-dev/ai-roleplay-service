@@ -2582,6 +2582,17 @@ function hasCompleteInspectionAppointmentProposal(text) {
     && Boolean(inspectionAppointmentProposalMatch(normalized));
 }
 
+function inspectionAppointmentBeforeAvailableFrom(text) {
+  if (!hasInspectionAppointmentProposalEvidence(text)) return false;
+  const appointment = inspectionAppointmentProposalMatch(text);
+  const availableFromMatch = normalizeScriptedText(scenario.availableFrom || "")
+    .match(/(\d{1,2})月(\d{1,2})日/);
+  if (!appointment || !availableFromMatch) return false;
+  const appointmentValue = Number(appointment.month) * 100 + Number(appointment.day);
+  const availableFromValue = Number(availableFromMatch[1]) * 100 + Number(availableFromMatch[2]);
+  return appointmentValue < availableFromValue;
+}
+
 function isInspectionDeadlineDateCandidate(normalized, date) {
   const precedingText = normalized.slice(Math.max(0, date.index - 18), date.index);
   const followingText = normalized.slice(date.end, date.end + 14);
@@ -3781,6 +3792,10 @@ function markInspectionPickupMetric(key, passed, evidence) {
 
 function inspectionPickupReasonFromQuestion(text) {
   const normalized = normalizeScriptedText(text);
+  // 「現在の走行距離はどのくらいですか」の「距離」を、引取理由の
+  // 「家から遠い」と取り違えない。引取分岐中でも最新の走行距離質問を
+  // 通常の車検応答へ渡し、約3万kmを回答できるようにする。
+  if (asksCurrentMileage(normalized)) return null;
   if (/(?:仕事|勤務|お休み|休み|平日|忙し)/.test(normalized)) return "work";
   if (/(?:遠い|距離|近くの店舗|近い店舗)/.test(normalized)) return "distance";
   if (/(?:運転|自信|不安|ご家族|家族)/.test(normalized)) return "driving";
@@ -3930,7 +3945,20 @@ function handleInspectionPickupBranchReply(text) {
   }
 
   if (state.inspectionPickupPhase === "reason") {
-    if (!inspectionPickupReasonQuestion(text)) return false;
+    if (!inspectionPickupReasonQuestion(text)) {
+      // 理由を尋ねないまま来店を勧められた場合は「はい」と承諾しない。
+      // 理由確認の得点は付けず、お客様側から事情を伝えて、理由に合う
+      // 提案と引取選択肢を案内できる状態を維持する。
+      if (!asksInspectionDirectVisitInvitation(text)) return false;
+      const reason = inspectionPickupReasons[state.variantSeed % inspectionPickupReasons.length];
+      state.inspectionPickupReason = reason.key;
+      state.inspectionPickupPhase = "proposal";
+      state.turn += 1;
+      addMessage("customer", reason.text, { audioId: reason.audioId });
+      els.speechNote.textContent = "引取理由の確認は未達です。お客様の事情を受け止め、理由に合う来店方法と引取の選択肢を案内してください。";
+      renderProgress();
+      return true;
+    }
     const detectedReason = inspectionPickupReasonFromQuestion(text);
     const reason = inspectionPickupReasons.find((item) => item.key === detectedReason)
       || inspectionPickupReasons[state.variantSeed % inspectionPickupReasons.length];
@@ -3946,7 +3974,20 @@ function handleInspectionPickupBranchReply(text) {
 
   if (state.inspectionPickupPhase === "proposal") {
     const evidence = inspectionPickupProposalEvidence(text, state.inspectionPickupReason);
-    if (!evidence.acknowledged && !evidence.alternative && !evidence.choicePreserved) return false;
+    if (!evidence.acknowledged && !evidence.alternative && !evidence.choicePreserved) {
+      // 運転不安・距離などの事情に合う代替案も、引取を選べる説明もない
+      // 一方的な来店依頼には同意せず、既存音声で引取希望を維持する。
+      if (!asksInspectionDirectVisitInvitation(text)) return false;
+      state.inspectionPickupOutcome = "pickup";
+      state.inspectionPickupPhase = "location";
+      state.turn += 1;
+      addMessage("customer", "今回は引き取りでお願いしたいです。", {
+        audioId: "inspection_pickup_still_requested"
+      });
+      els.speechNote.textContent = "理由に合う来店案と選択肢がないため、引取希望を維持しています。引取場所を確認してください。";
+      renderProgress();
+      return true;
+    }
     markInspectionPickupMetric("pickup_circumstance_acknowledged", evidence.acknowledged, text);
     markInspectionPickupMetric("pickup_alternative_proposed", evidence.alternative, text);
     markInspectionPickupMetric("pickup_choice_preserved", evidence.choicePreserved, text);
@@ -4068,6 +4109,23 @@ function handleScriptedStaffReply(text) {
       audioId: "inspection_closed_politely_customer",
       onCommitted: () => finishRoleplay({ keepCustomerPlayback: true })
     });
+    renderProgress();
+    return;
+  }
+
+  // 登録済みの作業可能日より前の具体的な日時は予約として確定しない。
+  // 音声認識の月違いにも同じ日時承諾を返さず、既存の日時確認音声で
+  // 日付だけを一度確認する。作業可能日以降の既存予約処理は変更しない。
+  if (
+    isPickupInspectionScenario()
+    && !state.proposedAppointment
+    && inspectionAppointmentBeforeAvailableFrom(text)
+  ) {
+    state.turn += 1;
+    addMessage("customer", "何日の予定ですか？", {
+      audioId: "inspection_appointment_date_missing_retry"
+    });
+    els.speechNote.textContent = `${scenario.availableFrom}より前の日付は予約できません。作業可能日以降の具体的な日時を案内してください。`;
     renderProgress();
     return;
   }
