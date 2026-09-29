@@ -1611,8 +1611,12 @@ function asksInspectionCallTimingPermission(text) {
   // 冒頭の通話継続確認として扱う。予約日時や10分の手続き時間とは区別する。
   const hasBareTimePermission = /(?:お時間|時間)(?:の方)?(?:は)?(?:よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized)
     && !/(?:\d{1,2}(?:月|日|時|分)|午前|午後)/.test(normalized);
+  // 「あともう少しだけお電話大丈夫ですか」のように「時間」を省いた
+  // 通話継続確認も、持参品など現在工程の了承ではなく質問そのものへ答える。
+  const hasContinuedCallPermission = /(?:あと|もう少し).{0,12}(?:お?電話|お話).{0,12}(?:よろしい|大丈夫|構いません|可能)/.test(normalized)
+    || /(?:お?電話|お話).{0,12}(?:あと|もう少し).{0,12}(?:よろしい|大丈夫|構いません|可能)/.test(normalized);
   const asksPermission = /(?:よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized);
-  return (hasCurrentCallContext || hasBareTimePermission) && asksPermission;
+  return (hasCurrentCallContext || hasBareTimePermission || hasContinuedCallPermission) && asksPermission;
 }
 
 function analyzeStaff(text) {
@@ -2782,7 +2786,7 @@ function inspectionTextHasSplitGuidanceKey(text, stepKey) {
   if (stepKey === "confirmed_reminder_contact") {
     const hasReminderFragment = /(?:3日前|三日前)/.test(normalized)
       && /(?:連絡|電話)/.test(normalized);
-    const hasContactFragment = /(?:この|同じ|今の|こちらの|今かけている).{0,8}(?:携帯|電話|連絡先|番号)/.test(normalized)
+    const hasContactFragment = /(?:この|同じ|今の|こちらの|今かけている).{0,8}(?:携帯|お?電話|連絡先|番号)/.test(normalized)
       || /(?:携帯|電話番号|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(normalized);
     return hasReminderFragment || hasContactFragment;
   }
@@ -2885,7 +2889,7 @@ function hasInspectionReminderContactConfirmation(text) {
   );
   const hasThreeDayReminder = /(?:3日前|三日前)/.test(conversationEvidence)
     && /(?:連絡|電話)/.test(conversationEvidence);
-  const asksKnownContact = /(?:この|同じ|今の|こちらの|今かけている).{0,8}(?:携帯|電話|連絡先|番号)/.test(conversationEvidence)
+  const asksKnownContact = /(?:この|同じ|今の|こちらの|今かけている).{0,8}(?:携帯|お?電話|連絡先|番号)/.test(conversationEvidence)
     || /(?:携帯|電話番号|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(conversationEvidence)
     || /(?:どちら|電話番号)/.test(conversationEvidence);
   const hasContactQuestion = inspectionStaffConversationEvidence(
@@ -2902,7 +2906,7 @@ function hasInspectionReminderContactConfirmation(text) {
 function asksInspectionReminderContactDestination(text) {
   const normalized = normalizeScriptedText(text);
   return isScriptedQuestion(normalized)
-    && /(?:携帯|電話番号|連絡先|この電話|同じ電話|今の電話|こちらの番号|この番号|今かけている番号|(?:今|現在).{0,10}(?:お電話|電話))/.test(normalized)
+    && /(?:携帯|電話番号|連絡先|このお?電話|同じお?電話|今のお?電話|こちらのお?電話|こちらの番号|この番号|今かけている(?:お?電話|番号)|(?:今|現在).{0,10}(?:お電話|電話))/.test(normalized)
     && /(?:よろしい|よろしかった|良い|大丈夫|どちら|どこ|お願いしますか)/.test(normalized);
 }
 
@@ -4093,6 +4097,11 @@ function handleScriptedStaffReply(text) {
   }
 
   const decisionText = inspectionLastQuestionClause(text);
+  // 説明と質問が一つの音声認識結果に連結された場合でも、最後の質問節と
+  // 発話全体の両方を確認し、前半の「代車をご用意します」より
+  // 後半の「気になるところはありますか」への返答を優先する。
+  const asksVehicleConcernsQuestion = asksInspectionVehicleConcerns(decisionText)
+    || asksInspectionVehicleConcerns(text);
 
   // 具体的な予約日時が確定済みなら、最終の「ありがとうございました」を
   // 連絡先確認などすべての個別判定より先に処理して確実に終話する。
@@ -4337,7 +4346,7 @@ function handleScriptedStaffReply(text) {
   if (
     (state.inspectionLoanerRequested || state.inspectionLoanerConfirmed)
     && hasInspectionLoanerConfirmation(text, true)
-    && !asksInspectionVehicleConcerns(decisionText)
+    && !asksVehicleConcernsQuestion
     && !hasInspectionAppointmentProposalEvidence(text)
     && !hasScriptedAppointmentRecapEvidence(text)
   ) {
@@ -4381,7 +4390,7 @@ function handleScriptedStaffReply(text) {
   if (
     state.inspectionWaitingMethod === "store"
     && hasInspectionLoanerConfirmation(text)
-    && !asksInspectionVehicleConcerns(decisionText)
+    && !asksVehicleConcernsQuestion
   ) {
     state.turn += 1;
     addMessage("customer", "待っています。", {
@@ -4456,7 +4465,7 @@ function handleScriptedStaffReply(text) {
 
   // 車両状態の質問は、工程順にかかわらず質問語を優先して回答する。
   // 一度オイル交換を希望済みなら、同じ希望を繰り返さず他は問題ないと答える。
-  if (asksInspectionVehicleConcerns(decisionText)) {
+  if (asksVehicleConcernsQuestion) {
     const concernStep = scenario.steps.find((candidate) => candidate.key === "asked_vehicle_concerns");
     if (concernStep) markScriptedStepPassed(concernStep, text);
     const concernReply = hasInspectionOilChangeRequest()
@@ -5656,6 +5665,78 @@ function inspectionConversationMetricAchieved(metricKey) {
   return false;
 }
 
+function inspectionSpecificImprovement(metricKey) {
+  const staffUtterances = (Array.isArray(state.transcript) ? state.transcript : [])
+    .filter((message) => message.role === "staff")
+    .map((message) => normalizeScriptedText(message.text))
+    .filter(Boolean);
+  const staffEvidence = staffUtterances.join(" ");
+
+  if (metricKey === "explained_available_period") {
+    const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
+    const availableFrom = normalizeScriptedText(scenario.availableFrom || "");
+    const hasExpiry = Boolean(expiryDate) && staffEvidence.includes(expiryDate);
+    const hasAvailableFrom = Boolean(availableFrom)
+      && staffUtterances.some((text) => hasInspectionAvailableFromInformation(text));
+    if (hasExpiry && !hasAvailableFrom) {
+      return `${scenario.availableFrom || "入庫可能日"}以降に作業可能であることを案内すると、より良い応対になります`;
+    }
+    if (!hasExpiry && hasAvailableFrom) {
+      return `${scenario.expiryDate || "車検満了日"}の車検満了日を案内すると、より良い応対になります`;
+    }
+  }
+
+  if (metricKey === "explained_documents") {
+    const hasLuggageArea = /(?:荷物|荷室|トランク|ラゲージ|空荷|荷)/.test(staffEvidence);
+    const hasEmptyAction = /(?:空|積|降|下)/.test(staffEvidence);
+    const hasEmptyVehicleGuidance = hasLuggageArea && hasEmptyAction;
+    const requiredDocuments = [
+      ["車検証", staffEvidence.includes("車検証")],
+      ["自賠責保険証明書", staffEvidence.includes("自賠責")],
+      ["納税証明書", staffEvidence.includes("納税証明")]
+    ];
+    const missingDocuments = requiredDocuments
+      .filter(([, present]) => !present)
+      .map(([label]) => label);
+    if (hasEmptyVehicleGuidance && missingDocuments.length) {
+      return `不足している必要書類（${missingDocuments.join("・")}）を案内すると、より良い応対になります`;
+    }
+    if (!hasEmptyVehicleGuidance && missingDocuments.length === 0) {
+      return "車内・荷室の荷物を降ろし、空の状態で来店することを案内すると、より良い応対になります";
+    }
+  }
+
+  if (metricKey === "confirmed_reminder_contact") {
+    const hasThreeDayReminder = /(?:3日前|三日前)/.test(staffEvidence)
+      && /(?:連絡|電話)/.test(staffEvidence);
+    const hasContactDestination = staffUtterances.some((text) =>
+      asksInspectionReminderContactDestination(text)
+    );
+    if (hasThreeDayReminder && !hasContactDestination) {
+      return "3日前の確認連絡を入れる電話番号を確認すると、より良い応対になります";
+    }
+    if (!hasThreeDayReminder && hasContactDestination) {
+      return "入庫日の3日前に確認連絡を行うことを案内すると、より良い応対になります";
+    }
+  }
+
+  if (metricKey === "recapped_appointment" && state.proposedAppointment) {
+    const appointmentWasRecapped = staffUtterances.some((text) =>
+      confirmedInspectionAppointmentMatches(text)
+    );
+    const customerName = normalizeScriptedText(scenario.customerName || "佐藤");
+    const customerNameWasRecapped = customerName
+      && staffUtterances.some((text) =>
+        confirmedInspectionAppointmentMatches(text) && text.includes(customerName)
+      );
+    if (appointmentWasRecapped && !customerNameWasRecapped) {
+      return "予約日時の復唱にお客様名を添えると、より良い応対になります";
+    }
+  }
+
+  return "";
+}
+
 function scoreScriptedRoleplay() {
   const notApplicableKeys = new Set(
     state.analyses
@@ -5713,6 +5794,10 @@ function scoreScriptedRoleplay() {
       if (metric.key === "explained_duration_and_wait" && state.inspectionMileageAsked) {
         return "基本作業時間と店内で待てることを説明することを意識すると、より良い応対になります";
       }
+      const specificImprovement = typeof inspectionSpecificImprovement === "function"
+        ? inspectionSpecificImprovement(metric.key)
+        : "";
+      if (specificImprovement) return specificImprovement;
       return `${metric.action}ことを意識すると、より良い応対になります`;
     });
   if (retryCount > 0) {
