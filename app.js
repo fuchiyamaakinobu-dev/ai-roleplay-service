@@ -3801,7 +3801,9 @@ function inspectionPickupReasonFromQuestion(text) {
   // 通常の車検応答へ渡し、約3万kmを回答できるようにする。
   if (asksCurrentMileage(normalized)) return null;
   if (/(?:仕事|勤務|お休み|休み|平日|忙し)/.test(normalized)) return "work";
-  if (/(?:遠い|距離|近くの店舗|近い店舗)/.test(normalized)) return "distance";
+  // 「距離3万kmですと」のような走行距離の説明を、店舗まで遠いという
+  // 引取理由と取り違えない。自宅・店舗・持込み負担の文脈がある場合だけ扱う。
+  if (/(?:遠い|家.{0,8}距離|自宅.{0,8}距離|店.{0,8}距離|店舗.{0,8}距離|持って行く.{0,8}大変|近くの店舗|近い店舗)/.test(normalized)) return "distance";
   if (/(?:運転|自信|不安|ご家族|家族)/.test(normalized)) return "driving";
   if (/(?:ほかのお店|他のお店|他店|他社|競合)/.test(normalized)) return "competitor";
   if (/(?:以前|前回|聞いた|説明|勘違い|認識)/.test(normalized)) return "misunderstanding";
@@ -3813,14 +3815,34 @@ function inspectionPickupReasonQuestion(text) {
   if (!isScriptedQuestion(normalized)) return false;
   // 開放質問に加え、実績で使われた「お仕事でご都合が悪いですか」など、
   // 理由を仮定して確かめる自然な質問も理由確認として扱う。
-  return /(?:なぜ|どうして|理由|事情|差し支え|どのような)/.test(normalized)
+  return /(?:なぜ|どうして|理由|事情|差し支え|不都合|どのような)/.test(normalized)
     || Boolean(inspectionPickupReasonFromQuestion(normalized));
+}
+
+function inspectionPickupAcknowledgesReason(normalized, reason) {
+  if (!normalized || !reason) return false;
+  if (reason === "work") {
+    return /(?:仕事|勤務|平日|忙し|時間が取れ).{0,20}(?:大変|難しい|ご負担|なのですね|んですね|承知)/.test(normalized);
+  }
+  if (reason === "distance") {
+    return /(?:遠い|距離|持って行くのが大変).{0,20}(?:大変|難しい|ご負担|なのですね|んですね|承知)/.test(normalized);
+  }
+  if (reason === "driving") {
+    return /(?:運転|自信|不安).{0,20}(?:ご不安|心配|大変|難しい|なのですね|んですね|承知)/.test(normalized);
+  }
+  if (reason === "competitor") {
+    return /(?:ほかのお店|他のお店|他店|他社|比較).{0,20}(?:聞いた|なのですね|んですね|承知|検討)/.test(normalized);
+  }
+  if (reason === "misunderstanding") {
+    return /(?:以前|前回|聞いた|説明|認識|勘違い).{0,20}(?:申し訳|確認|なのですね|んですね|承知)/.test(normalized);
+  }
+  return false;
 }
 
 function inspectionPickupProposalEvidence(text, reason) {
   const normalized = normalizeScriptedText(text);
   const reasonDefinition = inspectionPickupReasons.find((item) => item.key === reason);
-  const acknowledged = /(?:そうなんですね|なのですね|承知|かしこまり|分かり|わかり|ご不安|大変|ご負担)/.test(normalized);
+  const acknowledged = inspectionPickupAcknowledgesReason(normalized, reason);
   const alternative = Boolean(
     reasonDefinition?.alternatives.some((word) => normalized.includes(word))
   );
@@ -3931,10 +3953,14 @@ function handleInspectionPickupBranchReply(text) {
   if (!isPickupInspectionScenario() || !state.inspectionPickupActive) return false;
 
   const normalized = normalizeScriptedText(text);
-  const directlyAcceptsPickup = /(?:引取|引き取り|取りに).{0,16}(?:承知|かしこまり|受付|手配|伺います|行きます|可能)/.test(normalized)
-    || /(?:承知|かしこまり).{0,16}(?:引取|引き取り|取りに)/.test(normalized);
+  // 「引取希望ですね、かしこまりました。理由はありますか」の
+  // かしこまりましたは希望の受領であり、引取受付の確定ではない。
+  // 受付・手配・訪問を明示した場合だけ直接受付として扱う。
+  const directlyAcceptsPickup = /(?:引取|引き取り|取りに).{0,20}(?:承ります|受付(?:します|いたします)|手配(?:します|いたします)|伺います|行きます|可能です)/.test(normalized)
+    || /(?:承ります|受付(?:します|いたします)|手配(?:します|いたします)).{0,20}(?:引取|引き取り|取りに)/.test(normalized);
   if (
     directlyAcceptsPickup
+    && !inspectionPickupReasonQuestion(text)
     && ["reason", "proposal", "location"].includes(state.inspectionPickupPhase)
   ) {
     state.inspectionPickupOutcome = "pickup";
@@ -4029,7 +4055,9 @@ function handleInspectionPickupBranchReply(text) {
     // 分岐を解消してから既存17工程をそのまま継続する。
     const asksVisit = isScriptedQuestion(normalized)
       && /(?:ご来店|来店いただ|お越し|持って来|持ってき)/.test(normalized);
-    if (asksVisit || hasCompleteInspectionAppointmentProposal(text)) {
+    // 日時だけの提示は引取日時の調整でも使われるため、来店の明示が
+    // ない限り引取から来店へ自動変更しない。
+    if (asksVisit) {
       state.inspectionPickupOutcome = "visit";
       state.inspectionPickupActive = false;
       state.inspectionPickupPhase = "resolved";
@@ -4059,7 +4087,15 @@ function handleInspectionPickupBranchReply(text) {
   }
 
   if (state.inspectionPickupPhase === "confirmation") {
-    const accepted = /(?:かしこまり|承知|伺います|取りに行きます|お取りに|引取.{0,8}(?:可能|受付|手配|用意))/.test(normalized);
+    const accepted = /(?:かしこまり|承知|分かりました|わかりました|伺います|取りに行きます|お取りに|引取.{0,8}(?:可能|受付|手配|用意))/.test(normalized);
+    // 引取場所を確認済みで具体的な日時を提示した場合は、明示的な
+    // 「承ります」がなくても引取受付を継続し、通常の日時回答へ渡す。
+    if (!accepted && hasCompleteInspectionAppointmentProposal(text)) {
+      state.inspectionPickupActive = false;
+      state.inspectionPickupPhase = "resolved";
+      markPickupRouteBaseStepsNotApplicable();
+      return false;
+    }
     if (!accepted) return false;
     state.inspectionPickupActive = false;
     state.inspectionPickupPhase = "resolved";
@@ -4074,6 +4110,20 @@ function handleInspectionPickupBranchReply(text) {
   }
 
   return false;
+}
+
+function hasInspectionPickupVisitConflict(text) {
+  if (
+    !isPickupInspectionScenario()
+    || state.inspectionPickupOutcome !== "pickup"
+    || state.inspectionPickupPhase !== "resolved"
+  ) {
+    return false;
+  }
+  const normalized = normalizeScriptedText(text);
+  const mentionsVisit = /(?:ご来店|来店|お越し|店内.{0,8}待)/.test(normalized);
+  const mentionsPickup = /(?:引取|引き取り|取りに伺|自宅.{0,8}伺)/.test(normalized);
+  return mentionsVisit && !mentionsPickup;
 }
 
 function handleScriptedStaffReply(text) {
@@ -4187,6 +4237,28 @@ function handleScriptedStaffReply(text) {
   // 後工程へ到達した際に、すでに聞いた内容を再質問しないための記録であり、
   // この時点で会話順序を強制的に進めるものではない。
   rememberFutureScriptedAchievements(text, state.scriptStep);
+
+  // 自宅への引取を受付済みなのに、後続案内が「ご来店」「店内待ち」へ
+  // 戻った場合は一度だけ受付方法を訂正する。説明済みの書類などは上で
+  // 採点証拠として保持し、同じ訂正を繰り返さず音声入力を継続する。
+  if (hasInspectionPickupVisitConflict(text)) {
+    const conflictKey = "inspection-pickup-route-conflict";
+    const correctionCount = state.questionRepeats[conflictKey] || 0;
+    if (correctionCount === 0) {
+      state.questionRepeats[conflictKey] = 1;
+      state.turn += 1;
+      addMessage("customer", "今回は引き取りでお願いしたいです。", {
+        audioId: "inspection_pickup_still_requested"
+      });
+      els.speechNote.textContent = "引取受付済みです。来店案内へ戻らず、引取場所・日時の案内を続けてください。";
+      renderProgress();
+      return;
+    }
+    els.speechNote.textContent = "引取受付済みです。同じ訂正を繰り返さず、引取の案内を続けてください。";
+    renderProgress();
+    continueSpeechInputWithoutCustomerReply("音声入力中です。引取の案内を続けてください。");
+    return;
+  }
 
   // 走行距離・作業時間などを案内し忘れても、スタッフが予約日時・予約手続き・
   // 来店時の待ち方へ進もうとした時点で、引取相談を一度だけ開始する。
@@ -5364,6 +5436,22 @@ function appointmentPeriodsMatch(expected, actual) {
   return !expected?.period || expected.period === actual?.period;
 }
 
+function inspectionAppointmentRouteMatchesRecap(text) {
+  const normalized = normalizeScriptedText(text);
+  if (
+    scenario?.id !== "vehicle-inspection-pickup-delivery"
+    || scenario?.pickupBranchEnabled !== true
+  ) return true;
+  if (state.inspectionPickupOutcome === "pickup") {
+    return /(?:引取|引き取り|取りに伺|自宅.{0,8}伺)/.test(normalized)
+      && !/(?:ご来店|来店|店内.{0,8}待)/.test(normalized);
+  }
+  if (state.inspectionPickupOutcome === "visit") {
+    return /(?:ご来店|来店|お越し|店内.{0,8}待)/.test(normalized);
+  }
+  return true;
+}
+
 function hasConfirmedInspectionAppointmentRecap(text) {
   const appointment = state.proposedAppointment;
   const customerName = normalizeScriptedText(scenario.customerName || "").replace(/様$/, "");
@@ -5375,7 +5463,8 @@ function hasConfirmedInspectionAppointmentRecap(text) {
     && match.hour === appointment.hour
     && Number(match.minute || 0) === Number(appointment.minute || 0)
     && appointmentPeriodsMatch(appointment, match)
-    && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます)/.test(normalizeScriptedText(text));
+    && inspectionAppointmentRouteMatchesRecap(text)
+    && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います)/.test(normalizeScriptedText(text));
 }
 
 function handleReply(event) {
@@ -5575,12 +5664,30 @@ function inspectionConversationMetricAchieved(metricKey) {
       && hasInspectionLoanerConfirmation(message.text, true);
   });
 
-  if (metricKey === "pickup_next_action") {
-    return Boolean(
-      state.proposedAppointment
-      && ["visit", "pickup"].includes(state.inspectionPickupOutcome)
-      && state.inspectionPickupPhase === "resolved"
+  if (metricKey === "pickup_reason_confirmed") {
+    return staffUtterances.some((text) => inspectionPickupReasonQuestion(text));
+  }
+  if (metricKey === "pickup_circumstance_acknowledged") {
+    return staffUtterances.some((text) =>
+      inspectionPickupAcknowledgesReason(text, state.inspectionPickupReason)
     );
+  }
+  if (metricKey === "pickup_alternative_proposed") {
+    return staffUtterances.some((text) =>
+      inspectionPickupProposalEvidence(text, state.inspectionPickupReason).alternative
+    );
+  }
+  if (metricKey === "pickup_choice_preserved") {
+    return staffUtterances.some((text) =>
+      inspectionPickupProposalEvidence(text, state.inspectionPickupReason).choicePreserved
+    );
+  }
+
+  if (metricKey === "pickup_next_action") {
+    if (!state.proposedAppointment || state.inspectionPickupPhase !== "resolved") return false;
+    if (state.inspectionPickupOutcome === "visit") return true;
+    if (state.inspectionPickupOutcome !== "pickup") return false;
+    return /(?:自宅|会社|職場|駐車場|住所)/.test(customerEvidence);
   }
 
   // 最終採点は会話の順番ではなく、「確認したか・説明したか」を会話全体で判定する。
@@ -5721,15 +5828,26 @@ function inspectionSpecificImprovement(metricKey) {
   }
 
   if (metricKey === "recapped_appointment" && state.proposedAppointment) {
-    const appointmentWasRecapped = staffUtterances.some((text) =>
+    const appointmentDateTimeWasRecapped = staffUtterances.some((text) =>
       confirmedInspectionAppointmentMatches(text)
+    );
+    const appointmentRouteWasRecapped = staffUtterances.some((text) =>
+      confirmedInspectionAppointmentMatches(text)
+      && inspectionAppointmentRouteMatchesRecap(text)
     );
     const customerName = normalizeScriptedText(scenario.customerName || "佐藤");
     const customerNameWasRecapped = customerName
       && staffUtterances.some((text) =>
-        confirmedInspectionAppointmentMatches(text) && text.includes(customerName)
+        confirmedInspectionAppointmentMatches(text)
+        && inspectionAppointmentRouteMatchesRecap(text)
+        && text.includes(customerName)
       );
-    if (appointmentWasRecapped && !customerNameWasRecapped) {
+    if (appointmentDateTimeWasRecapped && !appointmentRouteWasRecapped) {
+      return state.inspectionPickupOutcome === "pickup"
+        ? "予約日時を、お客様名と引取で伺うことを添えて復唱すると、より良い応対になります"
+        : "予約日時を、お客様名とご来店であることを添えて復唱すると、より良い応対になります";
+    }
+    if (appointmentRouteWasRecapped && !customerNameWasRecapped) {
       return "予約日時の復唱にお客様名を添えると、より良い応対になります";
     }
   }

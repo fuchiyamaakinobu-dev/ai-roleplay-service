@@ -317,6 +317,29 @@ assert.deepEqual(
   ["confirmed_waiting", "explained_loaner", "explained_lock_and_arrival"].sort()
 );
 
+// 引取場所を回答した直後は「わかりました」でも受付承諾として扱う。
+const naturalPickupAcceptance = branchContext(0);
+naturalPickupAcceptance.state.inspectionPickupPhase = "confirmation";
+naturalPickupAcceptance.state.inspectionPickupOutcome = "pickup";
+assert.equal(
+  naturalPickupAcceptance.context.handleInspectionPickupBranchReply("わかりました。"),
+  true
+);
+assert.equal(naturalPickupAcceptance.state.inspectionPickupPhase, "resolved");
+assert.equal(naturalPickupAcceptance.messages.at(-1).audioId, "inspection_pickup_confirmed_customer");
+assert.equal(
+  naturalPickupAcceptance.context.hasInspectionPickupVisitConflict(
+    "ご来店の際に車検証をお持ちください。"
+  ),
+  true
+);
+assert.equal(
+  naturalPickupAcceptance.context.hasInspectionPickupVisitConflict(
+    "9月30日10時半に自宅へ引き取りに伺います。"
+  ),
+  false
+);
+
 const directAcceptance = branchContext(4);
 assert.equal(directAcceptance.context.handleInspectionPickupBranchReply("かしこまりました。引き取りを承ります。"), true);
 assert.equal(directAcceptance.state.inspectionPickupOutcome, "pickup");
@@ -336,6 +359,19 @@ assert.equal(
 assert.equal(naturalReasonQuestion.state.inspectionPickupReason, "work");
 assert.equal(naturalReasonQuestion.messages.at(-1).audioId, "inspection_pickup_reason_work");
 
+// 希望を受け止める「かしこまりました」が理由質問と同じ発話にあっても、
+// 引取確定へ飛ばず、質問された理由を具体的に回答する。
+const reasonAfterAcknowledgement = branchContext(1);
+assert.equal(
+  reasonAfterAcknowledgement.context.handleInspectionPickupBranchReply(
+    "お車引き取り希望ですね。かしこまりました。何か不都合があってのことでしょうか？"
+  ),
+  true
+);
+assert.equal(reasonAfterAcknowledgement.state.inspectionPickupReason, "distance");
+assert.equal(reasonAfterAcknowledgement.state.inspectionPickupPhase, "proposal");
+assert.equal(reasonAfterAcknowledgement.messages.at(-1).audioId, "inspection_pickup_reason_distance");
+
 // 引取理由待ちでも「走行距離」の距離を、自宅からの距離理由と誤認しない。
 const mileageBeforeReason = branchContext(1);
 assert.equal(
@@ -346,6 +382,18 @@ assert.equal(
 );
 assert.equal(mileageBeforeReason.state.inspectionPickupReason, null);
 assert.equal(mileageBeforeReason.messages.length, 0);
+
+// 走行距離を説明してから車両状態を尋ねた発話の「距離」は、
+// 自宅から店舗までの距離理由として扱わない。
+const mileageExplanationBeforeReason = branchContext(1);
+assert.equal(
+  mileageExplanationBeforeReason.context.handleInspectionPickupBranchReply(
+    "距離3万キロぐらいですと1時間半ほどですが、気になるところはございませんか？"
+  ),
+  false
+);
+assert.equal(mileageExplanationBeforeReason.state.inspectionPickupReason, null);
+assert.equal(mileageExplanationBeforeReason.messages.length, 0);
 
 // 理由を聞かずに来店を勧めた場合は「はい」と承諾せず、理由を伝える。
 // ただしスタッフは理由を確認していないため、理由確認の得点は付けない。
@@ -403,6 +451,18 @@ assert.equal(laterVisit.state.inspectionPickupOutcome, "visit");
 assert.equal(laterVisit.state.inspectionPickupPhase, "resolved");
 assert.equal(laterVisit.messages.at(-1).audioId, "inspection_pickup_visit_weekend");
 
+// 引取希望を維持した後の日時だけの提示は、来店予約へ自動変更しない。
+const pickupDateOnly = branchContext(0);
+pickupDateOnly.context.handleInspectionPickupBranchReply("引取をご希望の理由を教えていただけますか？");
+pickupDateOnly.context.handleInspectionPickupBranchReply("お仕事で大変なのですね。土日の来店もできます。難しい場合は引取も選べますが、いかがですか？");
+assert.equal(pickupDateOnly.state.inspectionPickupPhase, "location");
+assert.equal(
+  pickupDateOnly.context.handleInspectionPickupBranchReply("9月30日10時半はいかがでしょうか？"),
+  false
+);
+assert.equal(pickupDateOnly.state.inspectionPickupOutcome, "pickup");
+assert.equal(pickupDateOnly.state.inspectionPickupPhase, "location");
+
 // 日時と来店確認を一文で案内した場合は、その日時を了承して分岐を完了する。
 const datedVisit = branchContext(0);
 datedVisit.context.handleInspectionPickupBranchReply("引取をご希望の理由を教えていただけますか？");
@@ -448,6 +508,11 @@ assert.match(
   appSource,
   /inspectionAppointmentBeforeAvailableFrom\(text\)[\s\S]*?inspection_appointment_date_missing_retry/,
   "作業可能日前の日付を確定せず再確認する処理がありません"
+);
+assert.match(
+  appSource,
+  /inspectionAppointmentRouteMatchesRecap\(text\)[\s\S]*?inspectionPickupOutcome === "pickup"[\s\S]*?引取/,
+  "予約復唱で引取・来店の受付方法を照合できません"
 );
 
 console.log("車検誘致・引取納車対応: シナリオ、分岐、採点、音声12件を確認しました");
