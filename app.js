@@ -1312,6 +1312,15 @@ function looksLikeCompleteJapaneseSentence(text) {
 // 最後に実際に尋ねられた疑問節を優先する。採点には元の発話全体を残す。
 function inspectionLastQuestionClause(text) {
   const source = String(text || "").trim();
+  // 疑問符・読点が省かれた音声認識でも、質問の話題が続けば最後を選ぶ。
+  // 採点・候補日時の記録には、この切り出しではなく元の発話全体を使用する。
+  const lastTopicClause = (clause) => {
+    const topics = [...clause.matchAll(/(?:ご都合|走行距離|距離数|気になる|見てほしい|代車|お時間|お電話(?=.{0,12}(?:よろしい|よろしかった|大丈夫))|\d{1,2}月の?\d{1,2}日.{0,12}?\d{1,2}時(?!間))/g)];
+    if (topics.length < 2) return clause;
+    const lastTopic = topics[topics.length - 1];
+    const lastClause = clause.slice(lastTopic.index);
+    return isScriptedQuestion(lastClause) ? lastClause : clause;
+  };
   const questionEnd = Math.max(source.lastIndexOf("？"), source.lastIndexOf("?"));
   if (questionEnd < 0) {
     // Web Speech APIは疑問符を付けないことが多い。語尾が疑問形なら、
@@ -1324,7 +1333,7 @@ function inspectionLastQuestionClause(text) {
       source.lastIndexOf("！"),
       source.lastIndexOf("!")
     );
-    return source.slice(clauseStart + 1).trim() || source;
+    return lastTopicClause(source.slice(clauseStart + 1).trim() || source);
   }
 
   const beforeQuestion = source.slice(0, questionEnd);
@@ -1340,7 +1349,7 @@ function inspectionLastQuestionClause(text) {
     beforeQuestion.lastIndexOf("!"),
     previousQuestion
   );
-  return source.slice(clauseStart + 1, questionEnd + 1).trim() || source;
+  return lastTopicClause(source.slice(clauseStart + 1, questionEnd + 1).trim() || source);
 }
 
 function isInspectionOperationalNoiseUtterance(text) {
@@ -1613,13 +1622,13 @@ function asksInspectionCallTimingPermission(text) {
     || /(?:お?電話|お話).{0,10}(?:今(?!日)|ただいま|現在)/.test(normalized);
   // 「お時間よろしいですか？」だけでも、具体的な日時を含まなければ
   // 冒頭の通話継続確認として扱う。予約日時や10分の手続き時間とは区別する。
-  const hasBareTimePermission = /(?:お時間|時間)(?:の方)?(?:は)?(?:よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized)
+  const hasBareTimePermission = /(?:お時間|時間)(?:の方)?(?:は)?(?:少し|少々|もう少し)?(?:いただいて)?(?:いい|よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized)
     && !/(?:\d{1,2}(?:月|日|時|分)|午前|午後)/.test(normalized);
   // 「あともう少しだけお電話大丈夫ですか」のように「時間」を省いた
   // 通話継続確認も、持参品など現在工程の了承ではなく質問そのものへ答える。
   const hasContinuedCallPermission = /(?:あと|もう少し).{0,12}(?:お?電話|お話).{0,12}(?:よろしい|大丈夫|構いません|可能)/.test(normalized)
     || /(?:お?電話|お話).{0,12}(?:あと|もう少し).{0,12}(?:よろしい|大丈夫|構いません|可能)/.test(normalized);
-  const asksPermission = /(?:よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized);
+  const asksPermission = /(?:いい|よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized);
   return (hasCurrentCallContext || hasBareTimePermission || hasContinuedCallPermission) && asksPermission;
 }
 
@@ -2482,7 +2491,8 @@ function hasLockNutToolExpression(text) {
 
 function asksCurrentMileage(text) {
   const normalized = normalizeScriptedText(text).toLowerCase();
-  if (!isScriptedQuestion(normalized)) return false;
+  const mileageHowMuch = /(?:走行距離|距離数).{0,12}(?:どのくらい|どれくらい|どのぐらい|どれぐらい)/.test(normalized);
+  if (!isScriptedQuestion(normalized) && !mileageHowMuch) return false;
   return /(?:走行距離|距離数|何(?:キロ|km)|距離.{0,12}(?:乗|走))/.test(normalized);
 }
 
@@ -2553,7 +2563,9 @@ function hasInspectionAvailabilityRequest(text) {
   const asksWhenConvenient = /いつ/.test(normalized)
     && /(?:ご)?都合/.test(normalized)
     && /(?:でしょうか|ですか|ますか|[?？])/.test(normalized);
-  return hasAvailabilityContext && (requestsCustomerChoice || asksWhenConvenient);
+  const asksWhen = /いつ(?:ごろ|頃|が|なら|に)?(?:が|は)?(?:よろしい|良い|いい)/.test(normalized)
+    && isScriptedQuestion(normalized);
+  return hasAvailabilityContext && (requestsCustomerChoice || asksWhenConvenient) || asksWhen;
 }
 
 function hasDirectInspectionBookingInvitation(text) {
@@ -2657,7 +2669,7 @@ function inspectionAppointmentProposalMatch(text) {
   if (dates.length !== 1) return null;
   const date = dates[0];
   const following = normalized.slice(date.end);
-  const timeMatches = [...following.matchAll(/(午前|午後)?(\d{1,2})時(?:(半)|(\d{1,2})分)?/g)];
+  const timeMatches = [...following.matchAll(/(午前|午後)?(\d{1,2})時(?!間)(?:(半)|(\d{1,2})分)?/g)];
   if (timeMatches.length !== 1) return null;
   const timeMatch = timeMatches[0];
   return {
@@ -3816,7 +3828,8 @@ function inspectionPickupReasonFromQuestion(text) {
 
 function inspectionPickupReasonQuestion(text) {
   const normalized = normalizeScriptedText(text);
-  if (!isScriptedQuestion(normalized)) return false;
+  const politeReasonRequest = /(?:理由|事情).{0,24}(?:教えて|お聞かせ|伺い|お聞き).{0,24}(?:いただきた|いただけ|ください|たく)/.test(normalized);
+  if (!isScriptedQuestion(normalized) && !politeReasonRequest) return false;
   // 開放質問に加え、実績で使われた「お仕事でご都合が悪いですか」など、
   // 理由を仮定して確かめる自然な質問も理由確認として扱う。
   return /(?:なぜ|どうして|理由|事情|差し支え|不都合|どのような)/.test(normalized)
@@ -3899,8 +3912,8 @@ function shouldStartInspectionPickupAfterDuration(step, analysis) {
 
 function asksInspectionDirectVisitInvitation(text) {
   const normalized = normalizeScriptedText(text);
-  const hasVisitWording = /(?:ご入庫|入庫|ご入校|入校|ご来店|来店|お越し)/.test(normalized);
-  const asksOrRequestsVisit = /(?:お願い|いただけ|いただき|できます|可能|いかが|よろしい)/.test(normalized);
+  const hasVisitWording = /(?:ご入庫|入庫|ご入校|入校|ご来店|来店|お越し|来ていただ|来てもら|来ること|店(?:で|内で|の方で).{0,8}待)/.test(normalized);
+  const asksOrRequestsVisit = /(?:お願い|いただけ|いただき|いただいて|できます|可能|いかが|よろしい|いいですか)/.test(normalized);
   return hasVisitWording
     && asksOrRequestsVisit
     && (isScriptedQuestion(normalized) || /(?:お願いしたい|お願いでき)/.test(normalized));
@@ -4060,8 +4073,8 @@ function handleInspectionPickupBranchReply(text) {
     // お客様がいったん引取を希望した後でも、スタッフが来店日時や
     // 来店可否を具体的に確認した場合は、通常車検と同じ来店予約へ戻せる。
     // 分岐を解消してから既存17工程をそのまま継続する。
-    const asksVisit = isScriptedQuestion(normalized)
-      && /(?:ご来店|来店いただ|お越し|持って来|持ってき)/.test(normalized);
+    const asksVisit = asksInspectionDirectVisitInvitation(text)
+      || isScriptedQuestion(normalized) && /(?:ご来店|来店いただ|お越し|持って来|持ってき)/.test(normalized);
     // 日時だけの提示は引取日時の調整でも使われるため、来店の明示が
     // ない限り引取から来店へ自動変更しない。
     if (asksVisit) {
@@ -4148,7 +4161,7 @@ function hasInspectionPickupVisitConflict(text) {
     return false;
   }
   const normalized = normalizeScriptedText(text);
-  const mentionsVisit = /(?:ご来店|来店|お越し|店内.{0,8}待)/.test(normalized);
+  const mentionsVisit = /(?:ご来店|来店|お越し|来ていただ|来てもら|店(?:で|内で|の方で).{0,8}(?:お)?待)/.test(normalized);
   const mentionsPickup = /(?:引取|引き取り|取りに伺|自宅.{0,8}伺)/.test(normalized);
   return mentionsVisit && !mentionsPickup;
 }
@@ -4162,6 +4175,9 @@ function confirmInspectionPickupAppointmentCandidate() {
   state.inspectionAppointmentIncomplete = false;
   markScriptedStepPassed(scenario.steps.find((item) => item.key === "proposed_appointment"), candidate.text);
   delete state.scriptedPartialReplies.proposed_appointment;
+  const confirmedCandidateIndex = scenario.steps.findIndex((item) => item.key === "proposed_appointment");
+  state.scriptStep = Math.max(state.scriptStep, confirmedCandidateIndex + 1);
+  state.currentState = scenario.steps[state.scriptStep]?.state || state.currentState;
   return true;
 }
 
@@ -4176,7 +4192,7 @@ function inspectionPickupAppointmentReproposal(text) {
   const previous = state.proposedAppointment || state.inspectionAppointmentCandidate;
   if (!previous) return null;
   const dayMatches = [...normalized.matchAll(/(\d{1,2})日(?!前|後|間)/g)];
-  const timeMatches = [...normalized.matchAll(/(午前|午後)?(\d{1,2})時(?:(半)|(\d{1,2})分)?/g)];
+  const timeMatches = [...normalized.matchAll(/(午前|午後)?(\d{1,2})時(?!間)(?:(半)|(\d{1,2})分)?/g)];
   if (/\d{1,2}月/.test(normalized) || dayMatches.length > 1 || timeMatches.length > 1
     || !dayMatches.length && !timeMatches.length) return null;
   const day = dayMatches[0]?.[1] || previous.day;
@@ -4188,14 +4204,16 @@ function inspectionPickupAppointmentReproposal(text) {
   return { text: completeText, ...inspectionAppointmentProposalMatch(completeText) };
 }
 
-function handleInspectionPickupPriorityReply(text, decisionText) {
+function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly = false) {
   if (isInspectionOperationalNoiseUtterance(text)) return false;
   const concerns = asksInspectionVehicleConcerns(decisionText);
   const callPermission = !concerns && (asksInspectionCallTimingPermission(decisionText)
+    || hasBookingContinuationConfirmation(decisionText)
     || /(?:お?電話|お話).{0,12}(?:よろしい|よろしかった|大丈夫)/.test(normalizeScriptedText(decisionText))
       && asksInspectionCallTimingPermission(text));
   if (callPermission || concerns) {
     rememberFutureScriptedAchievements(text, -1);
+    if (state.inspectionPickupPhase === "resolved") confirmInspectionPickupAppointmentCandidate();
     if (concerns && state.inspectionLoanerRequested && hasInspectionLoanerConfirmation(text, true)) {
       state.inspectionLoanerConfirmed = true;
       state.inspectionWaitingMethod = "loaner";
@@ -4213,6 +4231,49 @@ function handleInspectionPickupPriorityReply(text, decisionText) {
     renderProgress();
     return true;
   }
+  const mileageQuestion = asksCurrentMileage(decisionText);
+  const loanerQuestion = asksInspectionLoanerNeed(decisionText);
+  if (mileageQuestion || loanerQuestion) {
+    rememberFutureScriptedAchievements(text, -1);
+    let response;
+    if (mileageQuestion) {
+      state.inspectionMileageAsked = true;
+      const durationKnown = state.inspectionDurationQuestionAsked || state.transcript.some((message) =>
+        message.role === "staff" && hasSupportedInspectionDuration(message.text));
+      response = durationKnown
+        ? { text: "今、3万キロくらいです。", audioId: "inspection_current_mileage_customer" }
+        : { text: "今、3万キロくらいです。どれくらい時間がかかるのですか？", audioId: "inspection_current_mileage_and_duration_customer" };
+    } else if (state.inspectionWaitingMethod === "store") {
+      response = { text: "待っています。", audioId: "inspection_confirmed_waiting_customer" };
+    } else {
+      state.inspectionWaitingMethod = "loaner";
+      state.inspectionLoanerRequested = true;
+      markScriptedStepPassed(scenario.steps.find((item) => item.key === "confirmed_waiting"), "お客様が代車利用を希望");
+      const preparationOffer = /(?:用意|準備|手配).*(?:ますか|ましょうか|でしょうか)/.test(normalizeScriptedText(decisionText));
+      response = preparationOffer
+        ? { text: "代車を用意してもらえますか？", audioId: "inspection_explained_loaner_retry" }
+        : { text: "お願いします。", audioId: "inspection_booking_invitation_accept_customer" };
+    }
+    if (state.inspectionPickupPhase === "resolved") confirmInspectionPickupAppointmentCandidate();
+    state.turn += 1;
+    addMessage("customer", response.text, { audioId: response.audioId });
+    renderProgress();
+    return true;
+  }
+  if (state.inspectionPickupActive && ["location", "confirmation"].includes(state.inspectionPickupPhase)
+    && !asksInspectionDirectVisitInvitation(text) && !hasInspectionPickupVisitConflict(text)
+    && !hasInspectionAppointmentProposalEvidence(text)
+    && !/(?:どこ|どちら|場所|自宅|職場|住所|引取先|引き取り先)/.test(normalizeScriptedText(decisionText))
+    && (hasSupportedInspectionDuration(text)
+      || inspectionPickupProposalEvidence(text, state.inspectionPickupReason).alternative)) {
+    // 店舗・時間の補足だけでは受付方法を変えず、説明済み時間も聞き直さない。
+    rememberFutureScriptedAchievements(text, -1);
+    state.turn += 1;
+    addMessage("customer", "はい。", { audioId: "inspection_thanked_customer_retry" });
+    renderProgress();
+    return true;
+  }
+  if (questionsOnly) return false;
   const proposal = inspectionPickupAppointmentReproposal(text)
     || (!state.proposedAppointment && hasCompleteInspectionAppointmentProposal(text)
       && !/(?:最後|最終|復唱)/.test(normalizeScriptedText(text))
@@ -4329,6 +4390,7 @@ function handleScriptedStaffReply(text) {
     }
   }
   // 引取納車の応用分岐は新シナリオでのみ有効。既存の車検誘致には影響させない。
+  if (isPickupInspectionScenario() && handleInspectionPickupPriorityReply(text, decisionText, true)) return;
   if (handleInspectionPickupBranchReply(text)) {
     if (state.inspectionPickupPhase === "resolved") confirmInspectionPickupAppointmentCandidate();
     return;
