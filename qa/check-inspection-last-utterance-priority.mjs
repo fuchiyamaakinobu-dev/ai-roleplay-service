@@ -57,5 +57,22 @@ for (const standard of [false, true]) {
   currentTurn.say('トヨタモビリティ帯広本別店の寺谷と申します');
   currentTurn.say('日頃はお世話になり誠にありがとうございます');
   assert.equal(currentTurn.say('ヤリスの車検が近くなりましたがご都合はいかがでしょうか').text, 'お願いしたいんですけど、いつできますか？');
+
+  const call = session();
+  if (standard) call.run('scenario=window.VEHICLE_INSPECTION_SCENARIO');
+  call.say('佐藤様のお電話でしょうか？');
+  assert.equal(call.say('トヨタモビリティ帯広本別店の寺谷と申します。今、お電話よろしいでしょうか？').text, '大丈夫ですよ。');
+  assert.equal(call.run('inspectionConversationMetricAchieved("introduced_self")'), true);
+  assert.equal(call.say('今、お電話よろしいでしょうか？ヤリスの車検のご都合はいかがでしょうか？').text, 'お願いしたいんですけど、いつできますか？');
 }
+
+const repeatedReason = session(2);
+repeatedReason.say('9月10日9時30分はいかがでしょうか？');
+const reasonText = repeatedReason.say('ご来店が難しい理由を教えていただけますか？').text;
+assert.match(reasonText, /運転に自信/);
+assert.equal(repeatedReason.say('引き取りをご希望ですね。ご来店が難しい理由を教えていただけますか？').text, reasonText);
+assert.equal(repeatedReason.run('state.inspectionPickupPhase'), 'proposal');
+assert.equal(repeatedReason.say('ご家族の方と一緒に来ることは可能ですか？').text, 'それなら、お店に持って行きます。');
+assert.equal(repeatedReason.run('state.inspectionPickupOutcome'), 'visit');
+assert.equal(repeatedReason.run('state.proposedAppointment.day'), '10');
 console.log('複合発話: 最後の質問だけに一度回答し、原文と前半の達成を保持 OK');

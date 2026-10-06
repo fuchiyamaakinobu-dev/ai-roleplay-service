@@ -4023,10 +4023,12 @@ function handleInspectionPickupBranchReply(text) {
 
   if (state.inspectionPickupPhase === "proposal") {
     const evidence = inspectionPickupProposalEvidence(text, state.inspectionPickupReason);
-    if (!evidence.acknowledged && !evidence.alternative && !evidence.choicePreserved) {
+    if (!evidence.alternative && asksInspectionDirectVisitInvitation(text)
+      || !evidence.acknowledged && !evidence.alternative && !evidence.choicePreserved) {
       // 運転不安・距離などの事情に合う代替案も、引取を選べる説明もない
       // 一方的な来店依頼には同意せず、既存音声で引取希望を維持する。
       if (!asksInspectionDirectVisitInvitation(text)) return false;
+      markInspectionPickupMetric("pickup_circumstance_acknowledged", evidence.acknowledged, text);
       state.inspectionPickupOutcome = "pickup";
       state.inspectionPickupPhase = "location";
       state.turn += 1;
@@ -4205,6 +4207,37 @@ function inspectionPickupAppointmentReproposal(text) {
 }
 
 function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly = false) {
+  // 理由相談中でも、最後に引取場所を尋ねられたら自宅を回答する。
+  if (state.inspectionPickupActive && isScriptedQuestion(decisionText)
+    && /(?:引取|引き取り|取りに)/.test(normalizeScriptedText(decisionText))
+    && /(?:場所|住所|引取先|引き取り先)/.test(normalizeScriptedText(decisionText))
+    && /(?:どこ|どちら)/.test(normalizeScriptedText(decisionText))) {
+    rememberFutureScriptedAchievements(text, -1);
+    state.inspectionPickupOutcome = "pickup";
+    state.inspectionPickupPhase = "confirmation";
+    state.turn += 1;
+    addMessage("customer", "自宅に取りに来てもらえますか？", {
+      audioId: "inspection_pickup_location_customer"
+    });
+    renderProgress();
+    return true;
+  }
+  // 理由を一度伝えた後の聞き直しにも、同じ事情を答える。受付状態は変えない。
+  if (state.inspectionPickupActive && state.inspectionPickupReason
+    && inspectionPickupReasonQuestion(decisionText)
+    && (!asksInspectionDirectVisitInvitation(decisionText)
+      || /(?:なぜ|どうして|理由|事情)/.test(normalizeScriptedText(decisionText)))
+    && !hasInspectionAppointmentProposalEvidence(decisionText)) {
+    const reason = inspectionPickupReasons.find((item) => item.key === state.inspectionPickupReason);
+    if (reason) {
+      rememberFutureScriptedAchievements(text, -1);
+      markInspectionPickupMetric("pickup_reason_confirmed", true, text);
+      state.turn += 1;
+      addMessage("customer", reason.text, { audioId: reason.audioId });
+      renderProgress();
+      return true;
+    }
+  }
   if (isInspectionOperationalNoiseUtterance(text)) return false;
   const concerns = asksInspectionVehicleConcerns(decisionText);
   const callPermission = !concerns && (asksInspectionCallTimingPermission(decisionText)
@@ -4478,7 +4511,9 @@ function handleScriptedStaffReply(text) {
   // 「今お電話よろしいですか」のような通話可否は、現在の採点工程に
   // 関係なく実際の質問へ明確に回答する。
   if (
-    asksInspectionCallTimingPermission(decisionText)
+    (asksInspectionCallTimingPermission(decisionText)
+      || /(?:お?電話|お話).{0,12}(?:よろしい|よろしかった|大丈夫)/.test(normalizeScriptedText(decisionText))
+        && asksInspectionCallTimingPermission(text))
     && !hasInspectionAppointmentProposalEvidence(text)
   ) {
     // 車検案内など現在工程の説明と通話可否確認が同じ発話に含まれる場合、
@@ -5544,7 +5579,9 @@ function handleScriptedStaffReply(text) {
   }
   if (
     !customerResponseOverride
-    && asksInspectionCallTimingPermission(decisionText)
+    && (asksInspectionCallTimingPermission(decisionText)
+      || /(?:お?電話|お話).{0,12}(?:よろしい|よろしかった|大丈夫)/.test(normalizeScriptedText(decisionText))
+        && asksInspectionCallTimingPermission(text))
     && !hasInspectionAppointmentProposalEvidence(text)
   ) {
     customerResponseOverride = {
@@ -5676,7 +5713,7 @@ function hasConfirmedInspectionAppointmentRecap(text) {
     && Number(match.minute || 0) === Number(appointment.minute || 0)
     && appointmentPeriodsMatch(appointment, match)
     && inspectionAppointmentRouteMatchesRecap(text)
-    && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います)/.test(normalizeScriptedText(text));
+    && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います|(?:引取|引き取り|取りに).{0,12}伺う.{0,12}(?:予約|予定))/.test(normalizeScriptedText(text));
 }
 
 function handleReply(event) {

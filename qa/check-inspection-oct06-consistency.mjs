@@ -70,4 +70,30 @@ const mileage = session();
 assert.match(mileage.say('かしこまりました、ヤリスの走行距離どのくらい乗れてます').text, /今、3万キロ/);
 assert.equal(mileage.run('asksCurrentMileage("走行距離は3万キロです")'), false);
 assert.equal(mileage.say('このまま少々お時間いただいていいですか').text, '大丈夫ですよ。');
+const far = session(1);
+far.run('state.inspectionPickupActive=true; state.inspectionPickupPhase="proposal"; state.inspectionPickupReason="distance"');
+assert.equal(far.say('遠くて持って行くのが大変なのですね。9月20日10時にご来店いただけますか？').text, '今回は引き取りでお願いしたいです。');
+assert.equal(far.run('state.inspectionPickupOutcome'), 'pickup');
+assert.equal(far.run('inspectionConversationMetricAchieved("pickup_circumstance_acknowledged")'), true);
+assert.equal(far.say('お車の引取場所はどちらになりますか？').text, '自宅に取りに来てもらえますか？');
+assert.equal(far.run('state.inspectionPickupPhase'), 'confirmation');
+assert.equal(far.say('かしこまりました。ご自宅への引き取りを承ります。').text, 'はい、お願いします。');
+far.say('9月20日10時にご自宅へ引き取りに伺う予定で、いかがでしょうか？');
+far.say('変更して9月21日10時30分にご自宅へ引き取りに伺う予定ではいかがでしょうか？');
+assert.equal(far.run('state.proposedAppointment.day'), '21');
+assert.equal(far.run('state.proposedAppointment.minute'), 30);
+for (const [text, expected] of [
+  ['佐藤様、9月21日10時30分にご自宅へ引き取りに伺うご予約です。よろしくお願いいたします。', true],
+  ['佐藤様、9月20日10時30分にご自宅へ引き取りに伺うご予約です。', false],
+  ['佐藤様、9月21日10時にご自宅へ引き取りに伺うご予約です。', false],
+  ['佐藤様、9月21日10時30分にご来店のご予約です。お待ちしております。', false],
+  ['9月21日10時30分にご自宅へ引き取りに伺うご予約です。', false]
+]) {
+  far.context.recapInput=text;
+  assert.equal(far.run('hasConfirmedInspectionAppointmentRecap(recapInput)'),expected,text);
+}
+const directLocation = session(1);
+directLocation.run('state.inspectionPickupActive=true; state.inspectionPickupPhase="proposal"; state.inspectionPickupReason="distance"');
+assert.equal(directLocation.say('お車の引取場所はどちらになりますか？').text, '自宅に取りに来てもらえますか？');
+assert.equal(directLocation.run('state.inspectionPickupPhase'), 'confirmation');
 console.log('10月6日再現: 引取・来店整合性、通話可否、都合確認、理由質問、日時保持、誤復唱未達 OK');
