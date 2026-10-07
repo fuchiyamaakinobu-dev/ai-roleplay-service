@@ -3836,7 +3836,7 @@ function inspectionPickupAcknowledgesReason(normalized, reason) {
     return /(?:仕事|勤務|平日|忙し|時間が取れ).{0,20}(?:大変|難しい|ご負担|なのですね|んですね|承知)/.test(normalized);
   }
   if (reason === "distance") {
-    return /(?:遠い|距離|持って行くのが大変).{0,20}(?:大変|難しい|ご負担|なのですね|んですね|承知)/.test(normalized);
+    return /(?:遠い|遠く|距離|持って行くのが大変).{0,20}(?:大変|難しい|ご負担|なのですね|んですね|承知)/.test(normalized);
   }
   if (reason === "driving") {
     return /(?:運転|自信|不安).{0,20}(?:ご不安|心配|大変|難しい|なのですね|んですね|承知)/.test(normalized);
@@ -3857,7 +3857,7 @@ function inspectionPickupProposalEvidence(text, reason) {
   const alternative = Boolean(
     reasonDefinition?.alternatives.some((word) => normalized.includes(word))
     || ["distance", "driving"].includes(reason)
-      && /(?:近く|近隣).{0,20}(?:店舗|店)/.test(normalized)
+      && /(?:近く|近い|近隣).{0,20}(?:店舗|店)/.test(normalized)
   );
   const choicePreserved = /(?:引取|引き取り|取りに)/.test(normalized)
     && /(?:来店|お越し|持って)/.test(normalized)
@@ -3977,6 +3977,8 @@ function handleInspectionPickupBranchReply(text) {
     || /(?:承ります|受付(?:します|いたします)|手配(?:します|いたします)).{0,20}(?:引取|引き取り|取りに)/.test(normalized);
   if (
     directlyAcceptsPickup
+    && !(inspectionPickupProposalEvidence(text, state.inspectionPickupReason).proposal
+      && /(?:難しい場合|難しければ|無理な場合)/.test(normalized))
     && !inspectionPickupReasonQuestion(text)
     && ["reason", "proposal", "location"].includes(state.inspectionPickupPhase)
   ) {
@@ -4206,7 +4208,7 @@ function inspectionPickupAppointmentReproposal(text) {
 
 function inspectionVisitStoreName(text) {
   const normalized = normalizeScriptedText(text);
-  const matches = [...normalized.matchAll(/(?:^|[、。]|に|の|は)([一-龯ァ-ヶーA-Za-z0-9]{1,16}店)(?=という|に|で|へ|の|[、。]|$)/g)];
+  const matches = [...normalized.matchAll(/(?:^|[、。]|近い|近くの|に|の|は)([一-龯ァ-ヶーA-Za-z0-9]{1,16}店)(?=という|に|で|へ|の|[、。]|$)/g)];
   return matches.map((match) => match[1]).find((name) => !/^(?:店舗|近隣店|最寄店)$/.test(name)) || null;
 }
 
@@ -6220,7 +6222,8 @@ function scoreScriptedRoleplay() {
     .filter((metric) => achieved[metric.key])
     .map((metric) => `${metric.action}ことができています`);
   const improve = applicableScoring
-    .filter((metric) => !achieved[metric.key])
+    .filter((metric) => !achieved[metric.key]
+      && !(recapDateMismatch && metric.key === "recapped_appointment"))
     .map((metric) => {
       if (metric.key === "explained_duration_and_wait" && !state.inspectionMileageAsked) {
         return "作業時間を判断するため、現在の走行距離を確認することを意識すると、より良い応対になります";
