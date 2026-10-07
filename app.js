@@ -820,7 +820,7 @@ function commitMessage(role, text, options = {}) {
     } else if (
       els.audioEnabled.checked
       && scenario.id !== "service-12month-visit-promotion"
-      && !isVehicleInspectionScenario()
+      && (!isVehicleInspectionScenario() || options.allowSpeechSynthesis === true)
     ) {
       speakCustomerText(message.text, onCustomerFinished);
     } else if (onCustomerFinished) {
@@ -2499,7 +2499,7 @@ function asksCurrentMileage(text) {
 function hasBookingContinuationConfirmation(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
-  const asksPermission = /(?:よろしい|大丈夫|ありますか|ございます|いただけ(?:ます|る)|構いません|構わない)/.test(normalized)
+  const asksPermission = /(?:よろしい|よろしかった|大丈夫|ありますか|ございます|いただけ(?:ます|る)|構いません|構わない)/.test(normalized)
     || /(?:予約|手続き).{0,24}いかが(?:でしょうか|ですか)/.test(normalized);
   if (!asksPermission) return false;
   const hasTimeContext = /(?:10分|十分|もう少し|少し|お時間)/.test(normalized);
@@ -2509,14 +2509,14 @@ function hasBookingContinuationConfirmation(text) {
   // 単なる予約日時の提案（「9月11日10時でよろしいですか」）は、
   // 予約手続きに必要な時間・継続可否の確認として加点しない。
   // 現在の予約手続き工程では「もう少しお時間ありますか」も自然な確認として扱う。
-  // 会話全体から採点を回収するときは、下の明示判定で予約・手続き語も必須にする。
+  // 会話全体からの採点では、予約手続きまたは車検説明を続ける文脈を確認する。
   return hasTimeContext || (hasBookingContext && explicitlyAsksToContinue);
 }
 
 function hasExplicitBookingContinuationConfirmation(text) {
   const normalized = normalizeScriptedText(text);
   return hasBookingContinuationConfirmation(normalized)
-    && /(?:予約|手続き)/.test(normalized)
+    && /(?:予約|手続き|このまま.{0,30}(?:車検|説明)|車検.{0,20}説明)/.test(normalized)
     && /(?:10分|十分|もう少し|少し|お時間)/.test(normalized);
 }
 
@@ -2557,7 +2557,7 @@ function hasInspectionAvailabilityRequest(text) {
   // 「ご都合の良い日を教えていただければと思います」のように、
   // 疑問形ではなく依頼形で希望日を尋ねる自然な電話表現も都合確認とする。
   const hasAvailabilityContext = /(?:ご)?都合|(?:ご)?予定|希望(?:日|日時)|日程/.test(normalized);
-  const requestsCustomerChoice = /(?:いかが|よろしい|教えて|お聞かせ|伺え|伺い|伺いた|お知らせ|ご提示|いただければ|お願い(?:いた)?します)/.test(normalized);
+  const requestsCustomerChoice = /(?:いかが|よろしい|よろしかった|教えて|お聞かせ|伺え|伺い|伺いた|お知らせ|ご提示|いただければ|お願い(?:いた)?します)/.test(normalized);
   // 「いつがご都合良いでしょうか」のような一般的な疑問形は、
   // 「よろしい」を含まなくても明確な都合確認である。
   const asksWhenConvenient = /いつ/.test(normalized)
@@ -3890,7 +3890,11 @@ function markPickupRouteBaseStepsNotApplicable() {
   state.currentState = scenario.steps[state.scriptStep]?.state || state.currentState;
 }
 
-function inspectionPickupVisitResponse(reason) {
+function inspectionPickupVisitResponse(reason, text = "") {
+  if (/(?:近く|近い|近隣|最寄り).{0,20}(?:店舗|店)/.test(normalizeScriptedText(text))
+    && !inspectionVisitStoreName(text)) {
+    return { text: "近くのお店は、どちらのお店になりますか？" };
+  }
   if (reason === "work") {
     return state.variantSeed % 2 === 0
       ? { text: "土日なら持って行けるかもしれません。", audioId: "inspection_pickup_visit_weekend" }
@@ -4062,8 +4066,8 @@ function handleInspectionPickupBranchReply(text) {
     } else {
       state.inspectionPickupActive = false;
       state.inspectionPickupPhase = "resolved";
-      const response = inspectionPickupVisitResponse(state.inspectionPickupReason);
-      addMessage("customer", response.text, { audioId: response.audioId });
+      const response = inspectionPickupVisitResponse(state.inspectionPickupReason, text);
+      addMessage("customer", response.text, { audioId: response.audioId, allowSpeechSynthesis: !response.audioId });
       els.speechNote.textContent = "来店で進めることに同意しました。通常の車検予約へ続けてください。";
     }
     renderProgress();
@@ -4109,8 +4113,8 @@ function handleInspectionPickupBranchReply(text) {
             text: "では、その日でお願いします。",
             audioId: "inspection_proposed_appointment_customer"
           }
-        : inspectionPickupVisitResponse(state.inspectionPickupReason);
-      addMessage("customer", response.text, { audioId: response.audioId });
+        : inspectionPickupVisitResponse(state.inspectionPickupReason, text);
+      addMessage("customer", response.text, { audioId: response.audioId, allowSpeechSynthesis: !response.audioId });
       els.speechNote.textContent = "来店で進めることに同意しました。通常の車検予約へ続けてください。";
       renderProgress();
       return true;
@@ -4206,6 +4210,32 @@ function inspectionPickupAppointmentReproposal(text) {
   return { text: completeText, ...inspectionAppointmentProposalMatch(completeText) };
 }
 
+function inspectionVisitStoreName(text) {
+  const normalized = normalizeScriptedText(text);
+  const matches = [...normalized.matchAll(/(?:^|[、。]|に|の|は)([一-龯ァ-ヶーA-Za-z0-9]{1,16}店)(?=という|に|で|へ|の|[、。]|$)/g)];
+  return matches.map((match) => match[1]).find((name) => !/^(?:店舗|近隣店|最寄店)$/.test(name)) || null;
+}
+
+function inspectionVisitStoreSelection() {
+  let selected = null;
+  for (let index = 0; index < state.transcript.length; index += 1) {
+    const message = state.transcript[index];
+    if (message.role !== "staff") continue;
+    const text = normalizeScriptedText(message.text);
+    const reply = state.transcript[index + 1];
+    if (/(?:近く|近い|近隣|最寄り).{0,20}(?:店舗|店)/.test(text)
+      && reply?.role === "customer"
+      && /(?:それなら、お店に持って行きます|近くのお店は、どちらのお店)/.test(reply.text)) {
+      selected = { name: inspectionVisitStoreName(text) };
+    } else if (selected && !selected.name
+      && !/(?:最後|最終|復唱)/.test(text)
+      && /(?:来店|お越し|店舗|店で|店に)/.test(text)) {
+      selected.name = inspectionVisitStoreName(text);
+    }
+  }
+  return selected;
+}
+
 function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly = false) {
   // 理由相談中でも、最後に引取場所を尋ねられたら自宅を回答する。
   if (state.inspectionPickupActive && isScriptedQuestion(decisionText)
@@ -4239,6 +4269,32 @@ function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly =
     }
   }
   if (isInspectionOperationalNoiseUtterance(text)) return false;
+  if (!questionsOnly && state.inspectionPickupOutcome === "visit") {
+    const selectedStore = inspectionVisitStoreSelection();
+    const recapStore = inspectionVisitStoreName(text);
+    if (selectedStore && /(?:最後|最終|復唱|確認させて)/.test(normalizeScriptedText(text))
+      && (!selectedStore.name || recapStore && recapStore !== selectedStore.name)) {
+      state.turn += 1;
+      // 店舗名によって文章が変わるため、登録済みMP3を流用せず音声合成を使う。
+      addMessage("customer", selectedStore.name
+        ? `ご案内いただいた${selectedStore.name}の予約ではありませんか？`
+        : "近くのお店は、どちらのお店になりますか？", { allowSpeechSynthesis: true });
+      els.speechNote.textContent = "来店先の店舗を確認し、同じ店舗名で予約を復唱してください。";
+      renderProgress();
+      return true;
+    }
+    if (state.inspectionWaitingMethod === "loaner"
+      && (asksInspectionWaitingMethodConfirmation(decisionText)
+        || hasSupportedInspectionDuration(text) && /(?:店内|お待ちいただ(?:く|いて))/.test(normalizeScriptedText(text)))
+      && !asksInspectionLoanerNeed(decisionText)) {
+      rememberFutureScriptedAchievements(text, -1);
+      state.turn += 1;
+      addMessage("customer", "代車を用意してもらえますか？", { audioId: "inspection_explained_loaner_retry" });
+      els.speechNote.textContent = "お客様は代車を希望しています。店内待ちへ変更せず、代車利用で案内してください。";
+      renderProgress();
+      return true;
+    }
+  }
   const concerns = asksInspectionVehicleConcerns(decisionText);
   const callPermission = !concerns && (asksInspectionCallTimingPermission(decisionText)
     || hasBookingContinuationConfirmation(decisionText)
@@ -5696,6 +5752,8 @@ function inspectionAppointmentRouteMatchesRecap(text) {
       && !/(?:ご来店|来店|店内.{0,8}待)/.test(normalized);
   }
   if (state.inspectionPickupOutcome === "visit") {
+    const selectedStore = inspectionVisitStoreSelection();
+    if (selectedStore && (!selectedStore.name || inspectionVisitStoreName(text) !== selectedStore.name)) return false;
     return /(?:ご来店|来店|お越し|店内.{0,8}待)/.test(normalized);
   }
   return true;
