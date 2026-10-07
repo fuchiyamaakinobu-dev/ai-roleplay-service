@@ -817,12 +817,6 @@ function commitMessage(role, text, options = {}) {
       : startSpeechInputAfterCustomer;
     if (els.audioEnabled.checked && message.audioSrc) {
       playAudio(message.audioSrc, message.text, false, onCustomerFinished);
-    } else if (
-      els.audioEnabled.checked
-      && scenario.id !== "service-12month-visit-promotion"
-      && (!isVehicleInspectionScenario() || options.allowSpeechSynthesis === true)
-    ) {
-      speakCustomerText(message.text, onCustomerFinished);
     } else if (onCustomerFinished) {
       onCustomerFinished();
     }
@@ -4407,6 +4401,13 @@ function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly =
 }
 
 function handleScriptedStaffReply(text) {
+  // 日付の食い違いは会話中に訂正せず、最後の復唱を採点する。
+  if (state.proposedAppointment && hasScriptedAppointmentRecapEvidence(text)
+    && !inspectionPickupAppointmentReproposal(text)) {
+    state.analyses.push({ appointmentRecapCheck: true,
+      dateMismatch: !confirmedInspectionAppointmentMatches(text), evidence: [text] });
+  }
+
   const startingScriptStep = state.scriptStep;
   const step = scenario.steps[state.scriptStep];
   if (!step) {
@@ -4707,7 +4708,8 @@ function handleScriptedStaffReply(text) {
     const waitingStep = scenario.steps.find((candidate) => candidate.key === "confirmed_waiting");
     markScriptedStepPassed(waitingStep, "お客様が代車利用を希望");
     state.turn += 1;
-    const preparationOffer = /(?:用意|準備|手配).*(?:ますか|ましょうか|でしょうか)/.test(normalizeScriptedText(text));
+    const preparationOffer = /(?:用意|準備|手配).*(?:ますか|ましょうか|でしょうか)/.test(normalizeScriptedText(text))
+      && !/(?:用意|準備|手配)できます/.test(normalizeScriptedText(text));
     addMessage("customer", preparationOffer ? "代車を用意してもらえますか？" : "お願いします。", {
       audioId: preparationOffer ? "inspection_explained_loaner_retry" : "inspection_booking_invitation_accept_customer"
     });
@@ -5771,7 +5773,7 @@ function hasConfirmedInspectionAppointmentRecap(text) {
     && Number(match.minute || 0) === Number(appointment.minute || 0)
     && appointmentPeriodsMatch(appointment, match)
     && inspectionAppointmentRouteMatchesRecap(text)
-    && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います|(?:引取|引き取り|取りに).{0,12}伺う.{0,12}(?:予約|予定))/.test(normalizeScriptedText(text));
+    && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|予約です|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います|(?:引取|引き取り|取りに).{0,12}伺う.{0,12}(?:予約|予定))/.test(normalizeScriptedText(text));
 }
 
 function handleReply(event) {
@@ -6162,6 +6164,10 @@ function inspectionSpecificImprovement(metricKey) {
   return "";
 }
 
+function lastInspectionRecapDateMismatch() {
+  return state.analyses.filter(item => item.appointmentRecapCheck).at(-1)?.dateMismatch === true;
+}
+
 function scoreScriptedRoleplay() {
   const notApplicableKeys = new Set(
     state.analyses
@@ -6180,6 +6186,9 @@ function scoreScriptedRoleplay() {
       || (typeof inspectionConversationMetricAchieved === "function"
         && inspectionConversationMetricAchieved(metric.key));
   });
+
+  const recapDateMismatch = state.analyses.filter(item => item.appointmentRecapCheck).at(-1)?.dateMismatch === true;
+  if (recapDateMismatch) achieved.recapped_appointment = false;
 
   const retryCount = state.analyses.filter((analysis) =>
     analysis.scripted
@@ -6232,6 +6241,10 @@ function scoreScriptedRoleplay() {
     improve.unshift("具体的な入庫日と来店時間が確定していません（最低条件未達：20点減点）");
   }
 
+  if (recapDateMismatch) {
+    improve.unshift("日付の案内が曖昧です。予約時と最終確認の日時が一致していません（予約復唱5点は未達・合計点は対象配点で100点換算）。");
+  }
+
   const judgements = scenario.scoring.map((metric) => {
     const attempts = state.analyses.filter((analysis) =>
       analysis.stepKey === metric.key && analysis.notApplicable !== true
@@ -6251,7 +6264,9 @@ function scoreScriptedRoleplay() {
     recommendedTalkTitle: "推奨トーク",
     recommendedTalk: scenario.recommendedTalk,
     judgements,
-    summary: minimumAppointmentMissing
+    summary: recapDateMismatch
+      ? "日付の案内が曖昧です。会話は完了しましたが、確定日時と最終確認が一致しないため予約復唱を未達として減点しました。"
+      : minimumAppointmentMissing
       ? "具体的な入庫日と来店時間が未確定です。会話は完了しましたが、予約確定の最低条件未達として大幅減点しました。"
       : score >= 90
       ? "車検誘致の電話応対を、予約確定から事前案内まで正確に完結できています。"

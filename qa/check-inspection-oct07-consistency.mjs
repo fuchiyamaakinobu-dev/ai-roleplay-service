@@ -55,7 +55,7 @@ assert.equal(named.run('state.ended'),true);
 const audio=session();
 audio.run('renderConversation=()=>{};els.audioEnabled.checked=true;startSpeechInputAfterCustomer=()=>{};speakCustomerText=(text)=>{window.spoken=text}');
 audio.run('commitMessage("customer","近くのお店は、どちらのお店になりますか？",{allowSpeechSynthesis:true})');
-assert.equal(audio.run('window.spoken'),'近くのお店は、どちらのお店になりますか？','新規の店舗確認文だけ音声合成を許可');
+assert.equal(audio.run('window.spoken'),undefined,'ユーザー指定により店舗確認も音声合成を使用しない');
 audio.run('window.spoken=null;commitMessage("customer","未登録の通常車検発話")');
 assert.equal(audio.run('window.spoken'),null,'既存の通常車検の音声動作は維持');
 console.log('10月7日: 都合・説明時間の採点回収、店舗確認・復唱一致、代車希望保持 OK');
