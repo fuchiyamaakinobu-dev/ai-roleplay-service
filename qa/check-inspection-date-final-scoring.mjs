@@ -43,3 +43,5 @@ assert.ok(!fixed.run('scoreScriptedRoleplay().improve').some(x=>x.includes('日�
 const loaner=session();
 assert.equal(loaner.say('代車をご用意できますが、必要でしょうか？').text,'お願いします。');
 console.log('最終日時不一致の減点・訂正回復・終話継続・代車受諾 OK');
+
+assert.doesNotMatch(source,/speakCustomerText\(message\.text/,"自動再生・再生ボタンとも音声合成を呼ばない");

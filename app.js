@@ -6621,8 +6621,8 @@ els.conversation.addEventListener("click", (event) => {
     const onFinished = shouldRestartMic ? startSpeechInputAfterCustomer : null;
     if (message.audioSrc) {
       playAudio(message.audioSrc, message.text, true, onFinished);
-    } else {
-      speakCustomerText(message.text, onFinished);
+    } else if (onFinished) {
+      onFinished();
     }
   }
 });
