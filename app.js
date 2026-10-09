@@ -3948,7 +3948,7 @@ function startInspectionPickupRequest(note) {
   if (!state.inspectionPickupPhase && (!state.inspectionMileageAsked || !hasInspectionOilChangeRequest()
     || (inspectionHighMileage()
       ? !(inspectionHighMileagePlanExplained() && inspectionHighMileageLoanerExplained())
-      : !hasSupportedInspectionDuration(latestStaff) || !/(?:店内|お待ち|待ち車検)/.test(normalizeScriptedText(latestStaff))))) {
+      : !inspectionWaitingPlanExplained(latestStaff)))) {
     addMessage("customer", "はい。", { audioId: "inspection_thanked_customer_retry" });
     return;
   }
@@ -4183,10 +4183,13 @@ function hasInspectionPickupVisitConflict(text) {
   return mentionsVisit && !mentionsPickup;
 }
 
-function confirmInspectionPickupAppointmentCandidate() {
+function confirmInspectionPickupAppointmentCandidate(allowPreparationSkip = false) {
   const candidate = state.inspectionAppointmentCandidate;
-  if (!candidate || state.inspectionPickupPhase !== "resolved") return false;
+  if (!candidate || (state.inspectionPickupPhase !== "resolved"
+    && !(allowPreparationSkip && !state.inspectionPickupPhase && !state.inspectionPickupActive))) return false;
   if (inspectionAppointmentBeforeAvailableFrom(candidate.text)) return false;
+  // 案内が後工程へ進んだ場合も日時は保持する。省略した引取相談の得点は付けない。
+  if (allowPreparationSkip && !state.inspectionPickupPhase) state.inspectionPickupPhase = "resolved";
   const { month, day, hour, minute, period } = candidate;
   state.proposedAppointment = { month, day, hour, minute, period };
   state.inspectionAppointmentIncomplete = false;
@@ -4442,6 +4445,12 @@ function inspectionHighMileageLoanerExplained() {
     && !/(?:できません|できない|ありません|不要|必要ですか)/.test(normalizeScriptedText(message.text)));
 }
 
+function inspectionWaitingPlanExplained(text) {
+  const waiting = /(?:店内|お待ち|待ち車検)/.test(normalizeScriptedText(text))
+    && !/(?:待てません|待つことはできません|お待ちいただけません)/.test(normalizeScriptedText(text));
+  return waiting && state.transcript.some(item => item.role === "staff" && hasSupportedInspectionDuration(item.text));
+}
+
 function handleInspectionPickupPreparation(text, decisionText) {
   if (!isPickupInspectionScenario() || state.inspectionPickupPhase || state.inspectionPickupActive) return false;
   const normalized = normalizeScriptedText(text);
@@ -4474,16 +4483,20 @@ function handleInspectionPickupPreparation(text, decisionText) {
       startInspectionPickupRequest("預かり方法と代車の案内を受けて引取希望へ進みました。");
       return true;
     }
-    if (asksInspectionLoanerNeed(text) || /(?:店内|お待ち|待ち車検|代車)/.test(normalized)) {
+    if (asksInspectionLoanerNeed(decisionText) || /(?:店内|お待ち|待ち車検|代車)/.test(normalized)) {
       state.inspectionWaitingMethod = "loaner";
       state.inspectionLoanerRequested = true;
+      if (inspectionHighMileageLoanerExplained() && !asksInspectionWaitingMethodConfirmation(decisionText)) {
+        state.inspectionLoanerConfirmed = true;
+        return reply("はい。", "inspection_thanked_customer_retry");
+      }
       return reply("代車を用意してもらえますか？", "inspection_explained_loaner_retry");
     }
     if (/(?:預かり|ワンデー|1日|一日)/.test(normalized)) return reply("はい。", "inspection_thanked_customer_retry");
   }
   const waitingOffer = /(?:店内|お待ち|待ち車検)/.test(normalized)
     && !/(?:待てません|待つことはできません|お待ちいただけません)/.test(normalized);
-  if (oilRequested && state.inspectionMileageAsked && hasSupportedInspectionDuration(text) && waitingOffer) {
+  if (!inspectionHighMileage() && oilRequested && state.inspectionMileageAsked && inspectionWaitingPlanExplained(text)) {
     rememberFutureScriptedAchievements(text, -1);
     startInspectionPickupRequest("追加作業を踏まえた待ち車検の案内を受け、引取希望を伝えました。");
     return true;
@@ -4506,6 +4519,41 @@ function handleInspectionPickupPreparation(text, decisionText) {
 }
 
 function handleScriptedStaffReply(text) {
+  if (isPickupInspectionScenario()) {
+    const question = inspectionLastQuestionClause(text);
+    const normalized = normalizeScriptedText(text);
+    const permission = hasExplicitBookingContinuationConfirmation(text)
+      || asksInspectionCallTimingPermission(question);
+    const aftercare = /(?:車検証|自賠責|納税証明|荷室|荷物|空荷|ロックナット)/.test(normalized);
+    // 先に提示済みの日時を、当日案内や最終確認へ進んだ時点で引き継ぐ。
+    // 引取相談が進行中の場合は、受付方法を勝手に確定しない。
+    if (state.inspectionAppointmentCandidate && !state.proposedAppointment
+      && (aftercare || hasScriptedAppointmentRecapEvidence(text) || isInspectionFinalClosingThanks(text))) {
+      confirmInspectionPickupAppointmentCandidate(true);
+      if (!state.proposedAppointment && isInspectionFinalClosingThanks(text)) {
+        // 日時候補はあるが引取受付が未解決。日時を再質問せず未確定として採点する。
+        state.inspectionAppointmentIncomplete = true;
+      }
+    }
+    if (inspectionHighMileage() && inspectionHighMileageLoanerExplained()) {
+      state.inspectionWaitingMethod = "loaner";
+      state.inspectionLoanerRequested = true;
+      state.inspectionLoanerConfirmed = true;
+    }
+    if (permission && !asksCurrentMileage(question) && !asksInspectionVehicleConcerns(question)
+      && !isInspectionFinalClosingThanks(text)) {
+      const candidate = inspectionPickupAppointmentReproposal(text)
+        || (!state.proposedAppointment && hasCompleteInspectionAppointmentProposal(text)
+          ? { text, ...inspectionAppointmentProposalMatch(text) } : null);
+      if (candidate && !inspectionAppointmentBeforeAvailableFrom(candidate.text)) state.inspectionAppointmentCandidate = candidate;
+      if (state.inspectionPickupPhase === "resolved") confirmInspectionPickupAppointmentCandidate();
+      rememberFutureScriptedAchievements(text, -1);
+      state.turn += 1;
+      addMessage("customer", "大丈夫ですよ。", { audioId: "inspection_confirmed_booking_time_customer" });
+      renderProgress();
+      return;
+    }
+  }
   // 日付の食い違いは会話中に訂正せず、最後の復唱を採点する。
   if (state.proposedAppointment && hasScriptedAppointmentRecapEvidence(text)
     && !inspectionPickupAppointmentReproposal(text)) {
@@ -4519,7 +4567,7 @@ function handleScriptedStaffReply(text) {
       addMessage("customer", mileage.text, { audioId: mileage.audioId });
       return;
     }
-    if (asksInspectionWaitingMethodConfirmation(text)) {
+    if (asksInspectionWaitingMethodConfirmation(inspectionLastQuestionClause(text))) {
       state.inspectionWaitingMethod = "loaner";
       state.inspectionLoanerRequested = true;
       addMessage("customer", "代車を用意してもらえますか？", { audioId: "inspection_explained_loaner_retry" });
