@@ -19,7 +19,34 @@ function session() {
   }};
 }
 
+for (const variant of ['30000','over60000','120000']) {
+ const s=session();s.run('state.inspectionMileageVariant='+JSON.stringify(variant));
+ s.say('佐藤様のお電話でしょうか？');
+ s.say('トヨタモビリティ帯広本別店の渕山と申します。日頃は大変お世話になりましてありがとうございます。');
+ s.say('ヤリスの車検満了日が9月30日となりまして、8月1日以降作業が可能です。');
+ s.say('ご予定はお決まりでしたでしょうか？');
+ s.say('8月10日はいかがでしょうか？');
+ s.say('9時半はいかがでしょうか？');
+ s.say('当日はご来店いただけますか？');
+ s.say('代車は必要でしょうか？');
+ s.say('車検証、自賠責保険証券、納税証明書をお持ちください。');
+ s.say('本日はありがとうございました。');
+ const result=s.run('scoreScriptedRoleplay()');
+ assert.match(result.improve.join(' '),/走行距離を確認/,'未質問なら距離確認を先に指摘');
+ assert.doesNotMatch(result.improve.join(' '),/6万km超の設定|12万kmの設定/,'未開示の距離を前提にしない');
+ assert.equal(s.run('state.inspectionMileageAsked'),false);
+ assert.equal(s.run('state.ended'),true);
+ const oldScore=result.score;
+ s.run('state.inspectionMileageVariant="120000"');
+ assert.equal(s.run('scoreScriptedRoleplay().score'),oldScore,'距離未確認時にランダム設定で点数が変わらない');
+}
 for (const variant of ['over60000','120000']) {
+ const known=session();known.run('state.inspectionMileageVariant='+JSON.stringify(variant));
+ known.say('佐藤様のお電話でしょうか？');
+ known.say('トヨタモビリティ帯広本別店の渕山と申します。日頃は大変お世話になりましてありがとうございます。');
+ known.say('ヤリスの車検満了日が9月30日となりまして、8月1日以降作業が可能ですが、ご都合はいかがでしょうか？');
+ known.say('現在の走行距離は何キロですか？');
+ assert.match(known.run('scoreScriptedRoleplay().improve.join(" ")'),variant==='over60000'?/ワンデー車検/:/お預かり対応/,'距離確認後は具体的な不足案内');
  const s=session();s.run('state.inspectionMileageVariant='+JSON.stringify(variant));
  assert.equal(s.say('ヤリスの車検のご都合はいかがでしょうか？').text,'お願いしたいんですけど、いつできますか？');
  assert.match(s.say('現在の走行距離は何キロですか？').text,variant==='120000'?/12万/:/6万/);

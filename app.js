@@ -6461,11 +6461,11 @@ function scoreScriptedRoleplay() {
     .filter((metric) => !achieved[metric.key]
       && !(recapDateMismatch && metric.key === "recapped_appointment"))
     .map((metric) => {
+      if (metric.key === "explained_duration_and_wait" && !state.inspectionMileageAsked) {
+        return "現在の走行距離を確認し、その結果に応じた作業時間・受付方法を案内してください";
+      }
       if (metric.key === "explained_duration_and_wait" && typeof inspectionHighMileage === "function" && inspectionHighMileage()) {
         return state.inspectionMileageVariant === "over60000" ? "6万km超の設定では、ワンデー車検でお預かりすることを案内してください" : "12万kmの設定では、待ち車検ではなくお預かり対応を案内してください";
-      }
-      if (metric.key === "explained_duration_and_wait" && !state.inspectionMileageAsked) {
-        return "作業時間を判断するため、現在の走行距離を確認することを意識すると、より良い応対になります";
       }
       if (metric.key === "explained_duration_and_wait" && state.inspectionMileageAsked) {
         return "基本作業時間と店内で待てることを説明することを意識すると、より良い応対になります";
