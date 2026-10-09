@@ -18,8 +18,10 @@ for (const variant of ['30000','over60000','120000']) for (const early of [true,
   s.say('8月1日以降作業が可能ですが、ご都合はいかがでしょうか？');
   const book=()=>{
     assert.equal(s.say('8月1日以降いつでも大丈夫なので、8月の30日はいかがでしょうか？'),'何時が空いていますか？');
-    s.say('今ですと何時でも大丈夫なんですが、朝一の9時半はいかがでしょう？');
-    s.say('9時30分はいかがでしょうか。');
+    const firstTime=s.say('今ですと何時でも大丈夫なんですが、朝一の9時半はいかがでしょう？');
+    if(early) assert.equal(firstTime,'では、その時間でお願いします。');
+    const repeatedTime=s.say('9時30分はいかがでしょうか。');
+    if(early) assert.equal(repeatedTime,'では、その時間でお願いします。');
     s.say('ありがとうございます。では、8月30日の9時半でご予約の方入れますね。');
   };
   if(early) {

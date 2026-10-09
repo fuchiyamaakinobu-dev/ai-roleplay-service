@@ -4566,6 +4566,19 @@ function handleScriptedStaffReply(text) {
       }
       if (!dates.length && hasTime && state.scriptedPartialReplies.inspectionPickupDate) {
         text = `${state.scriptedPartialReplies.inspectionPickupDate.text} ${text}`;
+        const proposal = inspectionAppointmentProposalMatch(text);
+        if (proposal && !state.inspectionPickupPhase && !state.inspectionPickupActive
+          && !inspectionAppointmentBeforeAvailableFrom(text)) {
+          // 日付に続く時刻は明確に了承する。受付方法の相談は完了扱いにしない。
+          state.inspectionAppointmentCandidate = { text, ...proposal };
+          rememberFutureScriptedAchievements(text, -1);
+          state.turn += 1;
+          addMessage("customer", "では、その時間でお願いします。", {
+            audioId: "inspection_appointment_single_time_customer"
+          });
+          renderProgress();
+          return;
+        }
       }
     }
     const question = inspectionLastQuestionClause(text);
