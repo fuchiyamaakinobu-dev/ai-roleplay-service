@@ -2400,7 +2400,7 @@ function asksInspectionWaitingMethodConfirmation(text) {
 function asksInspectionLoanerNeed(text) {
   const normalized = normalizeScriptedText(text);
   const hasLoanerContext = /(?:代車|代わりのお車|代わりの車|代替車)/.test(normalized);
-  const asksNeedOrUse = /(?:必要|使い|お使い|利用|用意|準備|手配|あった方|あったほう|あれば|ある方|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
+  const asksNeedOrUse = /(?:必要|使い|お使い|利用|用意|準備|手配|外出|あった方|あったほう|あれば|ある方|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
   const isChoiceQuestion = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized)
     || /(?:いかがいたしましょう|どうされます|どうします)/.test(normalized);
   return hasLoanerContext && asksNeedOrUse && isChoiceQuestion;
@@ -4473,6 +4473,9 @@ function handleInspectionPickupPreparation(text, decisionText) {
       ? reply("そのほかは大丈夫です。", "inspection_additional_service_none_customer")
       : reply("オイル交換もお願いしたいです。", "inspection_asked_vehicle_concerns_customer");
   }
+  if (asksInspectionLoanerNeed(decisionText)) {
+    return handleInspectionPickupPriorityReply(text, decisionText, true);
+  }
   const oilRequested = hasInspectionOilChangeRequest();
   if (inspectionHighMileage() && state.inspectionMileageAsked) {
     if (oilRequested && inspectionHighMileagePlanExplained() && inspectionHighMileageLoanerExplained()) {
@@ -4504,6 +4507,17 @@ function handleInspectionPickupPreparation(text, decisionText) {
   if (hasExplicitBookingContinuationConfirmation(text)) {
     return reply("大丈夫ですよ。", "inspection_confirmed_booking_time_customer");
   }
+  if (hasDirectInspectionBookingInvitation(text)) {
+    return reply("お願いします。", "inspection_booking_invitation_accept_customer");
+  }
+  if (/(?:入庫|ご利用|当社|弊社)/.test(normalized)
+    && /(?:いただけ|頂け|お願いでき|お願い出来)/.test(normalized)
+    && isScriptedQuestion(normalized)
+    && !/(?:代車|代わり|引取|引き取)/.test(normalized)
+    && !hasInspectionAppointmentProposalEvidence(text)) {
+    markScriptedStepPassed(scenario.steps.find(item => item.key === "asked_availability"), text);
+    return reply("お願いしたいんですけど、いつできますか？", "inspection_asked_availability_customer");
+  }
   if (hasInspectionAvailabilityRequest(decisionText)) {
     return reply("お願いしたいんですけど、いつできますか？", "inspection_asked_availability_customer");
   }
@@ -4520,6 +4534,36 @@ function handleInspectionPickupPreparation(text, decisionText) {
 
 function handleScriptedStaffReply(text) {
   if (isPickupInspectionScenario()) {
+    // お礼だけで前の工程の返答を再生しない。次のスタッフ案内を待つ。
+    const lastCustomer = state.transcript.filter(item => item.role === "customer").at(-1)?.text;
+    if (isInspectionDurationProgressAcknowledgement(text)
+      && (/^(?:お願いしたいんですけど、いつできますか？|お願いします。|何時が空いていますか？|何日の予定ですか？)$/.test(lastCustomer || "")
+        || state.scriptedPartialReplies.inspectionPickupDate)) {
+      continueSpeechInputWithoutCustomerReply("音声入力中です。続けてご案内ください。");
+      return;
+    }
+    const questionText = inspectionLastQuestionClause(text);
+    if (!state.proposedAppointment && hasInspectionAppointmentProposalEvidence(text)
+      && !asksCurrentMileage(questionText) && !asksInspectionVehicleConcerns(questionText)
+      && !asksInspectionLoanerNeed(questionText) && !hasExplicitBookingContinuationConfirmation(text)) {
+      const dates = inspectionAppointmentDateCandidates(text);
+      const hasTime = /\d{1,2}時(?!間)/.test(normalizeScriptedText(text));
+      if (dates.length === 1 && !hasTime) {
+        const dateText = `${dates[0].month}月${dates[0].day}日`;
+        const previous = state.scriptedPartialReplies.inspectionPickupDate?.text;
+        state.scriptedPartialReplies.inspectionPickupDate = { text: dateText };
+        rememberFutureScriptedAchievements(text, -1);
+        state.turn += 1;
+        addMessage("customer", previous === dateText ? "はい。" : "何時が空いていますか？", {
+          audioId: previous === dateText ? "inspection_thanked_customer_retry" : "inspection_appointment_time_missing_retry"
+        });
+        renderProgress();
+        return;
+      }
+      if (!dates.length && hasTime && state.scriptedPartialReplies.inspectionPickupDate) {
+        text = `${state.scriptedPartialReplies.inspectionPickupDate.text} ${text}`;
+      }
+    }
     const question = inspectionLastQuestionClause(text);
     const normalized = normalizeScriptedText(text);
     const permission = hasExplicitBookingContinuationConfirmation(text)
@@ -4645,6 +4689,9 @@ function handleScriptedStaffReply(text) {
       state.inspectionAppointmentCandidate = candidate;
     }
   }
+  if (isPickupInspectionScenario() && asksInspectionLoanerNeed(text)
+    && /外出/.test(decisionText) && !asksInspectionVehicleConcerns(decisionText)
+    && handleInspectionPickupPriorityReply(text, text, true)) return;
   if (handleInspectionPickupPreparation(text, decisionText)) return;
 
   // 引取納車の応用分岐は新シナリオでのみ有効。既存の車検誘致には影響させない。
