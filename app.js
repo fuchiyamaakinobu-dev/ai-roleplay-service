@@ -4468,7 +4468,11 @@ function handleInspectionPickupPreparation(text, decisionText) {
     const mileage = inspectionMileageReply();
     return reply(mileage.text, mileage.audioId);
   }
-  if (asksInspectionVehicleConcerns(decisionText) || asksInspectionAdditionalServiceFollowUp(decisionText)) {
+  const otherWorkConfirmation = hasInspectionOilChangeRequest()
+    && /(?:その他|そのほか|ほか|他).{0,8}大丈夫/.test(normalizeScriptedText(decisionText))
+    && isScriptedQuestion(decisionText);
+  if (asksInspectionVehicleConcerns(decisionText) || asksInspectionAdditionalServiceFollowUp(decisionText)
+    || otherWorkConfirmation) {
     return hasInspectionOilChangeRequest()
       ? reply("そのほかは大丈夫です。", "inspection_additional_service_none_customer")
       : reply("オイル交換もお願いしたいです。", "inspection_asked_vehicle_concerns_customer");
@@ -4572,7 +4576,8 @@ function handleScriptedStaffReply(text) {
     // 先に提示済みの日時を、当日案内や最終確認へ進んだ時点で引き継ぐ。
     // 引取相談が進行中の場合は、受付方法を勝手に確定しない。
     if (state.inspectionAppointmentCandidate && !state.proposedAppointment
-      && (aftercare || hasScriptedAppointmentRecapEvidence(text) || isInspectionFinalClosingThanks(text))) {
+      && (aftercare || /(?:最後|最終|復唱|確認させて)/.test(normalized) && hasScriptedAppointmentRecapEvidence(text)
+        || isInspectionFinalClosingThanks(text))) {
       confirmInspectionPickupAppointmentCandidate(true);
       if (!state.proposedAppointment && isInspectionFinalClosingThanks(text)) {
         // 日時候補はあるが引取受付が未解決。日時を再質問せず未確定として採点する。
