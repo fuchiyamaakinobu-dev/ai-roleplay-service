@@ -45,5 +45,14 @@ for (const variant of ['over60000','120000']) {
 const audio={window:{}};vm.createContext(audio);vm.runInContext(fs.readFileSync(new URL('../audio-db.js',import.meta.url),'utf8'),audio);
 for(const id of ['inspection_current_mileage_120000_customer','inspection_current_mileage_over60000_customer']) {
  const item=audio.window.ROLEPLAY_AUDIO_DB.items.find(x=>x.id===id);assert.ok(item);assert.ok(fs.statSync(new URL('../audio/'+item.file,import.meta.url)).size>1000);
+ const context={window:audio.window,document:{querySelector:()=>({textContent:''})},console};
+ vm.createContext(context);
+ vm.runInContext(fs.readFileSync(new URL('../scenario.js',import.meta.url),'utf8'),context);
+ vm.runInContext(source.slice(0,source.indexOf('els.startButton.addEventListener')),context);
+ for(const voice of Object.keys(audio.window.ROLEPLAY_AUDIO_DB.voices)) {
+   const path=vm.runInContext(`els.voiceSelect.value=${JSON.stringify(voice)};audioPath(${JSON.stringify(id)})`,context);
+   assert.ok(path,'実際の音声参照先が取得できる');
+   assert.deepEqual(fs.readFileSync(new URL('../'+path,import.meta.url)),fs.readFileSync(new URL('../audio/'+item.file,import.meta.url)),'選択音声の参照先に提供MP3と同じデータが存在する');
+ }
 }
 console.log('6万km超・12万km：距離保持・預かり案内・代車・終話・音声登録 OK');
