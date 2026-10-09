@@ -393,6 +393,8 @@ window.ROLEPLAY_AUDIO_DB = {
 };
 
 const vehicleInspectionAudioLines = [
+  ["inspection_current_mileage_120000_customer", "走行距離・12万km", "12万キロ走っています。"],
+  ["inspection_current_mileage_over60000_customer", "走行距離・6万km超", "今の走行距離ですか？何キロだったかな～。たしか6万キロは超えています。"],
   ["inspection_call_ringback", "電話冒頭・呼び出し音", "（呼び出し音）"],
   ["inspection_phone_greeting_customer", "電話冒頭・お客様挨拶", "はい、もしもし。"],
   ["inspection_confirmed_identity_customer", "本人確認・お客様回答", "そうです。"],

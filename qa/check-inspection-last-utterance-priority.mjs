@@ -68,6 +68,9 @@ for (const standard of [false, true]) {
 
 const repeatedReason = session(2);
 repeatedReason.say('9月10日9時30分はいかがでしょうか？');
+repeatedReason.say('現在の走行距離は何キロですか？');
+repeatedReason.say('車検以外のご用命や気になるところはございますか？');
+repeatedReason.say('オイル交換も含めて1時間半でできます。店内でお待ちいただけます。');
 const reasonText = repeatedReason.say('ご来店が難しい理由を教えていただけますか？').text;
 assert.match(reasonText, /運転に自信/);
 assert.equal(repeatedReason.say('引き取りをご希望ですね。ご来店が難しい理由を教えていただけますか？').text, reasonText);

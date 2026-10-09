@@ -52,6 +52,9 @@ assert.equal(mileage.run('state.inspectionPickupPhase'), 'proposal', '距離回�
 
 const retained = session(2);
 retained.say('9月の30日10時半はいかがでしょうか');
+retained.say('現在の走行距離は何キロですか？');
+retained.say('車検以外のご用命や気になるところはございますか？');
+retained.say('オイル交換も含めて1時間半でできます。店内でお待ちいただけます。');
 retained.say('引き取りの理由を教えていただけますか？');
 assert.equal(retained.say('ご家族の方と一緒にご来店いただくのって可能ですか？').text, 'それなら、お店に持って行きます。');
 assert.equal(retained.run('state.proposedAppointment.day'), '30');

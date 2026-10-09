@@ -607,7 +607,10 @@ function handleInspectionCheckpointTest(event) {
   ) return;
 
   const buttonKey = button.dataset.inspectionButtonKey || "";
-  const staffText = button.dataset.inspectionStaffText || "";
+  let staffText = button.dataset.inspectionStaffText || "";
+  if (typeof inspectionHighMileage === "function" && inspectionHighMileage() && buttonKey === "duration") {
+    staffText = state.inspectionMileageVariant === "over60000" ? "オイル交換も含めてワンデー車検で1日お預かりします。" : "オイル交換も含めてお預かりして整備します。";
+  }
   const responseText = button.dataset.inspectionResponse || "";
   const audioId = button.dataset.inspectionAudioId || "";
   if (!buttonKey || !staffText || !responseText) return;
@@ -616,6 +619,7 @@ function handleInspectionCheckpointTest(event) {
   stopCustomerPlayback();
   addMessage("staff", staffText, { immediate: true, hiddenFromConversation: true });
   state.inspectionButtonChecks[buttonKey] = true;
+  if (typeof isPickupInspectionScenario === "function" && isPickupInspectionScenario()) { handleScriptedStaffReply(staffText); return; }
 
   const markPassed = (key) => {
     const step = scenario.steps.find((item) => item.key === key);
@@ -1395,6 +1399,7 @@ function startRoleplay() {
   state.inspectionAppointmentCandidate = null;
   state.inspectionAppointmentIncomplete = false;
   state.variantSeed = Math.floor(Math.random() * 1000);
+  state.inspectionMileageVariant = isPickupInspectionScenario() ? ["30000", "over60000", "120000"][Math.floor(Math.random() * 3)] : "30000";
   state.pickupReason = null;
   state.currentObjection = null;
   state.resolutionType = null;
@@ -3869,6 +3874,7 @@ function inspectionPickupProposalEvidence(text, reason) {
 
 function markPickupRouteBaseStepsNotApplicable() {
   ["explained_loaner", "confirmed_waiting", "explained_lock_and_arrival"].forEach((key) => {
+    if (inspectionHighMileage() && key !== "explained_lock_and_arrival") return;
     const step = scenario.steps.find((candidate) => candidate.key === key);
     markScriptedStepNotApplicable(step, "引取納車を受付したため対象外");
   });
@@ -3937,6 +3943,15 @@ function shouldStartInspectionPickupFallback(text, step) {
 }
 
 function startInspectionPickupRequest(note) {
+  // 予約候補や都合確認だけで引取相談を始めない。
+  const latestStaff = state.transcript.filter(item => item.role === "staff").at(-1)?.text || "";
+  if (!state.inspectionPickupPhase && (!state.inspectionMileageAsked || !hasInspectionOilChangeRequest()
+    || (inspectionHighMileage()
+      ? !(inspectionHighMileagePlanExplained() && inspectionHighMileageLoanerExplained())
+      : !hasSupportedInspectionDuration(latestStaff) || !/(?:店内|お待ち|待ち車検)/.test(normalizeScriptedText(latestStaff))))) {
+    addMessage("customer", "はい。", { audioId: "inspection_thanked_customer_retry" });
+    return;
+  }
   const pickupDurationStep = scenario.steps.find(
     (candidate) => candidate.key === "explained_duration_and_wait"
   );
@@ -4402,6 +4417,94 @@ function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly =
   return true;
 }
 
+function inspectionHighMileage() {
+  return isPickupInspectionScenario() && ["over60000", "120000"].includes(state.inspectionMileageVariant);
+}
+function inspectionMileageReply() {
+  if (state.inspectionMileageVariant === "120000") return { text: "12万キロ走っています。", audioId: "inspection_current_mileage_120000_customer" };
+  if (state.inspectionMileageVariant === "over60000") return { text: "今の走行距離ですか？何キロだったかな～。たしか6万キロは超えています。", audioId: "inspection_current_mileage_over60000_customer" };
+  return { text: "今、3万キロくらいです。どれくらい時間がかかるのですか？", audioId: "inspection_current_mileage_and_duration_customer" };
+}
+function inspectionHighMileagePlanExplained() {
+  return state.transcript.some(message => {
+    if (message.role !== "staff") return false;
+    const t = normalizeScriptedText(message.text);
+    if (/(?:できません|できない|不可|不要|しません)/.test(t) && !/(?:お預かり|預かり|1日|一日|ワンデー)/.test(t)) return false;
+    return state.inspectionMileageVariant === "over60000"
+      ? /(?:1日車検|一日車検|ワンデー|1日お預かり|一日お預かり|1日で|一日で)/.test(t) && !/(?:1日|一日|ワンデー).{0,12}(?:できません|できない|無理)/.test(t)
+      : /(?:お預かり|預かり|預からせ)/.test(t) && !/(?:預かりません|預かれません)/.test(t);
+  });
+}
+function inspectionHighMileageLoanerExplained() {
+  return state.transcript.some(message => message.role === "staff"
+    && /(?:代車|代わりのお車)/.test(normalizeScriptedText(message.text))
+    && /(?:用意|準備|手配|利用)/.test(normalizeScriptedText(message.text))
+    && !/(?:できません|できない|ありません|不要|必要ですか)/.test(normalizeScriptedText(message.text)));
+}
+
+function handleInspectionPickupPreparation(text, decisionText) {
+  if (!isPickupInspectionScenario() || state.inspectionPickupPhase || state.inspectionPickupActive) return false;
+  const normalized = normalizeScriptedText(text);
+  const reply = (body, audioId) => {
+    rememberFutureScriptedAchievements(text, -1);
+    state.turn += 1;
+    addMessage("customer", body, { audioId });
+    renderProgress();
+    return true;
+  };
+  // 質問が複数ある場合は最後の質問を優先する。
+  if (asksCurrentMileage(decisionText)) {
+    state.inspectionMileageAsked = true;
+    state.inspectionDurationQuestionAsked = true;
+    const mileage = inspectionMileageReply();
+    return reply(mileage.text, mileage.audioId);
+  }
+  if (asksInspectionVehicleConcerns(decisionText) || asksInspectionAdditionalServiceFollowUp(decisionText)) {
+    return hasInspectionOilChangeRequest()
+      ? reply("そのほかは大丈夫です。", "inspection_additional_service_none_customer")
+      : reply("オイル交換もお願いしたいです。", "inspection_asked_vehicle_concerns_customer");
+  }
+  const oilRequested = hasInspectionOilChangeRequest();
+  if (inspectionHighMileage() && state.inspectionMileageAsked) {
+    if (oilRequested && inspectionHighMileagePlanExplained() && inspectionHighMileageLoanerExplained()) {
+      state.inspectionWaitingMethod = "loaner";
+      state.inspectionLoanerRequested = true;
+      state.inspectionLoanerConfirmed = true;
+      rememberFutureScriptedAchievements(text, -1);
+      startInspectionPickupRequest("預かり方法と代車の案内を受けて引取希望へ進みました。");
+      return true;
+    }
+    if (asksInspectionLoanerNeed(text) || /(?:店内|お待ち|待ち車検|代車)/.test(normalized)) {
+      state.inspectionWaitingMethod = "loaner";
+      state.inspectionLoanerRequested = true;
+      return reply("代車を用意してもらえますか？", "inspection_explained_loaner_retry");
+    }
+    if (/(?:預かり|ワンデー|1日|一日)/.test(normalized)) return reply("はい。", "inspection_thanked_customer_retry");
+  }
+  const waitingOffer = /(?:店内|お待ち|待ち車検)/.test(normalized)
+    && !/(?:待てません|待つことはできません|お待ちいただけません)/.test(normalized);
+  if (oilRequested && state.inspectionMileageAsked && hasSupportedInspectionDuration(text) && waitingOffer) {
+    rememberFutureScriptedAchievements(text, -1);
+    startInspectionPickupRequest("追加作業を踏まえた待ち車検の案内を受け、引取希望を伝えました。");
+    return true;
+  }
+  if (hasExplicitBookingContinuationConfirmation(text)) {
+    return reply("大丈夫ですよ。", "inspection_confirmed_booking_time_customer");
+  }
+  if (hasInspectionAvailabilityRequest(decisionText)) {
+    return reply("お願いしたいんですけど、いつできますか？", "inspection_asked_availability_customer");
+  }
+  if (hasCompleteInspectionAppointmentProposal(text) || hasSupportedInspectionDuration(text)
+    || waitingOffer || asksInspectionDirectVisitInvitation(text)) {
+    // 先に提示された日時は候補として保持し、受付方法が決まるまで確定しない。
+    if (hasCompleteInspectionAppointmentProposal(text)) {
+      state.inspectionAppointmentCandidate = { text, ...inspectionAppointmentProposalMatch(text) };
+    }
+    return reply("はい。", "inspection_thanked_customer_retry");
+  }
+  return false;
+}
+
 function handleScriptedStaffReply(text) {
   // 日付の食い違いは会話中に訂正せず、最後の復唱を採点する。
   if (state.proposedAppointment && hasScriptedAppointmentRecapEvidence(text)
@@ -4410,6 +4513,19 @@ function handleScriptedStaffReply(text) {
       dateMismatch: !confirmedInspectionAppointmentMatches(text), evidence: [text] });
   }
 
+  if (inspectionHighMileage() && state.inspectionPickupPhase && !isInspectionFinalClosingThanks(text)) {
+    if (asksCurrentMileage(inspectionLastQuestionClause(text))) {
+      const mileage = inspectionMileageReply();
+      addMessage("customer", mileage.text, { audioId: mileage.audioId });
+      return;
+    }
+    if (asksInspectionWaitingMethodConfirmation(text)) {
+      state.inspectionWaitingMethod = "loaner";
+      state.inspectionLoanerRequested = true;
+      addMessage("customer", "代車を用意してもらえますか？", { audioId: "inspection_explained_loaner_retry" });
+      return;
+    }
+  }
   const startingScriptStep = state.scriptStep;
   const step = scenario.steps[state.scriptStep];
   if (!step) {
@@ -4481,6 +4597,8 @@ function handleScriptedStaffReply(text) {
       state.inspectionAppointmentCandidate = candidate;
     }
   }
+  if (handleInspectionPickupPreparation(text, decisionText)) return;
+
   // 引取納車の応用分岐は新シナリオでのみ有効。既存の車検誘致には影響させない。
   if (isPickupInspectionScenario() && handleInspectionPickupPriorityReply(text, decisionText, true)) return;
   if (handleInspectionPickupBranchReply(text)) {
@@ -6189,6 +6307,11 @@ function scoreScriptedRoleplay() {
         && inspectionConversationMetricAchieved(metric.key));
   });
 
+  if (typeof inspectionHighMileage === "function" && inspectionHighMileage()) {
+    achieved.explained_duration_and_wait = Boolean(state.inspectionMileageAsked && inspectionHighMileagePlanExplained());
+    achieved.explained_loaner = inspectionHighMileageLoanerExplained();
+    achieved.confirmed_waiting = state.inspectionWaitingMethod === "loaner";
+  }
   const recapDateMismatch = state.analyses.filter(item => item.appointmentRecapCheck).at(-1)?.dateMismatch === true;
   if (recapDateMismatch) achieved.recapped_appointment = false;
 
@@ -6225,6 +6348,9 @@ function scoreScriptedRoleplay() {
     .filter((metric) => !achieved[metric.key]
       && !(recapDateMismatch && metric.key === "recapped_appointment"))
     .map((metric) => {
+      if (metric.key === "explained_duration_and_wait" && typeof inspectionHighMileage === "function" && inspectionHighMileage()) {
+        return state.inspectionMileageVariant === "over60000" ? "6万km超の設定では、ワンデー車検でお預かりすることを案内してください" : "12万kmの設定では、待ち車検ではなくお預かり対応を案内してください";
+      }
       if (metric.key === "explained_duration_and_wait" && !state.inspectionMileageAsked) {
         return "作業時間を判断するため、現在の走行距離を確認することを意識すると、より良い応対になります";
       }
