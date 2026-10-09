@@ -3945,7 +3945,8 @@ function shouldStartInspectionPickupFallback(text, step) {
 function startInspectionPickupRequest(note) {
   // 予約候補や都合確認だけで引取相談を始めない。
   const latestStaff = state.transcript.filter(item => item.role === "staff").at(-1)?.text || "";
-  if (!state.inspectionPickupPhase && (!state.inspectionMileageAsked || !hasInspectionOilChangeRequest()
+  const directArrival = inspectionDirectArrivalConfirmation(latestStaff);
+  if (!state.inspectionPickupPhase && !directArrival && (!state.inspectionMileageAsked || !hasInspectionOilChangeRequest()
     || (inspectionHighMileage()
       ? !(inspectionHighMileagePlanExplained() && inspectionHighMileageLoanerExplained())
       : !inspectionWaitingPlanExplained(latestStaff)))) {
@@ -4451,6 +4452,12 @@ function inspectionWaitingPlanExplained(text) {
   return waiting && state.transcript.some(item => item.role === "staff" && hasSupportedInspectionDuration(item.text));
 }
 
+function inspectionDirectArrivalConfirmation(text) {
+  return Boolean(state.inspectionAppointmentCandidate || state.proposedAppointment)
+    && /(?:来店|お越し|来ていただ)/.test(normalizeScriptedText(text))
+    && asksInspectionDirectVisitInvitation(text);
+}
+
 function handleInspectionPickupPreparation(text, decisionText) {
   if (!isPickupInspectionScenario() || state.inspectionPickupPhase || state.inspectionPickupActive) return false;
   const normalized = normalizeScriptedText(text);
@@ -4479,6 +4486,11 @@ function handleInspectionPickupPreparation(text, decisionText) {
   }
   if (asksInspectionLoanerNeed(decisionText)) {
     return handleInspectionPickupPriorityReply(text, decisionText, true);
+  }
+  if (inspectionDirectArrivalConfirmation(decisionText)) {
+    rememberFutureScriptedAchievements(text, -1);
+    startInspectionPickupRequest("日時候補後の来店可否確認に対し、引取希望を伝えました。");
+    return true;
   }
   const oilRequested = hasInspectionOilChangeRequest();
   if (inspectionHighMileage() && state.inspectionMileageAsked) {

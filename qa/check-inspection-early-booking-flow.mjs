@@ -53,3 +53,18 @@ for (const variant of ['30000','over60000','120000']) for (const early of [true,
   assert.equal(s.run('state.transcript.filter(x=>x.role==="customer" && x.text==="できれば、車を取りに来てもらえませんか？").length'),1,'引取依頼は一度だけ');
 }
 console.log('直近会話再現：日時先行/後行×3距離、追加整備、引取依頼、終話・日付採点 OK');
+for(const variant of ['30000','over60000','120000']) {
+ const s=session(variant);
+ assert.equal(s.say('当社へご入庫いただけますでしょうか？'),'お願いしたいんですけど、いつできますか？');
+ assert.equal(s.run('state.inspectionPickupActive'),false,'最初の利用意思確認では引取を依頼しない');
+ s.say('8月10日はいかがでしょうか？');
+ assert.equal(s.say('9時半はいかがでしょうか？'),'では、その時間でお願いします。');
+ assert.equal(s.say('当日はええ。ご来店いただけますか？'),'できれば、車を取りに来てもらえませんか？');
+ assert.equal(s.run('state.inspectionPickupPhase'),'reason');
+ assert.equal(s.run('state.inspectionAppointmentCandidate.minute'),30);
+ s.say('ご来店が難しい理由を教えていただけますか？');
+ s.say('近くの札内店へのご来店はいかがでしょうか？');
+ assert.equal(s.run('state.inspectionPickupOutcome'),'visit');
+ assert.notEqual(s.say('当日はご来店いただけますか？'),'できれば、車を取りに来てもらえませんか？','来店同意後は引取を再要求しない');
+}
+console.log('当日の来店確認：3距離で引取希望、初回利用確認との区別、来店同意後の維持 OK');
