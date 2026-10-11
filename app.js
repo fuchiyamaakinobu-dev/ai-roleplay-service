@@ -2492,7 +2492,7 @@ function asksCurrentMileage(text) {
   const normalized = normalizeScriptedText(text).toLowerCase();
   const mileageHowMuch = /(?:走行距離|距離数).{0,12}(?:どのくらい|どれくらい|どのぐらい|どれぐらい)/.test(normalized);
   if (!isScriptedQuestion(normalized) && !mileageHowMuch) return false;
-  return /(?:走行距離|距離数|何(?:キロ|km)|距離.{0,12}(?:乗|走))/.test(normalized);
+  return /(?:何(?:キロ|km)|(?:走行距離|距離数|距離).{0,20}(?:どのくらい|どれくらい|どのぐらい|どれぐらい|教えて|伺|何|いくつ))/.test(normalized);
 }
 
 function hasBookingContinuationConfirmation(text) {
@@ -2527,6 +2527,8 @@ function isInspectionDurationProgressAcknowledgement(text) {
 function hasInspectionBookingInvitation(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
+  if (/車検/.test(normalized) && /(?:どのように|どう).{0,8}お?考え|車検.{0,15}考えて/.test(normalized)) return true;
+  if (/車検.{0,20}お願いしたい.{0,15}いかが/.test(normalized)) return true;
   if (/(?:車検).{0,16}(?:お?決まり|決めて|決められ)/.test(normalized)) return true;
   const asksWhetherInspectionPlanIsDecided = /(?:ご)?予定/.test(normalized);
   // 「予定」と疑問形がそろえば都合確認として十分。
@@ -2904,7 +2906,8 @@ function hasInspectionReminderContactConfirmation(text) {
   );
   const hasThreeDayReminder = /(?:3日前|三日前)/.test(conversationEvidence)
     && /(?:連絡|電話)/.test(conversationEvidence);
-  const asksKnownContact = /(?:この|同じ|今の|こちらの|今かけている).{0,8}(?:携帯|お?電話|連絡先|番号)/.test(conversationEvidence)
+  const asksKnownContact = /(?:この|同じ|今の|こちらの|今かけている|かけている).{0,8}(?:携帯|お?電話|連絡先|番号)/.test(conversationEvidence)
+    || /今.{0,20}(?:お電話|電話).{0,20}番号/.test(conversationEvidence)
     || /(?:携帯|電話番号|連絡先).{0,12}(?:よろしい|良い|大丈夫)/.test(conversationEvidence)
     || /(?:どちら|電話番号)/.test(conversationEvidence);
   const hasContactQuestion = inspectionStaffConversationEvidence(
@@ -2913,7 +2916,7 @@ function hasInspectionReminderContactConfirmation(text) {
   ).split(/(?<=[。.!！?？])/).some((fragment) =>
     asksKnownContact
     && isScriptedQuestion(fragment)
-    && /(?:携帯|電話番号|連絡先|この電話|同じ電話|今の電話|こちらの番号|この番号|今かけている番号)/.test(fragment)
+    && /(?:携帯|電話番号|連絡先|この電話|同じ電話|今の電話|こちらの番号|この番号|今かけている番号|かけているお?電話|お電話.{0,20}番号)/.test(fragment)
   );
   return hasThreeDayReminder && asksKnownContact && hasContactQuestion;
 }
@@ -2921,7 +2924,7 @@ function hasInspectionReminderContactConfirmation(text) {
 function asksInspectionReminderContactDestination(text) {
   const normalized = normalizeScriptedText(text);
   return isScriptedQuestion(normalized)
-    && /(?:携帯|電話番号|連絡先|このお?電話|同じお?電話|今のお?電話|こちらのお?電話|こちらの番号|この番号|今かけている(?:お?電話|番号)|(?:今|現在).{0,10}(?:お電話|電話))/.test(normalized)
+    && /(?:携帯|電話番号|連絡先|このお?電話|同じお?電話|今のお?電話|こちらのお?電話|こちらの番号|この番号|かけている(?:お?電話|番号)|(?:今|現在).{0,10}(?:お電話|電話))/.test(normalized)
     && /(?:よろしい|よろしかった|良い|大丈夫|どちら|どこ|お願いしますか)/.test(normalized);
 }
 
@@ -4534,7 +4537,8 @@ function handleInspectionPickupPreparation(text, decisionText) {
     markScriptedStepPassed(scenario.steps.find(item => item.key === "asked_availability"), text);
     return reply("お願いしたいんですけど、いつできますか？", "inspection_asked_availability_customer");
   }
-  if (hasInspectionAvailabilityRequest(decisionText)) {
+  if (hasInspectionAvailabilityRequest(decisionText)
+    || hasInspectionBookingInvitation(text) && /(?:考え|いかが)/.test(decisionText)) {
     return reply("お願いしたいんですけど、いつできますか？", "inspection_asked_availability_customer");
   }
   if (hasCompleteInspectionAppointmentProposal(text) || hasSupportedInspectionDuration(text)
@@ -4550,6 +4554,38 @@ function handleInspectionPickupPreparation(text, decisionText) {
 
 function handleScriptedStaffReply(text) {
   if (isPickupInspectionScenario()) {
+    const actualQuestion = inspectionLastQuestionClause(text);
+    if (!isInspectionFinalClosingThanks(text) && asksInspectionReminderContactDestination(actualQuestion)
+      && (!asksInspectionCallTimingPermission(actualQuestion) || /(?:番号|かけている)/.test(actualQuestion))) {
+      rememberFutureScriptedAchievements(text, -1);
+      if (hasInspectionReminderContactConfirmation(text)) {
+        markScriptedStepPassed(scenario.steps.find(item => item.key === "confirmed_reminder_contact"), text);
+      }
+      state.inspectionReminderContactAnswered = true;
+      state.turn += 1;
+      addMessage("customer", "この携帯にお願いします。", { audioId: "inspection_confirmed_reminder_contact_customer" });
+      renderProgress();
+      return;
+    }
+    if (/(?:お願い事|お願いが|説明).{0,30}(?:よろしい|よろしかった|大丈夫)/.test(normalizeScriptedText(text))
+      && isScriptedQuestion(actualQuestion) && !asksCurrentMileage(actualQuestion)
+      && !asksInspectionVehicleConcerns(actualQuestion) && !isInspectionFinalClosingThanks(text)) {
+      rememberFutureScriptedAchievements(text, -1);
+      if (inspectionHighMileage() && inspectionHighMileageLoanerExplained()) {
+        state.inspectionWaitingMethod = "loaner";
+        state.inspectionLoanerRequested = true;
+        state.inspectionLoanerConfirmed = true;
+      }
+      const candidate = inspectionPickupAppointmentReproposal(text)
+        || (!state.proposedAppointment && hasCompleteInspectionAppointmentProposal(text)
+          ? { text, ...inspectionAppointmentProposalMatch(text) } : null);
+      if (candidate && !inspectionAppointmentBeforeAvailableFrom(candidate.text)) state.inspectionAppointmentCandidate = candidate;
+      if (state.inspectionPickupPhase === "resolved") confirmInspectionPickupAppointmentCandidate();
+      state.turn += 1;
+      addMessage("customer", "大丈夫ですよ。", { audioId: "inspection_confirmed_booking_time_customer" });
+      renderProgress();
+      return;
+    }
     // お礼だけで前の工程の返答を再生しない。次のスタッフ案内を待つ。
     const lastCustomer = state.transcript.filter(item => item.role === "customer").at(-1)?.text;
     if (isInspectionDurationProgressAcknowledgement(text)
@@ -6419,6 +6455,12 @@ function scoreScriptedRoleplay() {
       .filter((analysis) => analysis.scripted && analysis.notApplicable === true)
       .map((analysis) => analysis.stepKey)
   );
+  if (typeof isPickupInspectionScenario === "function" && isPickupInspectionScenario()
+    && !state.inspectionPickupActive && !state.inspectionPickupReason && !state.inspectionPickupOutcome
+    && !(state.transcript || []).some(item => item.role === "customer"
+      && /(?:取りに来て|引き取りでお願い|引取を希望)/.test(item.text))) {
+    scenario.scoring.filter(metric => metric.key.startsWith("pickup_")).forEach(metric => notApplicableKeys.add(metric.key));
+  }
   const applicableScoring = scenario.scoring.filter((metric) => !notApplicableKeys.has(metric.key));
   const optionalAfterAppointmentKeys = new Set(
     (scenario.steps || [])
