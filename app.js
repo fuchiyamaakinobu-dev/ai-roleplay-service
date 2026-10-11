@@ -3051,7 +3051,8 @@ function analyzeScriptedStaff(text, step) {
 
   if (step.key === "proposed_appointment") {
     const appointmentMatch = inspectionAppointmentProposalMatch(normalized);
-    passed = Boolean(passed && appointmentMatch);
+    passed = Boolean(passed && appointmentMatch
+      && !(isPickupInspectionScenario() && state.inspectionPickupActive));
     if (passed) {
       state.proposedAppointment = {
         month: appointmentMatch.month,
@@ -3919,7 +3920,7 @@ function shouldStartInspectionPickupAfterDuration(step, analysis) {
 
 function asksInspectionDirectVisitInvitation(text) {
   const normalized = normalizeScriptedText(text);
-  const hasVisitWording = /(?:ご入庫|入庫|ご入校|入校|ご来店|来店|お越し|来ていただ|来てもら|来ること|店(?:で|内で|の方で).{0,8}待)/.test(normalized);
+  const hasVisitWording = /(?:ご入庫|入庫|ご入校|入校|ご来店|来店|お越し|来ていただ|来てもら|来ること|(?:当社|弊社|店舗|お店).{0,8}(?:寄って|よって)いただ|店(?:で|内で|の方で).{0,8}待)/.test(normalized);
   const asksOrRequestsVisit = /(?:お願い|いただけ|いただき|いただいて|できます|可能|いかが|よろしい|いいですか)/.test(normalized);
   return hasVisitWording
     && asksOrRequestsVisit
@@ -4401,6 +4402,18 @@ function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly =
       return true;
     }
     if (hasInspectionPickupVisitConflict(text)) return false;
+    if (state.inspectionPickupPhase === "confirmation") {
+      // 場所回答後の日時提案は同じ自宅への受付を継続する。
+      state.inspectionPickupActive = false;
+      state.inspectionPickupPhase = "resolved";
+      markPickupRouteBaseStepsNotApplicable();
+      rememberFutureScriptedAchievements(text, -1);
+      confirmInspectionPickupAppointmentCandidate();
+      state.turn += 1;
+      addMessage("customer", "では、その時間でお願いします。", { audioId: "inspection_appointment_single_time_customer" });
+      renderProgress();
+      return true;
+    }
     state.inspectionPickupPhase = "confirmation";
     state.turn += 1;
     addMessage("customer", "自宅に取りに来てもらえますか？", { audioId: "inspection_pickup_location_customer" });
@@ -4418,7 +4431,11 @@ function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly =
   state.scriptStep = Math.max(state.scriptStep, pickupAppointmentStepIndex + 1);
   state.currentState = scenario.steps[state.scriptStep]?.state || state.currentState;
   state.turn += 1;
-  addMessage("customer", "では、その日でお願いします。", { audioId: "inspection_proposed_appointment_customer" });
+  const timeOnly = /\d{1,2}時(?!間)/.test(normalizeScriptedText(text))
+    && !/\d{1,2}(?:月|日)/.test(normalizeScriptedText(text));
+  addMessage("customer", timeOnly ? "では、その時間でお願いします。" : "では、その日でお願いします。", {
+    audioId: timeOnly ? "inspection_appointment_single_time_customer" : "inspection_proposed_appointment_customer"
+  });
   els.speechNote.textContent = "提示された日時で予約を確認しました。以後の案内へ続けてください。";
   renderProgress();
   return true;
@@ -4450,14 +4467,17 @@ function inspectionHighMileageLoanerExplained() {
 }
 
 function inspectionWaitingPlanExplained(text) {
-  const waiting = /(?:店内|お待ち|待ち車検)/.test(normalizeScriptedText(text))
-    && !/(?:待てません|待つことはできません|お待ちいただけません)/.test(normalizeScriptedText(text));
+  const staffTexts = [...state.transcript.filter(item => item.role === "staff").map(item => item.text), text];
+  const latestWaiting = staffTexts.map(normalizeScriptedText).filter(t => /(?:店内|お待ち|待ち車検|待てません|待つこと)/.test(t)).at(-1) || "";
+  const waiting = /(?:店内|お待ち|待ち車検)/.test(latestWaiting)
+    && !/(?:待てません|待つことはできません|お待ちいただけません)/.test(latestWaiting);
   return waiting && state.transcript.some(item => item.role === "staff" && hasSupportedInspectionDuration(item.text));
 }
 
 function inspectionDirectArrivalConfirmation(text) {
-  return Boolean(state.inspectionAppointmentCandidate || state.proposedAppointment)
-    && /(?:来店|お越し|来ていただ)/.test(normalizeScriptedText(text))
+  const stoppingBy = /(?:当社|弊社|店舗|お店).{0,8}(?:寄って|よって)いただ/.test(normalizeScriptedText(text));
+  return Boolean(state.inspectionAppointmentCandidate || state.proposedAppointment || stoppingBy && state.inspectionMileageAsked)
+    && (/(?:来店|お越し|来ていただ)/.test(normalizeScriptedText(text)) || stoppingBy)
     && asksInspectionDirectVisitInvitation(text);
 }
 
@@ -4518,7 +4538,8 @@ function handleInspectionPickupPreparation(text, decisionText) {
   }
   const waitingOffer = /(?:店内|お待ち|待ち車検)/.test(normalized)
     && !/(?:待てません|待つことはできません|お待ちいただけません)/.test(normalized);
-  if (!inspectionHighMileage() && oilRequested && state.inspectionMileageAsked && inspectionWaitingPlanExplained(text)) {
+  if (!inspectionHighMileage() && oilRequested && state.inspectionMileageAsked && inspectionWaitingPlanExplained(text)
+    && (hasSupportedInspectionDuration(text) || waitingOffer || asksInspectionDirectVisitInvitation(text))) {
     rememberFutureScriptedAchievements(text, -1);
     startInspectionPickupRequest("追加作業を踏まえた待ち車検の案内を受け、引取希望を伝えました。");
     return true;
@@ -4597,7 +4618,9 @@ function handleScriptedStaffReply(text) {
     const questionText = inspectionLastQuestionClause(text);
     if (!state.proposedAppointment && hasInspectionAppointmentProposalEvidence(text)
       && !asksCurrentMileage(questionText) && !asksInspectionVehicleConcerns(questionText)
-      && !asksInspectionLoanerNeed(questionText) && !hasExplicitBookingContinuationConfirmation(text)) {
+      && !asksInspectionLoanerNeed(questionText) && !hasExplicitBookingContinuationConfirmation(text)
+      && !(hasInspectionAvailableFromInformation(text) && hasInspectionAvailabilityRequest(questionText)
+        && !/\d{1,2}時(?!間)/.test(normalizeScriptedText(text)))) {
       const dates = inspectionAppointmentDateCandidates(text);
       const hasTime = /\d{1,2}時(?!間)/.test(normalizeScriptedText(text));
       if (dates.length === 1 && !hasTime) {
@@ -4767,6 +4790,18 @@ function handleScriptedStaffReply(text) {
     return;
   }
   if (isPickupInspectionScenario() && handleInspectionPickupPriorityReply(text, decisionText)) return;
+
+  if (isPickupInspectionScenario() && state.inspectionPickupActive
+    && /(?:最後|最終|復唱|確認させて)/.test(normalizeScriptedText(text))
+    && hasScriptedAppointmentRecapEvidence(text)) {
+    // 未解決の来店・引取相談を最終復唱だけで確定しない。会話は遮らない。
+    rememberFutureScriptedAchievements(text, -1);
+    state.inspectionAppointmentIncomplete = true;
+    state.turn += 1;
+    addMessage("customer", "はい。", { audioId: "inspection_thanked_customer_retry" });
+    renderProgress();
+    return;
+  }
 
   // 発話途中や周囲のノイズは、確認済み・未確認の判定や減点回数へ加えない。
   // 短い相づちを返した後も現在工程を保持し、MP3終了後にマイクを自動再開する。
@@ -6473,6 +6508,12 @@ function scoreScriptedRoleplay() {
       || (typeof inspectionConversationMetricAchieved === "function"
         && inspectionConversationMetricAchieved(metric.key));
   });
+
+  if (typeof isPickupInspectionScenario === "function" && isPickupInspectionScenario()
+    && state.inspectionPickupActive && !state.proposedAppointment) {
+    achieved.proposed_appointment = false;
+    achieved.recapped_appointment = false;
+  }
 
   if (typeof inspectionHighMileage === "function" && inspectionHighMileage()) {
     achieved.explained_duration_and_wait = Boolean(state.inspectionMileageAsked && inspectionHighMileagePlanExplained());

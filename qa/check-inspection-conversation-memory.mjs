@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+function session(variant='30000') {
+  const c={window:{},document:{querySelector:()=>({textContent:''})},console};
+  vm.createContext(c);
+  vm.runInContext(fs.readFileSync(new URL('../scenario.js',import.meta.url),'utf8'),c);
+  vm.runInContext(source.slice(0,source.indexOf('els.startButton.addEventListener')),c);
+  vm.runInContext(`scenario=window.VEHICLE_INSPECTION_PICKUP_SCENARIO;state.started=true;state.variantSeed=1;
+    state.inspectionMileageVariant=${JSON.stringify(variant)};renderProgress=()=>{};
+    continueSpeechInputWithoutCustomerReply=()=>{};finishRoleplay=()=>{state.ended=true};
+    addMessage=(role,text,options={})=>{state.transcript.push({role,text,audioId:options.audioId});options.onCommitted?.()};`,c);
+  return {run:s=>vm.runInContext(s,c),say(text){c.input=text;vm.runInContext('state.transcript.push({role:"staff",text:input});handleScriptedStaffReply(input)',c);return vm.runInContext('state.transcript.at(-1).text',c)}};
+}
+const stop=session('120000');
+const notice=session();
+assert.equal(notice.say('今日五年ご連絡させていただいたのが、佐藤様のヤリスの車検のご連絡でした。9月30日にまあ曜日を迎えまして、8月1日以降作業可能なのですが、ご都合の方いかがでしょうか？'),'お願いしたいんですけど、いつできますか？');
+assert.equal(notice.run('state.scriptedPartialReplies.inspectionPickupDate'),undefined);
+stop.say('現在の走行距離は何キロですか？');
+assert.equal(stop.say('ありがとうございます。もしよかったらなんですが、朝、ああ、会社の方、私の当社によっていただくことは可能ですか？'),'できれば、車を取りに来てもらえませんか？');
+const waiting=session();
+waiting.say('現在の走行距離は何キロですか？');
+waiting.say('一時間半ぐらいでお待ちいただいてできる車検ですが、気になるところございますか？');
+assert.equal(waiting.run('inspectionWaitingPlanExplained("店内ではお待ちいただけません")'),false);
+waiting.say('ありがとうございます。');
+assert.equal(waiting.run('state.inspectionPickupActive'),false,'お礼だけでは追加作業後の案内を終えたことにしない');
+assert.equal(waiting.say('ではオイル交換も一緒にさせていただきますね。それを踏まえましても一時間半でできるのですが、ご来店いかがでしょうか？'),'できれば、車を取りに来てもらえませんか？');
+const pickup=session('120000');
+pickup.say('9月17日9時30分はいかがでしょうか？');
+pickup.say('当日はご来店いただけますか？');
+pickup.say('引取場所はどちらですか？');
+assert.equal(pickup.say('9時30分から作業開始できますが、いかがでございますか？'),'では、その時間でお願いします。');
+assert.equal(pickup.run('state.inspectionPickupPhase'),'resolved');
+assert.equal(pickup.run('state.proposedAppointment.minute'),30);
+assert.equal(pickup.say('9時30分から作業開始できますが、いかがでございますか？'),'では、その時間でお願いします。');
+assert.equal(pickup.run('state.proposedAppointment.day'),'17');
+for(const variant of ['30000','over60000','120000']) {
+ const unresolved=session(variant);
+ unresolved.say('9月30日10時半はいかがでしょうか？');
+ unresolved.say('当日はご来店いただけますか？');
+ assert.equal(unresolved.say('最後に9月30日10時半本別店にて車検のご予約させていただきますのでよろしくお願いいたします'),'はい。');
+ assert.equal(unresolved.run('state.proposedAppointment'),null);
+ assert.equal(unresolved.run('state.inspectionPickupActive'),true);
+ unresolved.say('ありがとうございました。');
+ assert.equal(unresolved.run('state.ended'),true);
+ assert.equal(unresolved.run('state.proposedAppointment'),null);
+ assert.ok(!unresolved.run('scoreScriptedRoleplay().judgements').includes('具体的な日時: ○'));
+}
+console.log('会話記憶：来店質問・分割待ち説明・引取時刻・未解決予約 OK');
