@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>12カ月点検｜発言の理解を比較</title><link rel="stylesheet" href="/style.css"></head>
+<body><main>
+  <p class="eyebrow">AI接客ロープレ · 検証用</p>
+  <h1>発言の理解を比較する</h1>
+  <p class="lead">12カ月点検の「追加作業」と「車の気になる点」の聞き取りを確認します。</p>
+  <aside>ここでの結果は検証用です。公開中のロープレ・採点・登録済み音声には反映されません。</aside>
+  <section aria-labelledby="inputTitle">
+    <h2 id="inputTitle">スタッフの言い方を試す</h2>
+    <label for="example">例文</label>
+    <select id="example">
+      <option value="">例文を選択してください</option>
+      <option>点検のほかにご希望の作業はございますか？</option>
+      <option>お車で気になるところはございますか？</option>
+      <option>点検以外のご用命や、お車で気になる点はございませんか？</option>
+      <option>一緒に済ませておきたい整備はありますか？</option>
+      <option>走っている時に、いつもと違う音がしたりしませんか？</option>
+      <option>追加整備と気になる点は後で確認します。</option>
+      <option>お車の調子について、その……</option>
+    </select>
+    <form id="compareForm">
+      <label for="utterance">スタッフの発言（400文字まで）</label>
+      <textarea id="utterance" maxlength="400" rows="4" required>点検以外のご用命や、お車で気になる点はございませんか？</textarea>
+      <p class="hint">氏名・電話番号・社員コードなどは入力せず、練習用の文章を使ってください。</p>
+      <label class="check"><input type="checkbox" id="live" disabled>入力した文章をGroqへ送信して、LLMの判定も比較する</label>
+      <p id="connection" class="hint" role="status">接続設定を確認しています。</p>
+      <button type="submit" id="submit">判定を確認する</button>
+    </form>
+  </section>
+  <section aria-labelledby="resultTitle">
+    <h2 id="resultTitle">比較結果</h2>
+    <p id="message" role="status" aria-live="polite">発言を入力して「判定を確認する」を押してください。</p>
+    <div class="tableWrap"><table><caption>今回の発言だけの判定</caption><thead><tr><th scope="col">確認する内容</th><th scope="col">現在のルール</th><th scope="col">LLM</th></tr></thead><tbody>
+      <tr><th scope="row">点検以外の作業希望</th><td id="rule-service">—</td><td id="llm-service">—</td></tr>
+      <tr><th scope="row">車の気になる点・症状</th><td id="rule-concern">—</td><td id="llm-concern">—</td></tr>
+    </tbody></table></div>
+    <p class="hint">両方を別々に確認する必要があります。この画面は1発話の比較です。実際のロープレでは、別々の発話で確認した内容も会話全体で保持します。</p>
+    <p id="evidence"></p>
+    <p id="timing" class="hint"></p>
+  </section>
+  <footer>顧客音声の生成は行いません。入力文と判定結果は、この検証サーバーには保存しません。外部送信時はGroqのデータ取扱条件が適用されます。</footer>
+</main><script src="/client.js" defer></script></body></html>
