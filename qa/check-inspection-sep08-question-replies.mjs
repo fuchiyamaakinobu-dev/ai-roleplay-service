@@ -23,6 +23,9 @@ const context = {
   hasInspectionBookingInvitation: () => false
 };
 vm.createContext(context);
+// Availability classification now delegates complete date/time proposals to the appointment parser.
+vm.runInContext(source.slice(source.indexOf("function hasInspectionAppointmentProposalEvidence"),
+  source.indexOf("function hasInspectionScheduleQuestionIntent")), context);
 vm.runInContext(
   `${source.slice(additionalStart, additionalEnd)}\n${source.slice(availabilityStart, availabilityEnd)}\n${source.slice(questionClauseStart, questionClauseEnd)}\n`
     + "this.asksInspectionAdditionalServiceFollowUp = asksInspectionAdditionalServiceFollowUp;"

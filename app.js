@@ -2557,6 +2557,9 @@ function asksInspectionVisitAttendance(text) {
 
 function hasInspectionAvailabilityRequest(text) {
   const normalized = normalizeScriptedText(text);
+  // 「9月1日は予定がありませんので、9時半はいかがでしょう」は
+  // 一般的な都合確認ではなく、具体的な日時の提案として処理する。
+  if (hasCompleteInspectionAppointmentProposal(normalized)) return false;
   if (hasInspectionBookingInvitation(normalized)) return true;
 
   // 「ご都合の良い日を教えていただければと思います」のように、
@@ -3332,6 +3335,8 @@ function isAffirmativeBookingAvailabilityReply(text) {
 }
 
 function combinedScriptedReply(text, step) {
+  // 完全な日時を言い直した場合、以前の日付断片を重ねて複数候補にしない。
+  if (step.key === "proposed_appointment" && hasCompleteInspectionAppointmentProposal(text)) return text;
   const pending = state.scriptedPartialReplies[step.key];
   const expiryEvidence = step.key === "explained_available_period"
     ? state.inspectionExpiryEvidence
