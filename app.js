@@ -1899,8 +1899,11 @@ function rememberCompletedCheckpoints(analysis) {
   }
 }
 
-function nextCustomerMessage(analysis) {
+function nextCustomerMessage(analysis, conversationIntent = null) {
   rememberCompletedCheckpoints(analysis);
+  // LLM evidence is for reply routing only. Never add it to scoring analyses/checkpoints.
+  const asksService = analysis.asked_service_request || analysis.asked_vehicle_concern
+    || analysis.asked_additional_service || conversationIntent?.asksService === true;
 
   if (analysis.decision === "pickup_accepted_immediately") {
     state.currentState = "PICKUP_REQUEST";
@@ -1919,7 +1922,7 @@ function nextCustomerMessage(analysis) {
 
   if (
     scenario.scoring.some((metric) => metric.key === "asked_additional_service")
-    && (analysis.asked_service_request || analysis.asked_vehicle_concern || analysis.asked_additional_service)
+    && asksService
     && !state.additionalServiceAnswered
   ) {
     if (state.serviceTimeExplained) state.serviceTimeNeedsReconfirmation = true;
@@ -1943,7 +1946,7 @@ function nextCustomerMessage(analysis) {
   }
 
   if (state.currentState === "ADDITIONAL_SERVICE_REQUEST") {
-    if (analysis.asked_service_request || analysis.asked_vehicle_concern || analysis.asked_additional_service) {
+    if (asksService) {
       state.additionalServiceReconfirmed = true;
       state.currentState = "ADDITIONAL_SERVICE_RECONFIRMATION";
       return customerTurnFromAudio(
@@ -1954,14 +1957,14 @@ function nextCustomerMessage(analysis) {
     const resumeState = state.additionalServiceResumeState || "INSPECTION_REQUEST_RECEIVED";
     state.additionalServiceResumeState = null;
     state.currentState = resumeState;
-    return nextCustomerMessage(analysis);
+    return nextCustomerMessage(analysis, conversationIntent);
   }
 
   if (state.currentState === "ADDITIONAL_SERVICE_RECONFIRMATION") {
     const resumeState = state.additionalServiceResumeState || "INSPECTION_REQUEST_RECEIVED";
     state.additionalServiceResumeState = null;
     state.currentState = resumeState;
-    return nextCustomerMessage(analysis);
+    return nextCustomerMessage(analysis, conversationIntent);
   }
 
   if (state.currentState === "SERVICE_TIME_QUESTION") {
@@ -6158,6 +6161,26 @@ function handleReply(event) {
   const analysis = analyzeStaff(text);
   state.turn += 1;
 
+  const resolver = window.ROLEPLAY_INTENT_ASSIST;
+  if (resolver?.enabled() && scenario.id === "service-12month-visit-promotion"
+    && ["INSPECTION_REQUEST_RECEIVED", "SERVICE_TIME_QUESTION", "ADDITIONAL_SERVICE_REQUEST", "ADDITIONAL_SERVICE_RECONFIRMATION"].includes(state.currentState)
+    && !analysis.asked_service_request && !analysis.asked_vehicle_concern
+    && analysis.decision !== "pickup_accepted_immediately" && analysis.decision !== "needs_more_context") {
+    const transcript = state.transcript;
+    const activeScenario = scenario;
+    setCustomerReplyPending(true);
+    return Promise.resolve().then(() => resolver.resolve(text)).catch(() => null).then(intent => {
+      // Reset, scenario change, or manual finish invalidates this pending turn.
+      if (state.transcript !== transcript || scenario !== activeScenario || state.ended || !state.started) return;
+      setCustomerReplyPending(false);
+      completeBranchingReply(analysis, intent);
+    });
+  }
+  completeBranchingReply(analysis);
+}
+
+function completeBranchingReply(analysis, conversationIntent = null) {
+
   if (analysis.decision === "pickup_accepted_immediately") {
     state.ended = true;
     addMessage("system", "引取を検出しました。ロープレを終了します。", {
@@ -6167,7 +6190,7 @@ function handleReply(event) {
     return;
   }
 
-  const customer = nextCustomerMessage(analysis);
+  const customer = nextCustomerMessage(analysis, conversationIntent);
   const finished = state.ended;
   addMessage("customer", customer.text, {
     audioId: customer.audioId,

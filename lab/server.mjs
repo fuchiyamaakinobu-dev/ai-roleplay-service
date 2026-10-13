@@ -11,6 +11,13 @@ const assets = new Map([
   ['/client.js', ['client.js', 'text/javascript; charset=utf-8']],
   ['/style.css', ['style.css', 'text/css; charset=utf-8']]
 ]);
+const roleplayAssets = new Map([
+  ['/roleplay/app.js', ['../app.js', 'text/javascript; charset=utf-8']],
+  ['/roleplay/scenario.js', ['../scenario.js', 'text/javascript; charset=utf-8']],
+  ['/roleplay/audio-db.js', ['../audio-db.js', 'text/javascript; charset=utf-8']],
+  ['/roleplay/styles.css', ['../styles.css', 'text/css; charset=utf-8']],
+  ['/roleplay/roleplay-bridge.js', ['roleplay-bridge.js', 'text/javascript; charset=utf-8']]
+]);
 
 export function createLabServer({ apiKey = '', enabled = false,
   budget = new Budget(fileURLToPath(new URL('../.llm-lab/budget.json', import.meta.url))),
@@ -28,6 +35,24 @@ export function createLabServer({ apiKey = '', enabled = false,
     if (req.headers.host !== host) return json(403, { error: 'host' });
     const url = new URL(req.url, `http://${host}`);
     try {
+      if (req.method === 'GET' && url.pathname === '/roleplay/') {
+        const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')
+          .replace(/<script[^>]+src="\.\/results-store\.js[^>]*><\/script>/, '')
+          .replace(/<script[^>]+src="\.\/cloud-scenario\.js[^>]*><\/script>/,
+            '<script src="./roleplay-bridge.js"></script><script src="./app.js"></script>')
+          .replace('ローカル判定モード', 'LLM連携検証・履歴保存なし');
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(html);
+      }
+      const publicAsset = roleplayAssets.get(url.pathname);
+      const audioMatch = /^\/roleplay\/(audio|audio-ondoku)\/([A-Za-z0-9_-]+\.mp3)$/.exec(url.pathname);
+      if (req.method === 'GET' && (publicAsset || audioMatch)) {
+        const [file, type] = publicAsset || [`../${audioMatch[1]}/${audioMatch[2]}`, 'audio/mpeg'];
+        const location = new URL(file, import.meta.url);
+        if (!fs.existsSync(location)) return json(404, { error: 'not_found' });
+        res.writeHead(200, { 'Content-Type': type });
+        return res.end(fs.readFileSync(location));
+      }
       if (req.method === 'GET' && assets.has(url.pathname)) {
         const [file, type] = assets.get(url.pathname);
         res.writeHead(200, { 'Content-Type': type });

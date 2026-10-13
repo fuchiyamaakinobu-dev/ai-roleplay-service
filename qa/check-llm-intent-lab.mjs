@@ -77,6 +77,13 @@ try {
   let origin = `http://127.0.0.1:${server.address().port}`;
   const post = (body, extra = {}) => fetch(origin + '/api/compare', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin, ...extra }, body: JSON.stringify(body) });
   assert.equal((await fetch(origin + '/')).status, 200);
+  const roleplayPage = await (await fetch(origin + '/roleplay/')).text();
+  assert.ok(roleplayPage.includes('roleplay-bridge.js'));
+  assert.ok(!roleplayPage.includes('results-store.js'));
+  assert.ok(!roleplayPage.includes('cloud-scenario.js'));
+  assert.equal((await fetch(origin + '/roleplay/app.js')).status, 200);
+  assert.equal((await fetch(origin + '/roleplay/audio/customer_additional_service_request.mp3')).status, 200);
+  assert.equal((await fetch(origin + '/roleplay/.env.local')).status, 404);
   for (const route of ['/.env.local', '/.llm-lab/budget.json', '/app.js', '/server.mjs', '/%2e%2e/.env.local']) assert.equal((await fetch(origin + route)).status, 404);
   const config = await (await fetch(origin + '/api/status')).text();
   assert.ok(!config.includes('test-only-key'));
