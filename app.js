@@ -6832,6 +6832,14 @@ function setupSpeech() {
   speechRecognition.interimResults = true;
   speechRecognition.continuous = true;
 
+  let recognitionStartedAt = 0;
+  let rapidEnds = 0;
+  let networkFailures = 0;
+  const stopFailedRecognition = (reason) => {
+    stopSpeechInput();
+    els.speechNote.textContent = `${reason} 自動再開を停止しました。入力した文章は残っています。マイクを押して再試行するか、文字入力で続けてください。`;
+  };
+
   const restartRecognition = (retryCount = 0) => {
     if (!speechListening || state.ended) return;
     updateMicButtonPaused();
@@ -6859,6 +6867,7 @@ function setupSpeech() {
   };
 
   speechRecognition.addEventListener("start", () => {
+    recognitionStartedAt = Date.now();
     speechRecognitionRunning = true;
     speechRecognitionHasStarted = true;
     clearSpeechStartWatchdog();
@@ -6876,6 +6885,8 @@ function setupSpeech() {
 
   speechRecognition.addEventListener("result", (event) => {
     if (!speechListening || state.ended) return;
+    rapidEnds = 0;
+    networkFailures = 0;
     const text = Array.from(event.results).map((result) => result[0].transcript).join("");
     els.staffInput.value = `${speechBaseText}${speechBaseText && text ? " " : ""}${text}`;
     const latestResult = event.results[event.results.length - 1];
@@ -6911,6 +6922,11 @@ function setupSpeech() {
       return;
     }
 
+    rapidEnds = Date.now() - recognitionStartedAt < 2000 ? rapidEnds + 1 : 0;
+    if (rapidEnds >= 3) {
+      stopFailedRecognition("音声認識が連続してすぐに終了しました。");
+      return;
+    }
     speechBaseText = els.staffInput.value.trim();
     if (speechRestartTimer) window.clearTimeout(speechRestartTimer);
     speechRestartTimer = window.setTimeout(() => {
@@ -6922,6 +6938,10 @@ function setupSpeech() {
   speechRecognition.addEventListener("error", (event) => {
     speechRecognitionRunning = false;
     clearSpeechStartWatchdog();
+    if (event.error === "network" && speechListening && ++networkFailures >= 3) {
+      stopFailedRecognition("音声認識サービスへの接続に続けて失敗しました。");
+      return;
+    }
     if (event.error === "not-allowed" || event.error === "service-not-allowed") {
       speechSessionActive = false;
       speechListening = false;
@@ -6956,6 +6976,8 @@ function setupSpeech() {
     }
 
     speechSessionActive = isVehicleInspectionScenario();
+    rapidEnds = 0;
+    networkFailures = 0;
     speechListening = true;
     speechBaseText = els.staffInput.value.trim();
     updateMicButtonPaused();

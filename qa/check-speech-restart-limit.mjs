@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const source=fs.readFileSync(new URL('../app.js',import.meta.url),'utf8');
+const handlers={}, timers=new Map(); let next=0, now=1000;
+const mic={addEventListener:(n,f)=>handlers.click=f};
+const ctx=vm.createContext({Date:{now:()=>now},window:{SpeechRecognition:class {addEventListener(n,f){handlers[n]=f} start(){} stop(){}},setTimeout:f=>{timers.set(++next,f);return next},clearTimeout:id=>timers.delete(id)},els:{micButton:mic,staffInput:{value:'入力を保持'},speechNote:{}},state:{started:true,ended:false},speechRecognition:null,speechListening:true,speechSessionActive:false,speechRecognitionRunning:false,speechRecognitionHasStarted:false,speechRestartTimer:null,speechDecisionTimer:null,speechBaseText:'',clearSpeechStartWatchdog(){},scheduleSpeechStartWatchdog(){},updateMicButton(){},updateMicButtonPaused(){},isVehicleInspectionScenario:()=>false});
+vm.runInContext('function stopSpeechInput(){speechListening=false;speechSessionActive=false;window.clearTimeout(speechRestartTimer)}',ctx);
+vm.runInContext(source.slice(source.indexOf('function setupSpeech()'),source.indexOf('function updateMicButton(')),ctx);
+vm.runInContext('setupSpeech()',ctx);
+for(let i=0;i<3;i++){handlers.start(); now+=100; handlers.end();}
+assert.equal(ctx.speechListening,false);
+assert.equal(ctx.els.staffInput.value,'入力を保持');
+assert.equal(timers.size,0);
+assert.match(ctx.els.speechNote.textContent,/連続してすぐに終了/);
+handlers.click(); assert.equal(ctx.speechListening,true);
+for(let i=0;i<3;i++) handlers.error({error:'network'});
+assert.equal(ctx.speechListening,false); assert.equal(timers.size,0);
+assert.match(ctx.els.speechNote.textContent,/接続に続けて失敗/);
+handlers.end(); assert.equal(timers.size,0);
+handlers.click(); handlers.start(); now+=10000; handlers.end();
+assert.equal(ctx.speechListening,true); assert.equal(timers.size,1);
+console.log('音声認識: 短時間終了/通信失敗の再試行上限・文字保持・手動再開・通常終了の再開 OK');
