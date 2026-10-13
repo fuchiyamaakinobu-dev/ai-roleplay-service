@@ -15,12 +15,12 @@
   const toggle = document.createElement('input');
   toggle.type = 'checkbox';
   toggle.disabled = true;
-  label.append(toggle, ' LLMが返答・MP3を選ぶ（12カ月点検の受付〜引取希望）');
+  label.append(toggle, ' LLMが返答・MP3を選ぶ（3シナリオ対応）');
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
   status.textContent = '接続設定を確認しています。';
   const note = document.createElement('p');
-  note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。受付〜引取希望はLLM選択、その後と車検2シナリオは既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
+  note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。12カ月点検は受付〜引取希望、車検上級・応用は走行距離・追加作業・連絡先への返答、応用は引取理由・場所への返答もLLM選択です。日時確定・来店や代車の提案・終話は既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
   panel.append(label, status, note);
   document.querySelector('.topbar').after(panel);
   window.ROLEPLAY_INTENT_ASSIST = {

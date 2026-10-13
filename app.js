@@ -6184,6 +6184,77 @@ function applyLlmReplySelection(analysis, selection) {
   return customerTurnFromAudio(candidate.id);
 }
 
+function inspectionLlmCandidates(text) {
+  if (!isVehicleInspectionScenario() || state.ended || isInspectionFinalClosingThanks(text)
+    || hasInspectionAppointmentProposalEvidence(text) || hasScriptedAppointmentRecapEvidence(text)
+    || isInspectionIncompleteOrNoiseUtterance(text)) return [];
+  const candidates = [];
+  const add = (id, action) => {
+    const item = audioIndex.get(id);
+    if (item?.status === "ready" && audioPath(id)) candidates.push({ id, action, text: item.text });
+  };
+  const durationKnown = state.inspectionDurationQuestionAsked || state.transcript.some(m =>
+    m.role === "staff" && hasSupportedInspectionDuration(m.text));
+  const mileageId = inspectionHighMileage() ? inspectionMileageReply().audioId
+    : durationKnown ? "inspection_current_mileage_customer" : "inspection_current_mileage_and_duration_customer";
+  add(mileageId, "inspection_mileage");
+  add(hasInspectionOilChangeRequest() ? "inspection_additional_service_none_customer"
+    : "inspection_asked_vehicle_concerns_customer", "inspection_work");
+  add("inspection_confirmed_reminder_contact_customer", "inspection_contact");
+  if (isPickupInspectionScenario() && state.inspectionPickupActive) {
+    const reason = inspectionPickupReasons.find(r => r.key === state.inspectionPickupReason)
+      || inspectionPickupReasons[state.variantSeed % inspectionPickupReasons.length];
+    add(reason.audioId, "inspection_reason");
+    if (["location", "confirmation"].includes(state.inspectionPickupPhase)) {
+      add("inspection_pickup_location_customer", "inspection_location");
+    }
+  }
+  return candidates;
+}
+
+function applyInspectionLlmSelection(text, selection) {
+  const candidate = inspectionLlmCandidates(text).find(c => c.id === selection?.id);
+  if (!candidate) return false;
+  // Score only the original speech. Model choices are never evidence of achievement.
+  rememberFutureScriptedAchievements(text, -1);
+  if (candidate.action === "inspection_mileage") {
+    state.inspectionMileageAsked = true;
+    state.inspectionDurationQuestionAsked = true;
+  } else if (candidate.action === "inspection_contact") {
+    state.inspectionReminderContactAnswered = true;
+  } else if (candidate.action === "inspection_reason") {
+    state.inspectionPickupReason = inspectionPickupReasons.find(r => r.audioId === candidate.id).key;
+    if (state.inspectionPickupPhase === "reason") state.inspectionPickupPhase = "proposal";
+    if (inspectionPickupReasonQuestion(text)) markInspectionPickupMetric("pickup_reason_confirmed", true, text);
+  } else if (candidate.action === "inspection_location") {
+    // Answer the location without implicitly accepting a pickup or a reservation.
+    state.inspectionPickupPhase = "confirmation";
+  }
+  state.turn += 1;
+  addMessage("customer", candidate.text, { audioId: candidate.id });
+  renderProgress();
+  return true;
+}
+
+function handleInspectionLlmReply(text) {
+  const resolver = window.ROLEPLAY_INTENT_ASSIST;
+  const candidates = inspectionLlmCandidates(text);
+  if (!resolver?.enabled() || !resolver.select || !candidates.length) return handleScriptedStaffReply(text);
+  const transcript = state.transcript;
+  const activeScenario = scenario;
+  const request = { text, live: true, candidates,
+    context: { phase: `inspection:${state.inspectionPickupPhase || state.scriptStep}`,
+      additionalAnswered: hasInspectionOilChangeRequest(), timeExplained: state.inspectionDurationQuestionAsked === true },
+    history: transcript.slice(0, -1).filter(m => ["staff", "customer"].includes(m.role))
+      .slice(-4).map(m => ({ role: m.role, text: m.text.slice(0, 250) })) };
+  setCustomerReplyPending(true);
+  return Promise.resolve().then(() => resolver.select(request)).catch(() => null).then(selection => {
+    if (state.transcript !== transcript || scenario !== activeScenario || state.ended || !state.started) return;
+    setCustomerReplyPending(false);
+    if (!applyInspectionLlmSelection(text, selection)) handleScriptedStaffReply(text);
+  });
+}
+
 function handleReply(event) {
   event.preventDefault();
   if (!state.started || state.ended || state.customerReplyPending) return;
@@ -6195,8 +6266,7 @@ function handleReply(event) {
   clearStaffInput();
   addMessage("staff", text);
   if (scenario.mode === "staff-led-scripted") {
-    handleScriptedStaffReply(text);
-    return;
+    return handleInspectionLlmReply(text);
   }
   const analysis = analyzeStaff(text);
   state.turn += 1;
