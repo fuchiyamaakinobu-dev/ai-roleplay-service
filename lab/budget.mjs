@@ -31,11 +31,11 @@ export class Budget {
     const day = new Date(now + 9 * 3600000).toISOString().slice(0, 10);
     return { value, day, now, used: value.day === day ? value.used : 0 };
   }
-  reserve() {
+  reserve(intervalMs = this.intervalMs) {
     const { value, day, now, used } = this.status();
     if (now < value.blockedUntil) return 'provider_limit';
     if (used >= this.dailyLimit) return 'daily_limit';
-    if (value.last && now - value.last < this.intervalMs) return 'cooldown';
+    if (value.last && now - value.last < intervalMs) return 'cooldown';
     this.write({ day, used: used + 1, last: now, blockedUntil: value.blockedUntil });
     return 'ok';
   }

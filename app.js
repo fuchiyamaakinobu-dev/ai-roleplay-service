@@ -6144,6 +6144,46 @@ function hasConfirmedInspectionAppointmentRecap(text) {
     && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|予約です|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います|(?:引取|引き取り|取りに).{0,12}伺う.{0,12}(?:予約|予定))/.test(normalizeScriptedText(text));
 }
 
+function llmReplyCandidates(analysis) {
+  if (scenario.id !== "service-12month-visit-promotion" || state.pickupRequested
+    || !["INSPECTION_REQUEST_RECEIVED", "SERVICE_TIME_QUESTION", "ADDITIONAL_SERVICE_REQUEST", "ADDITIONAL_SERVICE_RECONFIRMATION"].includes(state.currentState)) return [];
+  const candidates = [];
+  const add = (id, action) => {
+    const item = audioIndex.get(id);
+    if (item?.status === "ready" && audioPath(id)) candidates.push({ id, action, text: item.text });
+  };
+  add(state.additionalServiceAnswered ? scenario.audio.additionalServiceNone : scenario.audio.additionalServiceRequest,
+    state.additionalServiceAnswered ? "additional_none" : "additional_request");
+  const timeKnown = analysis.explained_service_time || (state.serviceTimeExplained
+    && (!state.serviceTimeNeedsReconfirmation || analysis.confirmed_service_time_unchanged));
+  if (timeKnown) scenario.audio.pickupRequests.forEach(id => add(id, "request_pickup"));
+  else scenario.audio.serviceTimeQuestions.forEach(id => add(id, "ask_time"));
+  return candidates;
+}
+
+function applyLlmReplySelection(analysis, selection) {
+  const candidate = llmReplyCandidates(analysis).find(c => c.id === selection?.id);
+  if (!candidate) return null;
+  rememberCompletedCheckpoints(analysis);
+  if (candidate.action === "additional_request") {
+    if (state.serviceTimeExplained) state.serviceTimeNeedsReconfirmation = true;
+    state.additionalServiceAnswered = true;
+    state.additionalServiceResumeState = state.currentState;
+    state.currentState = "ADDITIONAL_SERVICE_REQUEST";
+  } else if (candidate.action === "additional_none") {
+    state.additionalServiceReconfirmed = true;
+    state.currentState = "ADDITIONAL_SERVICE_RECONFIRMATION";
+  } else if (candidate.action === "ask_time") {
+    state.currentState = "SERVICE_TIME_QUESTION";
+  } else if (candidate.action === "request_pickup") {
+    state.currentState = "PICKUP_REQUEST";
+    state.pickupRequested = true;
+    state.pickupReason = classifyCustomerReason(candidate.text);
+    state.additionalServiceResumeState = null;
+  }
+  return customerTurnFromAudio(candidate.id);
+}
+
 function handleReply(event) {
   event.preventDefault();
   if (!state.started || state.ended || state.customerReplyPending) return;
@@ -6162,6 +6202,23 @@ function handleReply(event) {
   state.turn += 1;
 
   const resolver = window.ROLEPLAY_INTENT_ASSIST;
+  const candidates = llmReplyCandidates(analysis);
+  if (resolver?.enabled() && resolver.select && candidates.length
+    && analysis.decision !== "pickup_accepted_immediately" && analysis.decision !== "needs_more_context") {
+    const transcript = state.transcript;
+    const activeScenario = scenario;
+    const request = { text, live: true, candidates,
+      context: { phase: state.currentState, additionalAnswered: state.additionalServiceAnswered,
+        timeExplained: candidates.some(c => c.action === "request_pickup") },
+      history: state.transcript.slice(0, -1).filter(m => ["staff", "customer"].includes(m.role))
+        .slice(-4).map(m => ({ role: m.role, text: m.text.slice(0, 250) })) };
+    setCustomerReplyPending(true);
+    return Promise.resolve().then(() => resolver.select(request)).catch(() => null).then(selection => {
+      if (state.transcript !== transcript || scenario !== activeScenario || state.ended || !state.started) return;
+      setCustomerReplyPending(false);
+      completeBranchingReply(analysis, null, selection);
+    });
+  }
   if (resolver?.enabled() && scenario.id === "service-12month-visit-promotion"
     && ["INSPECTION_REQUEST_RECEIVED", "SERVICE_TIME_QUESTION", "ADDITIONAL_SERVICE_REQUEST", "ADDITIONAL_SERVICE_RECONFIRMATION"].includes(state.currentState)
     && !analysis.asked_service_request && !analysis.asked_vehicle_concern
@@ -6179,7 +6236,7 @@ function handleReply(event) {
   completeBranchingReply(analysis);
 }
 
-function completeBranchingReply(analysis, conversationIntent = null) {
+function completeBranchingReply(analysis, conversationIntent = null, selection = null) {
 
   if (analysis.decision === "pickup_accepted_immediately") {
     state.ended = true;
@@ -6190,7 +6247,8 @@ function completeBranchingReply(analysis, conversationIntent = null) {
     return;
   }
 
-  const customer = nextCustomerMessage(analysis, conversationIntent);
+  const customer = (selection && applyLlmReplySelection(analysis, selection))
+    || nextCustomerMessage(analysis, conversationIntent);
   const finished = state.ended;
   addMessage("customer", customer.text, {
     audioId: customer.audioId,

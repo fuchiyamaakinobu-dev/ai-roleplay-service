@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Budget } from './budget.mjs';
 import { MODEL, validInput, judgeWithGroq } from './intent-core.mjs';
 import { ruleBaseline } from './rule-baseline.mjs';
+import { validSelection } from './selection-core.mjs';
 
 const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -62,7 +63,8 @@ export function createLabServer({ apiKey = '', enabled = false,
         const { used } = budget.status();
         return json(200, { ready: enabled && !!apiKey, model: MODEL, used, limit: budget.dailyLimit });
       }
-      if (req.method !== 'POST' || url.pathname !== '/api/compare') return json(404, { error: 'not_found' });
+      const selecting = url.pathname === '/api/select';
+      if (req.method !== 'POST' || (!selecting && url.pathname !== '/api/compare')) return json(404, { error: 'not_found' });
       // Reject cross-site calls; serve no credential file or repository file.
       if (req.headers.origin !== `http://${host}` || req.headers['content-type'] !== 'application/json') {
         req.resume(); return json(403, { error: 'origin' });
@@ -71,26 +73,26 @@ export function createLabServer({ apiKey = '', enabled = false,
       const chunks = [];
       for await (const chunk of req) {
         size += chunk.length;
-        if (size > 8192) { json(413, { error: 'too_large' }); req.destroy(); return; }
+        if (size > 24576) { json(413, { error: 'too_large' }); req.destroy(); return; }
         chunks.push(chunk);
       }
       let input;
       try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { return json(400, { error: 'invalid_input' }); }
-      if (!validInput(input)) return json(400, { error: 'invalid_input' });
+      if (!(selecting ? validSelection(input) : validInput(input))) return json(400, { error: 'invalid_input' });
       const baseline = ruleBaseline(input.text);
-      const reply = (llm, elapsedMs = 0) => json(200, { baseline, llm, elapsedMs, mode: 'comparison_only' });
+      const reply = (llm, elapsedMs = 0) => json(200, { baseline, llm, elapsedMs, mode: selecting ? 'candidate_selection' : 'comparison_only' });
       if (!input.live) return reply({ status: 'disabled' });
       if (!enabled || !apiKey) return reply({ status: 'not_configured' });
       if (busy) return reply({ status: 'busy' });
       let allowance;
-      try { allowance = budget.reserve(); }
+      try { allowance = selecting ? budget.reserve(15000) : budget.reserve(); }
       catch { return reply({ status: 'budget_error' }); }
       if (allowance !== 'ok') return reply({ status: allowance });
       busy = true;
       const started = Date.now();
       try {
-        const llm = await judge(input.text, { apiKey });
+        const llm = await judge(input.text, { apiKey, selection: selecting ? input : null });
         if (llm.status === 'provider_limit') budget.block();
         return reply(llm, Date.now() - started);
       } catch { return reply({ status: 'network_error' }, Date.now() - started); }

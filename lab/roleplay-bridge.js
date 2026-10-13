@@ -15,16 +15,37 @@
   const toggle = document.createElement('input');
   toggle.type = 'checkbox';
   toggle.disabled = true;
-  label.append(toggle, ' LLMで言い換えを理解する（12カ月点検・検証用）');
+  label.append(toggle, ' LLMが返答・MP3を選ぶ（12カ月点検の受付〜引取希望）');
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
   status.textContent = '接続設定を確認しています。';
   const note = document.createElement('p');
-  note.textContent = 'ONにすると、既存ルールが認識できない発言をGroqへ送信します。個人情報を含まない練習文を使ってください。音声は既存MP3、採点は既存ルールです。この検証版は履歴をクラウド保存しません。';
+  note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。受付〜引取希望はLLM選択、その後と車検2シナリオは既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
   panel.append(label, status, note);
   document.querySelector('.topbar').after(panel);
   window.ROLEPLAY_INTENT_ASSIST = {
     enabled: () => toggle.checked && !toggle.disabled,
+    async select(request) {
+      if (request.text.length > 600) return null;
+      status.textContent = '会話の流れから返答を選んでいます…';
+      try {
+        const response = await fetch('/api/select', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request), signal: AbortSignal.timeout(7000) });
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        if (!toggle.checked) return null;
+        const choice = data.llm?.judgement;
+        const candidate = request.candidates.find(c => c.id === choice?.id);
+        if (data.llm?.status === 'ok' && candidate) {
+          status.textContent = `LLM選択：「${candidate.text}」（${(data.elapsedMs / 1000).toFixed(2)}秒）`;
+          return { id: candidate.id };
+        }
+        status.textContent = data.llm?.status === 'cooldown'
+          ? '15秒間隔の利用制限のため、今回は既存ルールで応答します。'
+          : `LLM選択を採用できませんでした（${data.llm?.status || '応答なし'}${choice?.id === 'rule' ? '・既存処理を選択' : ''}）。今回は既存ルールで応答します。`;
+        return null;
+      } catch { status.textContent = '通信を確認できないため、既存ルールで応答します。'; return null; }
+    },
     async resolve(text) {
       if (!text || text.length > 400) return null;
       status.textContent = '発言の意味を確認しています…';
@@ -54,6 +75,6 @@
   };
   fetch('/api/status').then(r => r.json()).then(data => {
     toggle.disabled = !data.ready;
-    status.textContent = data.ready ? '接続済み。チェックを入れると利用できます（1日50回・30秒間隔）。' : 'API未接続。既存ルールで練習できます。';
+    status.textContent = data.ready ? '接続済み。チェックを入れると利用できます（1日50回・返答選択は15秒間隔）。' : 'API未接続。既存ルールで練習できます。';
   }).catch(() => { status.textContent = '接続を確認できません。既存ルールで練習できます。'; });
 })();

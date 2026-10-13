@@ -69,3 +69,33 @@ const later = session(assistant); later.run('state.currentState="VISIT_PROPOSAL"
 const previous = calls; later.say('一緒に済ませておきたい整備はありますか？');
 assert.equal(calls, previous, 'Later stages are outside initial integration scope');
 console.log('LLM返答連携: 既存MP3・採点分離・API節約・失敗復帰・二重送信防止・終了/切替後の返答破棄 OK');
+
+// Candidate selection overrides a false positive from the existing keyword rule.
+let selectionRequest;
+const selecting = session({ enabled: () => true, select: async request => {
+  selectionRequest = request;
+  return { id: request.candidates.find(c => c.action === 'request_pickup').id };
+} });
+selecting.run('state.additionalServiceAnswered=true;state.currentState="ADDITIONAL_SERVICE_REQUEST"');
+await selecting.say('かしこまりました。オイル交換ですね。オイル交換を含めて作業時間は60分、一時間かからない程度で終わりますが、店舗でお待ちいただけますでしょうか。');
+assert.ok(selectionRequest);
+assert.equal(selecting.run('state.currentState'), 'PICKUP_REQUEST');
+assert.equal(selecting.run('state.pickupRequested'), true);
+assert.equal(selecting.run('state.serviceTimeExplained'), true);
+assert.notEqual(selecting.run('state.transcript.at(-1).audioId'), 'additionalServiceNone');
+assert.ok(!selectionRequest.candidates.some(c => c.action === 'ask_time'));
+assert.ok(!('employeeCode' in selectionRequest));
+const bounded = session();
+const initial = bounded.run('analyzeStaff("お車の調子はどうですか？")');
+assert.equal(bounded.run('applyLlmReplySelection(state.analyses[0],{id:"pickupRequest01"})'), null, 'Do not skip unknown duration');
+assert.equal(bounded.run('applyLlmReplySelection(state.analyses[0],{id:"unknown"})'), null);
+const { validSelection, validateSelection } = await import('../lab/selection-core.mjs');
+assert.equal(validSelection(selectionRequest), true);
+assert.ok(!validSelection({ ...selectionRequest, employeeCode: '000000' }));
+assert.ok(!validSelection({ ...selectionRequest, candidates: [null] }));
+assert.throws(() => validateSelection({id:'arbitrary',evidence:'店舗'}, selectionRequest));
+assert.throws(() => validateSelection({id:selectionRequest.candidates[0].id,evidence:'ない言葉'}, selectionRequest));
+assert.equal(validateSelection({id:'rule'}, selectionRequest).id, 'rule');
+assert.equal(validateSelection({id:selectionRequest.candidates[0].id}, selectionRequest).id, selectionRequest.candidates[0].id);
+console.log('LLM候補選択: 複合発話の誤判定補正・段階制約・音声ID許可リスト・入力/根拠検証 OK');
+export { selectionRequest };

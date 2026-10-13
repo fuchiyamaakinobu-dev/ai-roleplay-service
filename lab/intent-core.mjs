@@ -1,3 +1,4 @@
+import { SELECTION_PROMPT, validateSelection } from './selection-core.mjs';
 export const MODEL = 'qwen/qwen3.8-27b';
 export const KEYS = ['service_request', 'vehicle_concern'];
 export const PROMPT = `あなたは12カ月点検の接客練習におけるスタッフ発話の分類器です。
@@ -37,7 +38,7 @@ export function validateJudgement(value, text) {
   return result;
 }
 
-export async function judgeWithGroq(text, { apiKey, fetchImpl = fetch, timeoutMs = 6000 } = {}) {
+export async function judgeWithGroq(text, { apiKey, fetchImpl = fetch, timeoutMs = 6000, selection = null } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -47,14 +48,15 @@ export async function judgeWithGroq(text, { apiKey, fetchImpl = fetch, timeoutMs
       body: JSON.stringify({
         model: MODEL, temperature: 0, reasoning_effort: 'none', max_completion_tokens: 320,
         response_format: { type: 'json_object' },
-        messages: [{ role: 'system', content: PROMPT }, { role: 'user', content: JSON.stringify({ text }) }]
+        messages: [{ role: 'system', content: selection ? SELECTION_PROMPT : PROMPT }, { role: 'user', content: JSON.stringify(selection || { text }) }]
       })
     });
     if (!response.ok) return { status: response.status === 429 ? 'provider_limit' : 'provider_error' };
     const body = await response.json();
     if (body.choices?.[0]?.finish_reason !== 'stop') return { status: 'invalid_output' };
     try {
-      const judgement = validateJudgement(JSON.parse(body.choices[0].message.content), text);
+      const decoded = JSON.parse(body.choices[0].message.content);
+      const judgement = selection ? validateSelection(decoded, selection) : validateJudgement(decoded, text);
       return { status: 'ok', judgement };
     } catch { return { status: 'invalid_output' }; }
   } catch {
