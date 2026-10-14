@@ -20,11 +20,39 @@
   status.setAttribute('role', 'status');
   status.textContent = '接続設定を確認しています。';
   const note = document.createElement('p');
-  note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。12カ月点検は受付〜引取希望、車検上級・応用は走行距離・追加作業・連絡先への返答、応用は引取理由・場所への返答もLLM選択です。日時確定・来店や代車の提案・終話は既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
+  note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。12カ月点検は受付〜引取希望、車検上級・応用は走行距離・追加作業・連絡先への返答、応用は引取理由・場所への返答もLLM選択です。応用編の追加9音声は下の条件設定に対応します。日時確定・終話は既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
   panel.append(label, status, note);
+  const extras = document.createElement('details');
+  const summary = document.createElement('summary');
+  summary.textContent = '応用編：追加音声の練習条件・9本の試聴';
+  extras.append(summary);
+  const choice = (title, values) => {
+    const label = document.createElement('label');
+    label.textContent = title + ' ';
+    const select = document.createElement('select');
+    for (const [value, text] of values) { const option = document.createElement('option'); option.value = value; option.textContent = text; select.append(option); }
+    label.append(select); extras.append(label, document.createElement('br')); return select;
+  };
+  const scheduleChoice = choice('最初の日時提案', [['accept','通常どおり'],['other_date','別の日を希望'],['later_time','同じ日の遅い時間を希望']]);
+  const locationChoice = choice('引取場所', [['home','自宅'],['workplace','職場']]);
+  const waitingChoice = choice('来店に同意した後の過ごし方', [['store','店内で待つ'],['family','家族の迎え（代車不要）']]);
+  const hint = document.createElement('p');
+  hint.textContent = '条件は最初のスタッフ発言時に固定します。変更後は「やり直し」で開始してください。引取希望中に店内待ちへ勝手に変更しません。音声はユーザー提供の9本です。';
+  extras.append(hint);
+  const ids = ['vehicle_condition_no_concerns','oil_change_reconfirmed','cannot_wait_pickup_request','duration_accepted_wait_in_store','appointment_other_date_request','appointment_later_time_request','no_loaner_family_pickup','pickup_workplace_request','delivery_home_request'];
+  for (const suffix of ids) {
+    const item = window.ROLEPLAY_AUDIO_DB.items.find(i => i.id === 'inspection_' + suffix);
+    const row = document.createElement('div');
+    const caption = document.createElement('p'); caption.textContent = item.text;
+    const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none'; audio.src = '/roleplay/audio-ondoku/' + item.file;
+    audio.addEventListener('play', () => { for (const other of extras.querySelectorAll('audio')) if (other !== audio) other.pause(); });
+    row.append(caption, audio); extras.append(row);
+  }
+  panel.append(extras);
   document.querySelector('.topbar').after(panel);
   window.ROLEPLAY_INTENT_ASSIST = {
     enabled: () => toggle.checked && !toggle.disabled,
+    pickupSettings: () => ({ schedule: scheduleChoice.value, location: locationChoice.value, waiting: waitingChoice.value }),
     async select(request) {
       if (request.text.length > 600) return null;
       status.textContent = '会話の流れから返答を選んでいます…';

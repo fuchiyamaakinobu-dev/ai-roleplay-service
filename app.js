@@ -352,6 +352,7 @@ function selectScenario(scenarioId) {
   state.additionalServiceReconfirmed = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
+  state.pickupAudioMemory = null;
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.inspectionExpiryEvidence = "";
@@ -831,6 +832,16 @@ function commitMessage(role, text, options = {}) {
 }
 
 function addMessage(role, text, options = {}) {
+  if (role === "customer" && isPickupInspectionScenario() && state.pickupAudioMemory
+    && !state.pickupAudioMemory.location && options.audioId === "inspection_pickup_location_customer") {
+    state.pickupAudioMemory.location = "home";
+  }
+  if (role === "customer" && isPickupInspectionScenario()
+    && state.pickupAudioMemory?.location === "workplace"
+    && options.audioId === "inspection_pickup_location_customer") {
+    options = { ...options, audioId: "inspection_pickup_workplace_request" };
+    text = audioIndex.get(options.audioId).text;
+  }
   const previousMessage = state.transcript[state.transcript.length - 1];
   const delay = role === "customer"
     && previousMessage?.role === "staff"
@@ -1415,6 +1426,7 @@ function startRoleplay() {
   state.additionalServiceReconfirmed = false;
   state.additionalServiceResumeState = null;
   state.transcript = [];
+  state.pickupAudioMemory = null;
   state.analyses = [];
   state.scriptedPartialReplies = {};
   state.inspectionExpiryEvidence = "";
@@ -6189,10 +6201,115 @@ function applyLlmReplySelection(analysis, selection) {
   return customerTurnFromAudio(candidate.id);
 }
 
+function pickupAudioSettings() {
+  if (!isPickupInspectionScenario()) return null;
+  const assist = window.ROLEPLAY_INTENT_ASSIST;
+  if (!assist?.enabled() || !assist.pickupSettings) return null;
+  // Snapshot choices on first use; later UI changes must not change this customer's wishes.
+  if (!state.pickupAudioMemory) state.pickupAudioMemory = { settings: { ...assist.pickupSettings() } };
+  return state.pickupAudioMemory;
+}
+
+function pickupExtraCandidates(text) {
+  const memory = pickupAudioSettings();
+  if (!memory || state.ended || isInspectionFinalClosingThanks(text)
+    || isInspectionIncompleteOrNoiseUtterance(text) || hasScriptedAppointmentRecapEvidence(text)) return [];
+  const result = [];
+  const add = id => {
+    const item = audioIndex.get(id);
+    if (item?.status === "ready" && audioPath(id)) result.push({id, text:item.text, action:"inspection_extra"});
+  };
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  if (hasCompleteInspectionAppointmentProposal(text)) {
+    if (!state.proposedAppointment && !memory.rejected && !inspectionAppointmentBeforeAvailableFrom(text)) {
+      if (memory.settings.schedule === "other_date") add("inspection_appointment_other_date_request");
+      if (memory.settings.schedule === "later_time") add("inspection_appointment_later_time_request");
+    }
+    return result;
+  }
+  if (asksInspectionVehicleConcerns(q) && !/(?:オイル|交換|追加|作業)/.test(q)) add("inspection_vehicle_condition_no_concerns");
+  if (hasInspectionOilChangeRequest() && /オイル/.test(q) && isScriptedQuestion(q)
+    && !/(?:時間|待|ほか|その他)/.test(q)) add("inspection_oil_change_reconfirmed");
+  if (asksInspectionWaitingMethodConfirmation(q) || asksInspectionWaitingChoiceOfferSafe(q)) {
+    if (state.inspectionPickupOutcome === "visit" && !inspectionHighMileage()
+      && !state.inspectionLoanerRequested && !memory.family && memory.settings.waiting === "store"
+      && state.transcript.some(m => m.role === "staff" && hasSupportedInspectionDuration(m.text))) {
+      add("inspection_duration_accepted_wait_in_store");
+    } else if (state.inspectionPickupOutcome !== "visit" && !state.proposedAppointment
+      && (state.inspectionPickupActive || state.inspectionMileageAsked && hasInspectionOilChangeRequest()
+        && inspectionWaitingPlanExplained(text))) add("inspection_cannot_wait_pickup_request");
+  }
+  if (state.inspectionPickupOutcome === "visit" && !inspectionHighMileage()
+    && !state.inspectionWaitingMethod && !state.inspectionLoanerRequested
+    && memory.settings.waiting === "family" && asksInspectionLoanerNeed(q)) add("inspection_no_loaner_family_pickup");
+  if (state.inspectionPickupActive && ["location", "confirmation"].includes(state.inspectionPickupPhase)
+    && !memory.location && memory.settings.location === "workplace"
+    && isScriptedQuestion(q) && /(?:どこ|どちら|場所|住所|職場)/.test(q)) add("inspection_pickup_workplace_request");
+  if (state.inspectionPickupOutcome === "pickup" && state.inspectionPickupPhase === "resolved"
+    && !memory.delivery && isScriptedQuestion(q) && /(?:納車|返却|お返し|届け)/.test(q)) add("inspection_delivery_home_request");
+  return result;
+}
+
+function asksInspectionWaitingChoiceOfferSafe(text) {
+  return hasInspectionWaitingChoiceOffer(text) && isScriptedQuestion(text);
+}
+
+function applyPickupExtra(text, candidate) {
+  const memory = state.pickupAudioMemory;
+  const id = candidate.id;
+  if (/inspection_appointment_(?:other_date|later_time)_request/.test(id)) {
+    memory.rejected = { ...inspectionAppointmentProposalMatch(text), kind: memory.settings.schedule };
+    state.inspectionAppointmentCandidate = null;
+    delete state.scriptedPartialReplies.proposed_appointment;
+    delete state.scriptedPartialReplies.inspectionPickupDate;
+    // A rejected proposal is not a confirmed appointment or scoring evidence.
+  } else {
+    rememberFutureScriptedAchievements(text, -1);
+    if (id === "inspection_cannot_wait_pickup_request" && !state.inspectionPickupActive) {
+      state.inspectionPickupActive = true; state.inspectionPickupPhase = "reason";
+    }
+    if (id === "inspection_duration_accepted_wait_in_store") state.inspectionWaitingMethod = "store";
+    if (id === "inspection_no_loaner_family_pickup") {
+      memory.family = true; state.inspectionWaitingMethod = "family";
+      state.inspectionLoanerRequested = false; state.inspectionLoanerConfirmed = false;
+    }
+    if (id === "inspection_pickup_workplace_request") {
+      memory.location = "workplace"; state.inspectionPickupOutcome = "pickup";
+      state.inspectionPickupPhase = "confirmation";
+    }
+    if (id === "inspection_delivery_home_request") memory.delivery = "home";
+  }
+  state.turn += 1;
+  addMessage("customer", candidate.text, {audioId:id}); renderProgress();
+  return true;
+}
+
+function handlePickupAudioMemory(text) {
+  if (!isPickupInspectionScenario() || !state.pickupAudioMemory || isInspectionFinalClosingThanks(text)) return false;
+  const memory = state.pickupAudioMemory;
+  const q = inspectionLastQuestionClause(text);
+  let id;
+  if (memory.family && (asksInspectionLoanerNeed(q) || asksInspectionWaitingMethodConfirmation(q))) id = "inspection_no_loaner_family_pickup";
+  if (memory.family && /代車.{0,12}(?:用意|準備|手配)/.test(normalizeScriptedText(q))) id = "inspection_no_loaner_family_pickup";
+  if (memory.rejected && !memory.adjusted && hasInspectionAppointmentProposalEvidence(text)) {
+    const proposal = inspectionAppointmentProposalMatch(text);
+    const previous = memory.rejected;
+    const sameDate = proposal && Number(proposal.month) === Number(previous.month) && Number(proposal.day) === Number(previous.day);
+    const minutes = a => (Number(a.hour) % 12 + (a.period === "午後" ? 12 : Number(a.hour) >= 12 ? 12 : 0)) * 60 + a.minute;
+    const acceptable = proposal && (previous.kind === "other_date" ? !sameDate : sameDate && minutes(proposal) > minutes(previous));
+    if (acceptable) memory.adjusted = true;
+    else id = previous.kind === "other_date" ? "inspection_appointment_other_date_request" : "inspection_appointment_later_time_request";
+  }
+  if (!id) return false;
+  state.turn += 1; addMessage("customer", audioIndex.get(id).text, {audioId:id}); renderProgress();
+  return true;
+}
+
 function inspectionLlmCandidates(text) {
+  const extras = pickupExtraCandidates(text);
   if (!isVehicleInspectionScenario() || state.ended || isInspectionFinalClosingThanks(text)
     || hasInspectionAppointmentProposalEvidence(text) || hasScriptedAppointmentRecapEvidence(text)
-    || isInspectionIncompleteOrNoiseUtterance(text)) return [];
+    || isInspectionIncompleteOrNoiseUtterance(text)) return extras;
   const candidates = [];
   const add = (id, action) => {
     const item = audioIndex.get(id);
@@ -6214,12 +6331,19 @@ function inspectionLlmCandidates(text) {
       add("inspection_pickup_location_customer", "inspection_location");
     }
   }
-  return candidates;
+  if (extras.some(c => c.id === "inspection_vehicle_condition_no_concerns")) {
+    return [...candidates.filter(c => c.action !== "inspection_work"), ...extras];
+  }
+  if (extras.some(c => c.id === "inspection_pickup_workplace_request")) {
+    return [...candidates.filter(c => c.action !== "inspection_location"), ...extras];
+  }
+  return [...candidates, ...extras];
 }
 
 function applyInspectionLlmSelection(text, selection) {
   const candidate = inspectionLlmCandidates(text).find(c => c.id === selection?.id);
   if (!candidate) return false;
+  if (candidate.action === "inspection_extra") return applyPickupExtra(text, candidate);
   // Score only the original speech. Model choices are never evidence of achievement.
   rememberFutureScriptedAchievements(text, -1);
   if (candidate.action === "inspection_mileage") {
@@ -6242,6 +6366,12 @@ function applyInspectionLlmSelection(text, selection) {
 }
 
 function handleInspectionLlmReply(text) {
+  const rejected = isPickupInspectionScenario() && state.pickupAudioMemory?.rejected;
+  if (rejected?.kind === "later_time" && !state.pickupAudioMemory.adjusted
+    && !inspectionAppointmentDateCandidates(text).length && /\d{1,2}時(?!間)/.test(normalizeScriptedText(text))) {
+    text = `${rejected.month}月${rejected.day}日 ${text}`;
+  }
+  if (handlePickupAudioMemory(text)) return;
   const resolver = window.ROLEPLAY_INTENT_ASSIST;
   const candidates = inspectionLlmCandidates(text);
   if (!resolver?.enabled() || !resolver.select || !candidates.length) return handleScriptedStaffReply(text);
@@ -6256,7 +6386,11 @@ function handleInspectionLlmReply(text) {
   return Promise.resolve().then(() => resolver.select(request)).catch(() => null).then(selection => {
     if (state.transcript !== transcript || scenario !== activeScenario || state.ended || !state.started) return;
     setCustomerReplyPending(false);
-    if (!applyInspectionLlmSelection(text, selection)) handleScriptedStaffReply(text);
+    if (!applyInspectionLlmSelection(text, selection)) {
+      const extras = pickupExtraCandidates(text);
+      if (extras.length === 1) applyPickupExtra(text, extras[0]);
+      else handleScriptedStaffReply(text);
+    }
   });
 }
 

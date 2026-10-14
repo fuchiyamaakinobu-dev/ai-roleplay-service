@@ -471,3 +471,16 @@ window.ROLEPLAY_AUDIO_DB.items.push(...vehicleInspectionAudioLines.map(([id, lab
   file: `${id}.mp3`,
   status
 })));
+
+// User supplied recordings, pickup/delivery scenario only. No callback branch.
+window.ROLEPLAY_AUDIO_DB.items.push(...[
+  ["inspection_vehicle_condition_no_concerns", "今のところ、特に気になるところはありません。"],
+  ["inspection_oil_change_reconfirmed", "はい、オイル交換もお願いします。"],
+  ["inspection_cannot_wait_pickup_request", "お店で待つのは難しいので、取りに来てもらえますか？"],
+  ["inspection_duration_accepted_wait_in_store", "そのくらいなら、お店で待ちます。"],
+  ["inspection_appointment_other_date_request", "その日は都合が悪いので、別の日は空いていますか？"],
+  ["inspection_appointment_later_time_request", "その時間は難しいので、もう少し遅い時間はありますか？"],
+  ["inspection_no_loaner_family_pickup", "代車は必要ありません。家族に迎えに来てもらいます。"],
+  ["inspection_pickup_workplace_request", "職場への引き取りをお願いしたいです。"],
+  ["inspection_delivery_home_request", "終わったら、自宅まで届けてもらえますか？"]
+].map(([id, text]) => ({ id, label: text, text, file: `${id}.mp3`, status: "ready" })));

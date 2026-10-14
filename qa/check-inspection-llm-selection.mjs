@@ -40,3 +40,4 @@ assert.equal(stale.run('state.transcript.length'),1);
 const fail=session('vehicle-inspection-phone-followup',async()=>({id:'not-allowed'}));fail.run('handleScriptedStaffReply=()=>state.legacyCalled=true');
 await fail.say('走行距離は何キロですか？');assert.equal(fail.run('state.legacyCalled'),true);
 console.log('車検LLM: 上級/応用・距離設定・MP3・引取理由保持・予約保護・遅延破棄・失敗復帰 OK');
+export { session };
