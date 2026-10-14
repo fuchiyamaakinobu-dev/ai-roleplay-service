@@ -6244,7 +6244,7 @@ function pickupExtraCandidates(text) {
     && memory.settings.waiting === "family" && asksInspectionLoanerNeed(q)) add("inspection_no_loaner_family_pickup");
   if (state.inspectionPickupActive && ["location", "confirmation"].includes(state.inspectionPickupPhase)
     && !memory.location && memory.settings.location === "workplace"
-    && isScriptedQuestion(q) && /(?:どこ|どちら|場所|住所|職場)/.test(q)) add("inspection_pickup_workplace_request");
+    && asksInspectionPickupLocation(q)) add("inspection_pickup_workplace_request");
   if (state.inspectionPickupOutcome === "pickup" && state.inspectionPickupPhase === "resolved"
     && !memory.delivery && isScriptedQuestion(q) && /(?:納車|返却|お返し|届け)/.test(q)) add("inspection_delivery_home_request");
   return result;
@@ -6305,6 +6305,13 @@ function handlePickupAudioMemory(text) {
   return true;
 }
 
+function asksInspectionPickupLocation(text) {
+  const q = normalizeScriptedText(text);
+  return isScriptedQuestion(q) && /(?:どこ|どちら|場所|住所|自宅|職場)/.test(q)
+    && /(?:引取|引き取り|取りに|伺|場所|住所|自宅|職場)/.test(q)
+    && !/(?:電話|携帯|連絡先|番号|返却|納車|お返し|届け)/.test(q);
+}
+
 function inspectionLlmCandidates(text) {
   const extras = pickupExtraCandidates(text);
   if (!isVehicleInspectionScenario() || state.ended || isInspectionFinalClosingThanks(text)
@@ -6322,18 +6329,24 @@ function inspectionLlmCandidates(text) {
     m.role === "staff" && hasSupportedInspectionDuration(m.text));
   const mileageId = inspectionHighMileage() ? inspectionMileageReply().audioId
     : durationKnown ? "inspection_current_mileage_customer" : "inspection_current_mileage_and_duration_customer";
-  add(mileageId, "inspection_mileage");
-  add(hasInspectionOilChangeRequest() ? "inspection_additional_service_none_customer"
-    : "inspection_asked_vehicle_concerns_customer", "inspection_work");
+  if (asksCurrentMileage(question)) add(mileageId, "inspection_mileage");
+  if (asksInspectionVehicleConcerns(question) || asksInspectionAdditionalServiceFollowUp(question)
+    || asksInspectionOilChangeOffer(question)) {
+    add(hasInspectionOilChangeRequest() ? "inspection_additional_service_none_customer"
+      : "inspection_asked_vehicle_concerns_customer", "inspection_work");
+  }
   if (asksInspectionReminderContactDestination(question)) {
     add("inspection_confirmed_reminder_contact_customer", "inspection_contact");
   }
   if (isPickupInspectionScenario() && state.inspectionPickupActive) {
     const reason = inspectionPickupReasons.find(r => r.key === state.inspectionPickupReason)
       || inspectionPickupReasons[state.variantSeed % inspectionPickupReasons.length];
-    add(reason.audioId, "inspection_reason");
-    if (["location", "confirmation"].includes(state.inspectionPickupPhase)) {
-      add("inspection_pickup_location_customer", "inspection_location");
+    if (inspectionPickupReasonQuestion(question) && !asksCurrentMileage(question)
+      && !asksInspectionPickupLocation(question) && !asksInspectionReminderContactDestination(question)
+      && !asksInspectionVehicleConcerns(question)) add(reason.audioId, "inspection_reason");
+    if (["location", "confirmation"].includes(state.inspectionPickupPhase) && asksInspectionPickupLocation(question)) {
+      add(state.pickupAudioMemory?.location === "workplace"
+        ? "inspection_pickup_workplace_request" : "inspection_pickup_location_customer", "inspection_location");
     }
   }
   if (extras.some(c => c.id === "inspection_vehicle_condition_no_concerns")) {
