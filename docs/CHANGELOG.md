@@ -1251,3 +1251,10 @@
 - Cloudflare Workers用APIとSQLite Durable Objectによる共有上限管理を追加。LLM_ENABLEDは初期false。
 - モックによる入力検証、Origin、日次50回、15秒間隔、日本時間の日付更新、429後停止、秘密・発話の非保存テスト成功。
 - Cloudflareアカウント未作成のため実配置と実ランタイム検証は未実施。公開画面の接続はWorker URL確定後。GitHub Pagesへの反映なし。
+
+## 2026-10-15 公開フロントエンド接続準備（配置待ち）
+
+- 共通bridgeに公開モードを追加。公開時の履歴保存・管理リンクを維持し、設定したHTTPS APIへ送信。音声はGitHub Pages配下の相対パス。
+- llm-public-config.jsのURLはまだ空で、未設定時は公開LLM機能を起動しない。ローカルサーバーは公開用スクリプトを除去して従来どおり動作。
+- 全86本QA成功（85本＋HTTP1本）。Wranglerの公開バンドル検証成功。
+- Cloudflareログイン済み。初回workers.dev名未登録でdeployは未完了。Secret登録・本番疎通・GitHub Pages反映は未実施。

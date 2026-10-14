@@ -1,5 +1,10 @@
 (() => {
+  const config = window.ROLEPLAY_LLM_CONFIG;
+  const isPublic = config?.public === true;
+  if (isPublic && !config.apiBase) return;
+  const api = path => (isPublic ? config.apiBase : '') + path;
   // Local trial sessions must not be queued for later production history upload.
+  if (!isPublic) {
   window.ROLEPLAY_RESULTS = { recordStart() {}, saveResult() {} };
   const historyStatus = document.querySelector('#resultSaveStatus');
   if (historyStatus) {
@@ -8,6 +13,7 @@
   }
   for (const link of document.querySelectorAll('a[href]')) {
     if (/^\.\/(admin|history|audio-list|judgement-glossary)\.html$/.test(link.getAttribute('href'))) link.remove();
+  }
   }
   const panel = document.createElement('section');
   panel.className = 'manager-steps';
@@ -21,6 +27,7 @@
   status.textContent = '接続設定を確認しています。';
   const note = document.createElement('p');
   note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。12カ月点検は受付〜引取希望、車検上級・応用は走行距離・追加作業・連絡先への返答、応用は引取理由・場所への返答もLLM選択です。応用編の追加9音声は下の条件設定に対応します。日時確定・終話は既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
+  if (isPublic) note.textContent = note.textContent.replace('Groqへ送信','Cloudflare経由でGroqへ送信').replace('履歴はクラウド保存しません。','履歴保存は従来どおりです。LLMは全利用者合計1日50回・15秒間隔で、上限時は既存ルールで続けます。');
   panel.append(label, status, note);
   const tracePanel = document.createElement('details');
   const traceTitle = document.createElement('summary');
@@ -73,7 +80,7 @@
     const item = window.ROLEPLAY_AUDIO_DB.items.find(i => i.id === 'inspection_' + suffix);
     const row = document.createElement('div');
     const caption = document.createElement('p'); caption.textContent = item.text;
-    const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none'; audio.src = '/roleplay/audio-ondoku/' + item.file;
+    const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'none'; audio.src = (isPublic ? './audio-ondoku/' : '/roleplay/audio-ondoku/') + item.file;
     audio.addEventListener('play', () => { for (const other of extras.querySelectorAll('audio')) if (other !== audio) other.pause(); });
     row.append(caption, audio); extras.append(row);
   }
@@ -103,7 +110,7 @@
       if (request.text.length > 600) return null;
       status.textContent = '会話の流れから返答を選んでいます…';
       try {
-        const response = await fetch('/api/select', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        const response = await fetch(api('/api/select'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request), signal: AbortSignal.timeout(7000) });
         if (!response.ok) throw new Error();
         const data = await response.json();
@@ -132,6 +139,7 @@
       }
     },
     async resolve(text) {
+      if (isPublic) return null;
       if (!text || text.length > 400) return null;
       status.textContent = '発言の意味を確認しています…';
       try {
@@ -158,7 +166,7 @@
       } catch { status.textContent = '通信を確認できないため、既存ルールで続けます。'; return null; }
     }
   };
-  fetch('/api/status').then(r => r.json()).then(data => {
+  fetch(api('/api/status')).then(r => r.json()).then(data => {
     toggle.disabled = !data.ready;
     status.textContent = data.ready ? '接続済み。チェックを入れると利用できます（1日50回・返答選択は15秒間隔）。' : 'API未接続。既存ルールで練習できます。';
   }).catch(() => { status.textContent = '接続を確認できません。既存ルールで練習できます。'; });

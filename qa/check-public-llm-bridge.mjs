@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const nodes=[],urls=[];
+const node=tag=>{const n={tag,style:{},setAttribute(){},append(){},after(){},addEventListener(){}};nodes.push(n);return n;};
+const results={saveResult(){},recordStart(){}};
+const window={ROLEPLAY_RESULTS:results,ROLEPLAY_LLM_CONFIG:{public:true,apiBase:'https://api.example.com'}};
+const c=vm.createContext({window,document:{createElement:node,querySelector:s=>{assert.equal(s,'.topbar');return node('root')},querySelectorAll:()=>{throw Error('public links must be preserved')}},AbortSignal,
+ fetch:async url=>{urls.push(url);return {ok:true,json:async()=>url.endsWith('/status')?{ready:true}:{llm:{status:'ok',judgement:{id:'distance',kind:'question',topic:'mileage',evidence:'何キロ'}}}}}});
+vm.runInContext(fs.readFileSync(new URL('../audio-db.js',import.meta.url),'utf8'),c);
+vm.runInContext(fs.readFileSync(new URL('../lab/roleplay-bridge.js',import.meta.url),'utf8'),c);
+await new Promise(r=>setImmediate(r));
+assert.equal(window.ROLEPLAY_RESULTS,results);
+nodes.find(n=>n.type==='checkbox').checked=true;
+await window.ROLEPLAY_INTENT_ASSIST.select({text:'何キロ',candidates:[{id:'distance',text:'3万キロ'}]});
+assert.deepEqual(urls,['https://api.example.com/api/status','https://api.example.com/api/select']);
+assert.ok(nodes.filter(n=>n.tag==='audio').every(n=>n.src.startsWith('./audio-ondoku/')));
+assert.ok(nodes.some(n=>n.textContent?.includes('Cloudflare経由')));
+assert.equal(await window.ROLEPLAY_INTENT_ASSIST.resolve('test'),null);
+console.log('公開画面: 履歴保存維持・リンク維持・公開API接続・相対音声パス OK');

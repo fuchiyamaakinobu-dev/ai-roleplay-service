@@ -38,6 +38,7 @@ export function createLabServer({ apiKey = '', enabled = false,
     try {
       if (req.method === 'GET' && url.pathname === '/roleplay/') {
         const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8')
+          .replace(/<script data-llm-public[^>]*><\/script>/g, '')
           .replace(/<script[^>]+src="\.\/results-store\.js[^>]*><\/script>/, '')
           .replace(/<script[^>]+src="\.\/cloud-scenario\.js[^>]*><\/script>/,
             '<script src="./roleplay-bridge.js"></script><script src="./app.js"></script>')
