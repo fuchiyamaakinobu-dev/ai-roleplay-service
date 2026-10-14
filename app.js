@@ -6310,6 +6310,9 @@ function inspectionLlmCandidates(text) {
   if (!isVehicleInspectionScenario() || state.ended || isInspectionFinalClosingThanks(text)
     || hasInspectionAppointmentProposalEvidence(text) || hasScriptedAppointmentRecapEvidence(text)
     || isInspectionIncompleteOrNoiseUtterance(text)) return extras;
+  const question = inspectionLastQuestionClause(text);
+  // Instructions such as unloading luggage need acknowledgement, not a factual-question answer.
+  if (!isScriptedQuestion(normalizeScriptedText(question)) && !inspectionPickupReasonQuestion(question)) return extras;
   const candidates = [];
   const add = (id, action) => {
     const item = audioIndex.get(id);
@@ -6322,7 +6325,9 @@ function inspectionLlmCandidates(text) {
   add(mileageId, "inspection_mileage");
   add(hasInspectionOilChangeRequest() ? "inspection_additional_service_none_customer"
     : "inspection_asked_vehicle_concerns_customer", "inspection_work");
-  add("inspection_confirmed_reminder_contact_customer", "inspection_contact");
+  if (asksInspectionReminderContactDestination(question)) {
+    add("inspection_confirmed_reminder_contact_customer", "inspection_contact");
+  }
   if (isPickupInspectionScenario() && state.inspectionPickupActive) {
     const reason = inspectionPickupReasons.find(r => r.key === state.inspectionPickupReason)
       || inspectionPickupReasons[state.variantSeed % inspectionPickupReasons.length];
