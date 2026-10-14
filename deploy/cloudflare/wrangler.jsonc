@@ -1,0 +1,15 @@
+{
+  "name": "ai-roleplay-api",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-15",
+  "workers_dev": true,
+  "vars": {
+    "ALLOWED_ORIGIN": "https://fuchiyamaakinobu-dev.github.io",
+    "LLM_ENABLED": "false"
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "BUDGET", "class_name": "RoleplayBudget" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RoleplayBudget"] }],
+  "observability": { "enabled": false }
+}
