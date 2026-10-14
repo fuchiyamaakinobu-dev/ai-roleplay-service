@@ -800,6 +800,7 @@ function commitMessage(role, text, options = {}) {
     hiddenFromConversation: options.hiddenFromConversation === true
   };
   state.transcript.push(message);
+  window.ROLEPLAY_INTENT_ASSIST?.traceMessage?.(message);
   if (
     role === "customer"
     && isVehicleInspectionScenario()
@@ -942,6 +943,8 @@ function playAudio(src, fallbackText = "", showMissingMessage = true, onFinished
     if (typeof onFinished === "function") onFinished();
   };
   audio.addEventListener("ended", finishOnce, { once: true });
+  audio.addEventListener("playing", () => window.ROLEPLAY_INTENT_ASSIST?.tracePlayback?.(src, "再生開始"), { once: true });
+  audio.addEventListener("error", () => window.ROLEPLAY_INTENT_ASSIST?.tracePlayback?.(src, "再生失敗"), { once: true });
   audio.addEventListener("error", finishOnce, { once: true });
   audio.play().catch(() => {
     if (showMissingMessage) {

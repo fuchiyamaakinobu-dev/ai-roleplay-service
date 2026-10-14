@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {validateSelection} from '../lab/selection-core.mjs';
+import {judgeWithGroq} from '../lab/intent-core.mjs';
+const input={text:'トランクの荷物を降ろしてください。',candidates:[{id:'contact',action:'inspection_contact',text:'この携帯にお願いします。'}]};
+const wrong={id:'contact',kind:'request',topic:'other',evidence:input.text};
+const blocked=validateSelection(wrong,input);
+assert.equal(blocked.id,'rule');assert.equal(blocked.rejectedId,'contact');
+const question={...input,text:'連絡先はこの携帯でよろしいですか？'};
+assert.equal(validateSelection({...wrong,kind:'question',topic:'contact',evidence:question.text},question).id,'contact');
+assert.throws(()=>validateSelection({...wrong,evidence:'電話番号は？'},input));
+assert.throws(()=>validateSelection({...wrong,kind:'unclear'},input));
+assert.throws(()=>validateSelection({...wrong,id:'unknown'},input));
+const result=await judgeWithGroq(input.text,{apiKey:'test',selection:input,fetchImpl:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify(wrong)}}]})})});
+assert.equal(result.status,'ok');assert.equal(result.judgement.guard,'topic_mismatch');
+console.log('LLM意味判断: 原文根拠・質問と依頼・話題不一致拒否・API経路 OK');

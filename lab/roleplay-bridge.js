@@ -22,6 +22,35 @@
   const note = document.createElement('p');
   note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。12カ月点検は受付〜引取希望、車検上級・応用は走行距離・追加作業・連絡先への返答、応用は引取理由・場所への返答もLLM選択です。応用編の追加9音声は下の条件設定に対応します。日時確定・終話は既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
   panel.append(label, status, note);
+  const tracePanel = document.createElement('details');
+  const traceTitle = document.createElement('summary');
+  traceTitle.textContent = '返答チェック：発話の解釈・音声選択を確認';
+  const traceView = document.createElement('pre');
+  traceView.style.whiteSpace = 'pre-wrap';
+  const traceClear = document.createElement('button');
+  traceClear.type = 'button';
+  traceClear.textContent = '確認記録を消去';
+  tracePanel.append(traceTitle, traceView, traceClear);
+  panel.append(tracePanel);
+  let trace = null;
+  const traces = [];
+  const labels = {question:'質問',request:'お願い・依頼',explanation:'説明',acknowledgement:'相づち',unclear:'判断不能',
+    mileage:'走行距離',work:'車両状態・作業希望',contact:'連絡先',pickup_reason:'引取理由',pickup_location:'引取場所',
+    delivery_location:'返却場所',duration:'作業時間',waiting:'待ち方',loaner:'代車',appointment:'予約日時',other:'その他'};
+  const renderTrace = () => {
+    traceView.textContent = traces.length ? traces.slice().reverse().map(t => [
+      'スタッフ：' + t.text,
+      'LLM判定：' + (t.meaning || '未実行（対象外・既存ルール）'),
+      '根拠：' + (t.evidence || '—'),
+      'LLM選択：' + (t.selected || 'なし'),
+      '経路：' + (t.route || '既存ルール／応答待ち'),
+      '実際の返答：' + (t.reply || '応答待ち'),
+      '音声ID：' + (t.audioId || '—'),
+      '音声再生：' + (t.playback || '未確認')
+    ].join('\n')).join('\n\n') : 'この画面内だけに直近20発話を記録します。更新すると消えます。音声認識前の録音は保存しません。';
+  };
+  traceClear.addEventListener('click', () => { traces.length = 0; trace = null; renderTrace(); });
+  renderTrace();
   const extras = document.createElement('details');
   const summary = document.createElement('summary');
   summary.textContent = '応用編：追加音声の練習条件・9本の試聴';
@@ -51,9 +80,26 @@
   panel.append(extras);
   document.querySelector('.topbar').after(panel);
   window.ROLEPLAY_INTENT_ASSIST = {
+    traceMessage(message) {
+      if (message.role === 'staff') {
+        trace = { text: message.text };
+        traces.push(trace);
+        if (traces.length > 20) traces.shift();
+      } else if (message.role === 'customer' && trace) {
+        trace.reply = message.text; trace.audioId = message.audioId; trace.audioSrc = message.audioSrc;
+        if (trace.selectedId && trace.selectedId !== message.audioId) trace.route = 'LLM選択と異なる音声をアプリが採用';
+        else if (trace.selectedId) trace.route = 'LLM選択をアプリが採用';
+      }
+      renderTrace();
+    },
+    tracePlayback(src, result) {
+      if (trace?.audioSrc === src) { trace.playback = result; renderTrace(); }
+    },
     enabled: () => toggle.checked && !toggle.disabled,
     pickupSettings: () => ({ schedule: scheduleChoice.value, location: locationChoice.value, waiting: waitingChoice.value }),
     async select(request) {
+      const currentTrace = trace;
+      if (currentTrace) { currentTrace.route = 'LLMへ問い合わせ中'; renderTrace(); }
       if (request.text.length > 600) return null;
       status.textContent = '会話の流れから返答を選んでいます…';
       try {
@@ -63,6 +109,14 @@
         const data = await response.json();
         if (!toggle.checked) return null;
         const choice = data.llm?.judgement;
+        if (currentTrace) {
+          currentTrace.meaning = choice ? (labels[choice.kind] || choice.kind) + ' ／ ' + (labels[choice.topic] || choice.topic) : '判定取得なし';
+          currentTrace.evidence = choice?.evidence;
+          currentTrace.selected = choice?.rejectedId ? choice.rejectedId + '（意味と音声が不一致のため拒否）' : choice?.id || 'なし';
+          currentTrace.selectedId = choice?.id !== 'rule' ? choice?.id : null;
+          currentTrace.route = choice?.id === 'rule' ? 'LLM保留・不適合 → 既存ルール' : data.llm?.status === 'ok' ? 'アプリ適用待ち' : '既存ルール（' + (data.llm?.status || '応答なし') + '）';
+          renderTrace();
+        }
         const candidate = request.candidates.find(c => c.id === choice?.id);
         if (data.llm?.status === 'ok' && candidate) {
           status.textContent = `LLM選択：「${candidate.text}」（${(data.elapsedMs / 1000).toFixed(2)}秒）`;
@@ -72,7 +126,10 @@
           ? '15秒間隔の利用制限のため、今回は既存ルールで応答します。'
           : `LLM選択を採用できませんでした（${data.llm?.status || '応答なし'}${choice?.id === 'rule' ? '・既存処理を選択' : ''}）。今回は既存ルールで応答します。`;
         return null;
-      } catch { status.textContent = '通信を確認できないため、既存ルールで応答します。'; return null; }
+      } catch {
+        if (currentTrace) { currentTrace.route = '通信失敗 → 既存ルール'; renderTrace(); }
+        status.textContent = '通信を確認できないため、既存ルールで応答します。'; return null;
+      }
     },
     async resolve(text) {
       if (!text || text.length > 400) return null;
