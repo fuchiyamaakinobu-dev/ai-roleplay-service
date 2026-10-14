@@ -1,11 +1,12 @@
 {
   "name": "ai-roleplay-api",
   "main": "worker.mjs",
-  "compatibility_date": "2026-10-15",
+  "compatibility_date": "2026-10-14",
   "workers_dev": true,
+  "preview_urls": false,
   "vars": {
     "ALLOWED_ORIGIN": "https://fuchiyamaakinobu-dev.github.io",
-    "LLM_ENABLED": "false"
+    "LLM_ENABLED": "true"
   },
   "durable_objects": {
     "bindings": [{ "name": "BUDGET", "class_name": "RoleplayBudget" }]

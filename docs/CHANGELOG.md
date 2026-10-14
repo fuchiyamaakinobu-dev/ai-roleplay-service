@@ -1258,3 +1258,9 @@
 - llm-public-config.jsのURLはまだ空で、未設定時は公開LLM機能を起動しない。ローカルサーバーは公開用スクリプトを除去して従来どおり動作。
 - 全86本QA成功（85本＋HTTP1本）。Wranglerの公開バンドル検証成功。
 - Cloudflareログイン済み。初回workers.dev名未登録でdeployは未完了。Secret登録・本番疎通・GitHub Pages反映は未実施。
+
+## 2026-10-15 Cloudflare接続の公開反映
+
+- 公開Workerを配置、Secret登録、有効化。走行距離質問が270msで正しい意味・音声IDを返した。
+- 公開configにWorker URLを設定。app/audio-db/cloud-scenarioのキャッシュ識別子を更新。
+- 既存の86本QA成功済み。実環境で許可Origin200、不許可Origin403、OPTIONS204を確認。マイク実入力は未確認。
