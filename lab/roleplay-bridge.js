@@ -20,15 +20,31 @@
   const label = document.createElement('label');
   const toggle = document.createElement('input');
   toggle.type = 'checkbox';
+  toggle.checked = true;
   toggle.disabled = true;
   label.append(toggle, ' LLMが返答・MP3を選ぶ（3シナリオ対応）');
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
   status.textContent = '接続設定を確認しています。';
-  const note = document.createElement('p');
-  note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。12カ月点検は受付〜引取希望、車検上級・応用は走行距離・追加作業・連絡先・入庫意思・曜日希望への返答、応用は引取理由・場所への返答もLLM選択です。応用編の追加9音声は下の条件設定に対応します。日時確定・終話は既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
-  if (isPublic) note.textContent = note.textContent.replace('Groqへ送信','Cloudflare経由でGroqへ送信').replace('履歴はクラウド保存しません。','履歴保存は従来どおりです。LLMは全利用者合計1日50回・15秒間隔で、上限時は既存ルールで続けます。');
-  panel.append(label, status, note);
+  const remaining = document.createElement('p');
+  remaining.setAttribute('role', 'status');
+  remaining.textContent = '本日のLLM残り —／50回（全利用者合計）';
+  panel.append(label, remaining, status);
+  const refreshUsage = async (initial = false) => {
+    try {
+      const response = await fetch(api('/api/status'));
+      if (!response.ok) throw new Error();
+      const data = await response.json();
+      toggle.disabled = !data.ready;
+      if (Number.isInteger(data.used) && Number.isInteger(data.limit) && data.used >= 0 && data.limit > 0) {
+        remaining.textContent = `本日のLLM残り ${Math.max(0, data.limit - data.used)}／${data.limit}回（全利用者合計）`;
+      } else remaining.textContent = '本日のLLM残り：確認できません';
+      if (initial) status.textContent = data.ready ? '' : 'API未接続。既存ルールで練習できます。';
+    } catch {
+      remaining.textContent = '本日のLLM残り：確認できません';
+      if (initial) status.textContent = '接続を確認できません。既存ルールで練習できます。';
+    }
+  };
   const tracePanel = document.createElement('details');
   const traceTitle = document.createElement('summary');
   traceTitle.textContent = '返答チェック：発話の解釈・音声選択を確認';
@@ -136,7 +152,7 @@
       } catch {
         if (currentTrace) { currentTrace.route = '通信失敗 → 既存ルール'; renderTrace(); }
         status.textContent = '通信を確認できないため、既存ルールで応答します。'; return null;
-      }
+      } finally { void refreshUsage(); }
     },
     async resolve(text) {
       if (isPublic) return null;
@@ -164,10 +180,9 @@
           : '追加作業・車両状態の質問とは判定されなかったため、既存ルールで続けます。';
         return { asksService };
       } catch { status.textContent = '通信を確認できないため、既存ルールで続けます。'; return null; }
+      finally { void refreshUsage(); }
     }
   };
-  fetch(api('/api/status')).then(r => r.json()).then(data => {
-    toggle.disabled = !data.ready;
-    status.textContent = data.ready ? '接続済み。チェックを入れると利用できます（1日50回・返答選択は15秒間隔）。' : 'API未接続。既存ルールで練習できます。';
-  }).catch(() => { status.textContent = '接続を確認できません。既存ルールで練習できます。'; });
+  void refreshUsage(true);
+  if (window.setInterval) window.setInterval(() => { void refreshUsage(); }, 60000);
 })();
