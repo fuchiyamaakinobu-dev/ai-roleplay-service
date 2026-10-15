@@ -4600,7 +4600,42 @@ function handleInspectionPickupPreparation(text, decisionText) {
   return false;
 }
 
+function shouldAnswerInspectionBookingIntent(text) {
+  if (!isVehicleInspectionScenario() || state.ended || state.proposedAppointment
+    || state.inspectionAppointmentCandidate || state.inspectionPickupActive) return false;
+  const customers = state.transcript.filter(m => m.role === "customer");
+  if (!customers.some(m => m.audioId === "inspection_explained_inspection_notice_customer"
+    || m.text === "案内のはがきが来ていましたよ。")) return false;
+  if (customers.some(m => m.audioId === "inspection_asked_availability_customer"
+    || /いつできますか|何時が空いて|何日の予定/.test(m.text))) return false;
+  if (state.transcript.some(m => m.role === "staff"
+    && hasInspectionAppointmentCoordinationEvidence(m.text))) return false;
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  if (inspectionAppointmentDateCandidates(text).length || /\d{1,2}時|何日|何時|日程|いつ/.test(q)) return false;
+  if (hasInspectionAppointmentProposalEvidence(text) || hasScriptedAppointmentRecapEvidence(text)
+    || /(?:代車|荷物|連絡先|電話番号|キャンセル|取り消|入庫できない)/.test(q)) return false;
+  const asksConsent = isScriptedQuestion(q) || /(?:いただけないか|お願いできないか)/.test(q);
+  return asksConsent && (
+    /入庫.{0,16}(?:いただけ|いただくこと|お願いでき|お願いして|されます|お考え)/.test(q)
+    || /(?:当社|当店|弊社|こちら).{0,16}(?:車検|お任せ).{0,16}(?:お願い|いただけ|よろしい)/.test(q)
+  );
+}
+
 function handleScriptedStaffReply(text) {
+  if (shouldAnswerInspectionBookingIntent(text)) {
+    rememberFutureScriptedAchievements(text, -1);
+    const index = scenario.steps.findIndex(step => step.key === "asked_availability");
+    if (index >= state.scriptStep) {
+      state.scriptStep = index + 1;
+      state.currentState = scenario.steps[state.scriptStep]?.state || state.currentState;
+    }
+    state.turn += 1;
+    addMessage("customer", "お願いしたいんですけど、いつできますか？", {
+      audioId: "inspection_asked_availability_customer"
+    });
+    renderProgress();
+    return;
+  }
   if (isPickupInspectionScenario()) {
     const pendingAppointment = state.inspectionAppointmentCandidate;
     const recapText = normalizeScriptedText(text);
@@ -6387,6 +6422,10 @@ function applyInspectionLlmSelection(text, selection) {
 }
 
 function handleInspectionLlmReply(text) {
+  if (shouldAnswerInspectionBookingIntent(text)) {
+    handleScriptedStaffReply(text);
+    return;
+  }
   const rejected = isPickupInspectionScenario() && state.pickupAudioMemory?.rejected;
   if (rejected?.kind === "later_time" && !state.pickupAudioMemory.adjusted
     && !inspectionAppointmentDateCandidates(text).length && /\d{1,2}時(?!間)/.test(normalizeScriptedText(text))) {
