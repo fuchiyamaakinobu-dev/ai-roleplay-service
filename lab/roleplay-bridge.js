@@ -26,7 +26,7 @@
   status.setAttribute('role', 'status');
   status.textContent = '接続設定を確認しています。';
   const note = document.createElement('p');
-  note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。12カ月点検は受付〜引取希望、車検上級・応用は走行距離・追加作業・連絡先への返答、応用は引取理由・場所への返答もLLM選択です。応用編の追加9音声は下の条件設定に対応します。日時確定・終話は既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
+  note.textContent = 'ONにすると、発言・直近4発話・進行状況と返答候補をGroqへ送信します。架空の情報で練習してください。12カ月点検は受付〜引取希望、車検上級・応用は走行距離・追加作業・連絡先・入庫意思・曜日希望への返答、応用は引取理由・場所への返答もLLM選択です。応用編の追加9音声は下の条件設定に対応します。日時確定・終話は既存ルールです。採点は既存ルール、音声は登録済みMP3です。履歴はクラウド保存しません。';
   if (isPublic) note.textContent = note.textContent.replace('Groqへ送信','Cloudflare経由でGroqへ送信').replace('履歴はクラウド保存しません。','履歴保存は従来どおりです。LLMは全利用者合計1日50回・15秒間隔で、上限時は既存ルールで続けます。');
   panel.append(label, status, note);
   const tracePanel = document.createElement('details');
@@ -42,7 +42,7 @@
   let trace = null;
   const traces = [];
   const labels = {question:'質問',request:'お願い・依頼',explanation:'説明',acknowledgement:'相づち',unclear:'判断不能',
-    mileage:'走行距離',work:'車両状態・作業希望',contact:'連絡先',pickup_reason:'引取理由',pickup_location:'引取場所',
+    booking_intent:'入庫意思',weekday:'曜日希望',mileage:'走行距離',work:'車両状態・作業希望',contact:'連絡先',pickup_reason:'引取理由',pickup_location:'引取場所',
     delivery_location:'返却場所',duration:'作業時間',waiting:'待ち方',loaner:'代車',appointment:'予約日時',other:'その他'};
   const renderTrace = () => {
     traceView.textContent = traces.length ? traces.slice().reverse().map(t => [

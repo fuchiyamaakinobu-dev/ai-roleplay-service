@@ -3,7 +3,7 @@ import {session} from './check-inspection-llm-selection.mjs';
 for(const id of ['vehicle-inspection-phone-followup','vehicle-inspection-pickup-delivery']) {
  for(const enabled of [true,false]) {
   for(const text of ['当社へご入庫いただけますでしょうか？','ぜひご入庫いただけないかと思いまして、お電話させていただきました。','当店で車検をお願いしてもよろしいでしょうか？']) {
-   const s=session(id,async()=>{throw Error('Should not call LLM for this deterministic reply')});
+   const s=session(id,async()=>{throw Error('Simulated API failure: verify deterministic fallback')});
    s.run(`window.ROLEPLAY_INTENT_ASSIST.enabled=()=>${enabled};state.transcript.push({role:'customer',text:'案内のはがきが来ていましたよ。',audioId:'inspection_explained_inspection_notice_customer'});`);
    await s.say(text);
    assert.equal(s.run('state.transcript.at(-1).audioId'),'inspection_asked_availability_customer',text);

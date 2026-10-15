@@ -6366,7 +6366,8 @@ function inspectionLlmCandidates(text) {
     || isInspectionIncompleteOrNoiseUtterance(text)) return extras;
   const question = inspectionLastQuestionClause(text);
   // Instructions such as unloading luggage need acknowledgement, not a factual-question answer.
-  if (!isScriptedQuestion(normalizeScriptedText(question)) && !inspectionPickupReasonQuestion(question)) return extras;
+  if (!isScriptedQuestion(normalizeScriptedText(question)) && !inspectionPickupReasonQuestion(question)
+    && !shouldAnswerInspectionBookingIntent(text)) return extras;
   const candidates = [];
   const add = (id, action) => {
     const item = audioIndex.get(id);
@@ -6396,6 +6397,27 @@ function inspectionLlmCandidates(text) {
         ? "inspection_pickup_workplace_request" : "inspection_pickup_location_customer", "inspection_location");
     }
   }
+  // Unknown phrasing in the booking discussion is classified by the LLM.
+  // Eligibility comes from conversation state, not a weekday/booking keyword.
+  if (!candidates.length && !extras.length && !state.proposedAppointment
+    && !state.inspectionAppointmentCandidate && !state.inspectionPickupActive
+    && !inspectionAppointmentDateCandidates(text).length
+    && !/\d{1,2}時/.test(normalizeScriptedText(text))) {
+    const customers = state.transcript.filter(m => m.role === "customer");
+    const accepted = customers.some(m => m.audioId === "inspection_asked_availability_customer"
+      || /いつできますか|何時が空いて|何日の予定/.test(m.text));
+    const notice = customers.some(m => m.audioId === "inspection_explained_inspection_notice_customer"
+      || m.text === "案内のはがきが来ていましたよ。");
+    const scheduling = state.transcript.some(m => m.role === "staff" && m.text !== text
+      && hasInspectionAppointmentCoordinationEvidence(m.text));
+    if (notice && !accepted && !scheduling) {
+      add("inspection_asked_availability_customer", "inspection_booking_intent");
+    }
+    if ((notice || accepted || asksInspectionDayPreference(question))
+      && !state.questionRepeats["inspection-day-preference-answer"]) {
+      add("inspection_day_preference_answer", "inspection_weekday");
+    }
+  }
   if (extras.some(c => c.id === "inspection_vehicle_condition_no_concerns")) {
     return [...candidates.filter(c => c.action !== "inspection_work"), ...extras];
   }
@@ -6411,6 +6433,14 @@ function applyInspectionLlmSelection(text, selection) {
   if (candidate.action === "inspection_extra") return applyPickupExtra(text, candidate);
   // Score only the original speech. Model choices are never evidence of achievement.
   rememberFutureScriptedAchievements(text, -1);
+  if (["inspection_booking_intent", "inspection_weekday"].includes(candidate.action)) {
+    if (candidate.action === "inspection_weekday") state.questionRepeats["inspection-day-preference-answer"] = 1;
+    const index = scenario.steps.findIndex(step => step.key === "asked_availability");
+    if (index >= state.scriptStep) {
+      state.scriptStep = index + 1;
+      state.currentState = scenario.steps[state.scriptStep]?.state || state.currentState;
+    }
+  }
   if (candidate.action === "inspection_mileage") {
     state.inspectionMileageAsked = true;
     state.inspectionDurationQuestionAsked = true;
@@ -6431,10 +6461,6 @@ function applyInspectionLlmSelection(text, selection) {
 }
 
 function handleInspectionLlmReply(text) {
-  if (shouldAnswerInspectionBookingIntent(text)) {
-    handleScriptedStaffReply(text);
-    return;
-  }
   const rejected = isPickupInspectionScenario() && state.pickupAudioMemory?.rejected;
   if (rejected?.kind === "later_time" && !state.pickupAudioMemory.adjusted
     && !inspectionAppointmentDateCandidates(text).length && /\d{1,2}時(?!間)/.test(normalizeScriptedText(text))) {
