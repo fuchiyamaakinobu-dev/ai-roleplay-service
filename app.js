@@ -4003,11 +4003,11 @@ function shouldStartInspectionPickupFallback(text, step) {
     || asksInspectionDirectVisitInvitation(text);
 }
 
-function startInspectionPickupRequest(note) {
+function startInspectionPickupRequest(note, explicitChoice = false) {
   // 予約候補や都合確認だけで引取相談を始めない。
   const latestStaff = state.transcript.filter(item => item.role === "staff").at(-1)?.text || "";
   const directArrival = inspectionDirectArrivalConfirmation(latestStaff);
-  if (!state.inspectionPickupPhase && !directArrival && (!state.inspectionMileageAsked || !hasInspectionOilChangeRequest()
+  if (!explicitChoice && !state.inspectionPickupPhase && !directArrival && (!state.inspectionMileageAsked || !hasInspectionOilChangeRequest()
     || (inspectionHighMileage()
       ? !(inspectionHighMileagePlanExplained() && inspectionHighMileageLoanerExplained())
       : !inspectionWaitingPlanExplained(latestStaff)))) {
@@ -4028,6 +4028,32 @@ function startInspectionPickupRequest(note) {
   );
   els.speechNote.textContent = note;
   renderProgress();
+}
+
+function isInspectionPickupChoiceQuestion(text) {
+  if (!isPickupInspectionScenario() || state.ended || state.proposedAppointment || state.inspectionPickupOutcome) return false;
+  const last = normalizeScriptedText(inspectionLastQuestionClause(text));
+  if (!/(?:引取|引き取|取りに|待|どちら|どっち)/.test(last)) return false;
+  // Keep both options across commas, while excluding earlier sentences and later unrelated questions.
+  const q = normalizeScriptedText(String(text).split(/[。！!]/).filter(s => s.trim()).at(-1) || "");
+  return isScriptedQuestion(q)
+    && /(?:店内|お店|店舗).{0,16}(?:待|待機)|待ち車検/.test(q)
+    && /(?:引取|引き取|取りに)/.test(q)
+    && /(?:それとも|どちら|あるいは|または|か、|かそれ)/.test(q);
+}
+
+function answerInspectionPickupChoice(text) {
+  if (!isInspectionPickupChoiceQuestion(text)) return false;
+  rememberFutureScriptedAchievements(text, -1);
+  if (!state.inspectionPickupPhase) {
+    startInspectionPickupRequest("店内待機と引取の選択への返答として、引取希望を伝えました。", true);
+  } else {
+    state.turn += 1;
+    const item = audioIndex.get("inspection_pickup_request_customer");
+    addMessage("customer", item.text, {audioId:item.id});
+    renderProgress();
+  }
+  return true;
 }
 
 function inspectionCustomerResponseAudioId(
@@ -4656,6 +4682,7 @@ function shouldAnswerInspectionBookingIntent(text) {
 
 function handleScriptedStaffReply(text) {
   if (answerInspectionWrongName(text)) return;
+  if (answerInspectionPickupChoice(text)) return;
   if (shouldAnswerInspectionBookingIntent(text)) {
     rememberFutureScriptedAchievements(text, -1);
     const index = scenario.steps.findIndex(step => step.key === "asked_availability");
@@ -6385,6 +6412,10 @@ function asksInspectionPickupLocation(text) {
 }
 
 function inspectionLlmCandidates(text) {
+  if (isInspectionPickupChoiceQuestion(text)) {
+    const item = audioIndex.get("inspection_pickup_request_customer");
+    if (item?.status === "ready" && audioPath(item.id)) return [{id:item.id,action:"inspection_pickup_choice",text:item.text}];
+  }
   const wrongName = inspectionWrongNameAudio(text);
   if (wrongName) {
     const item = audioIndex.get(wrongName);
@@ -6460,6 +6491,7 @@ function inspectionLlmCandidates(text) {
 function applyInspectionLlmSelection(text, selection) {
   const candidate = inspectionLlmCandidates(text).find(c => c.id === selection?.id);
   if (!candidate) return false;
+  if (candidate.action === "inspection_pickup_choice") return answerInspectionPickupChoice(text);
   if (candidate.action === "inspection_wrong_name") return answerInspectionWrongName(text);
   if (candidate.action === "inspection_extra") return applyPickupExtra(text, candidate);
   // Score only the original speech. Model choices are never evidence of achievement.

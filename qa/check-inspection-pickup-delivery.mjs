@@ -56,7 +56,7 @@ for (const id of expectedAudio) {
 assert.match(appSource, /function handleInspectionPickupBranchReply\(text\)/);
 assert.match(appSource, /function shouldStartInspectionPickupAfterDuration\(step, analysis\)/);
 assert.match(appSource, /function shouldStartInspectionPickupFallback\(text, step\)/);
-assert.match(appSource, /function startInspectionPickupRequest\(note\)/);
+assert.match(appSource, /function startInspectionPickupRequest\(note, explicitChoice = false\)/);
 assert.match(appSource, /state\.inspectionPickupPhase === "reason"/);
 assert.match(appSource, /state\.inspectionPickupPhase === "proposal"/);
 assert.match(appSource, /state\.inspectionPickupPhase === "location"/);
