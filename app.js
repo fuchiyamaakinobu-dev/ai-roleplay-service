@@ -1327,6 +1327,14 @@ function inspectionLastQuestionClause(text) {
   // 疑問符・読点が省かれた音声認識でも、質問の話題が続けば最後を選ぶ。
   // 採点・候補日時の記録には、この切り出しではなく元の発話全体を使用する。
   const lastTopicClause = (clause) => {
+    // Retain weekday choices before a punctuation-split "which" question.
+    if (/^(?:どちら|どっち)(?:が|の方が|のほうが)?(?:よろしい|いい|良い|ご都合)/.test(clause)) {
+      const prefix = source.slice(0, source.lastIndexOf(clause));
+      const options = prefix.match(/((?:平日|土日|週末|土曜日|日曜日)(?:(?:[、,。\s]|もしくは|または|それとも|と|か|の|方|ほう|は|が|ええ|えー|あの)|(?:平日|土日|週末|土曜日|日曜日))*)$/);
+      if (options && (options[1].match(/平日|土日|週末|土曜日|日曜日/g) || []).length >= 2) {
+        return options[1] + clause;
+      }
+    }
     const topics = [...clause.matchAll(/(?:ご都合|走行距離|距離数|気になる|見てほしい|代車|お時間|お電話(?=.{0,12}(?:よろしい|よろしかった|大丈夫))|\d{1,2}月の?\d{1,2}日.{0,12}?\d{1,2}時(?!間))/g)];
     if (topics.length < 2) return clause;
     const lastTopic = topics[topics.length - 1];
@@ -3952,6 +3960,7 @@ function asksInspectionDirectVisitInvitation(text) {
 }
 
 function shouldStartInspectionPickupFallback(text, step) {
+  if (asksInspectionDayPreference(inspectionLastQuestionClause(text))) return false;
   if (
     !isPickupInspectionScenario()
     || state.inspectionPickupActive
