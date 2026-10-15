@@ -146,6 +146,8 @@ function fallbackContext({ pickupScenario, active = false, phase = null, appoint
   };
   vm.createContext(context);
   vm.runInContext(appSource.slice(fallbackStart, fallbackEnd), context);
+  vm.runInContext(appSource.slice(appSource.indexOf("function asksInspectionDayPreference("),
+    appSource.indexOf("function scriptedRetryForMissingDetails(")), context);
   return context;
 }
 
