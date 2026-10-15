@@ -484,3 +484,9 @@ window.ROLEPLAY_AUDIO_DB.items.push(...[
   ["inspection_pickup_workplace_request", "職場への引き取りをお願いしたいです。"],
   ["inspection_delivery_home_request", "終わったら、自宅まで届けてもらえますか？"]
 ].map(([id, text]) => ({ id, label: text, text, file: `${id}.mp3`, status: "ready" })));
+
+// 名前を間違えた場合の本人確認用。登録文は実音声の文字起こしに対応。
+window.ROLEPLAY_AUDIO_DB.items.push(...[
+  ['inspection_confirmed_identity_retry', 'どちらにおかけですか？'],
+  ['inspection_identity_missing_after_introduction', 'はい、どちらにおかけですか？']
+].map(([id, text]) => ({id, label:text, text, file:`${id}.mp3`, status:'ready'})));

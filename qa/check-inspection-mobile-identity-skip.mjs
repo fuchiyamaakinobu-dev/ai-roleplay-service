@@ -5,12 +5,10 @@ import vm from "node:vm";
 const appSource = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const scenarioSource = fs.readFileSync(new URL("../scenario.js", import.meta.url), "utf8");
 const audioDbSource = fs.readFileSync(new URL("../audio-db.js", import.meta.url), "utf8");
-const activeDialogueSource = `${appSource}\n${scenarioSource}\n${audioDbSource}`;
-
 assert.doesNotMatch(
-  activeDialogueSource,
+  scenarioSource,
   /どちらにおかけですか|どちらにお掛けですか/,
-  "廃止した『どちらにおかけですか？』が通常会話データに残っています"
+  "本人確認省略時の通常シナリオへ誤名専用の返答を戻さない"
 );
 assert.match(
   scenarioSource,
@@ -22,11 +20,15 @@ assert.match(
   /skippedIncompleteStep[\s\S]*?\? "はい。" : responseStep\.customerResponse/,
   "本人確認や名乗りが未達の場合に会話を止めず進められません"
 );
-assert.doesNotMatch(
-  audioDbSource,
-  /inspection_identity_missing_after_introduction|inspection_confirmed_identity_retry/,
-  "廃止した本人確認聞き返し音声が通常再生登録に残っています"
-);
+// 2026-10-16: ユーザー承認により誤名の場合だけ再登録。省略では流さない。
+const {session}=await import('./check-inspection-llm-selection.mjs');
+for(const id of ['vehicle-inspection-phone-followup','vehicle-inspection-pickup-delivery']){
+ const s=session(id,async()=>null);s.run('state.scriptStep=0;');
+ assert.equal(s.run('inspectionWrongNameAudio("トヨタモビリティ帯広の山田と申します。")'),null);
+ await s.say('トヨタモビリティ帯広の山田と申します。');
+ assert.doesNotMatch(s.run('state.transcript.at(-1).text'),/どちらにおかけですか/);
+ assert.equal(s.run('state.analyses.some(a=>a.stepKey==="confirmed_identity"&&a.passed)'),false);
+}
 
 const helperStart = appSource.indexOf("function scriptedStepCanAdvanceOnFailure");
 const helperEnd = appSource.indexOf("function markScriptedStepNotApplicable", helperStart);

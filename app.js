@@ -2910,6 +2910,30 @@ function asksInspectionIdentityConfirmation(text) {
   return new RegExp(`${customerName}(?:様|さん)?(?:のお電話|のお宅|ご本人|様)?(?:でいらっしゃいます|でしょうか|ですか|で?よろしい(?:ですか|でしょうか))`).test(normalized);
 }
 
+function inspectionWrongNameAudio(text) {
+  if (!isVehicleInspectionScenario() || state.ended || state.proposedAppointment
+    || state.inspectionPickupActive
+    || state.scriptStep > scenario.steps.findIndex(s => s.key === "explained_inspection_notice")
+    || state.analyses.some(a => a.stepKey === "confirmed_identity" && a.passed)) return null;
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  const match = q.match(/([一-龠ぁ-んァ-ヶーA-Za-z]{1,20})(?:様|さん)(?:のお電話|のお宅|ご本人)?(?:でいらっしゃいますか|でいらっしゃいますでしょうか|でしょうか|ですか|でよろしいでしょうか|でよろしいですか)/);
+  const name = normalizeScriptedText(scenario.customerName || "").replace(/様$/, "");
+  if (!match || !name || match[1].endsWith(name)) return null;
+  const introduced = hasInspectionSelfIntroduction(normalizeScriptedText(text))
+    || state.transcript.some(m => m.role === "staff" && hasInspectionSelfIntroduction(normalizeScriptedText(m.text)));
+  return introduced ? "inspection_identity_missing_after_introduction" : "inspection_confirmed_identity_retry";
+}
+
+function answerInspectionWrongName(text) {
+  const id = inspectionWrongNameAudio(text);
+  const item = audioIndex.get(id);
+  if (!item || item.status !== "ready") return false;
+  state.turn += 1;
+  addMessage("customer", item.text, { audioId: id });
+  renderProgress();
+  return true;
+}
+
 function repeatedInspectionCoreStepAfterAppointment(text) {
   if (!state.proposedAppointment) return null;
   const appointmentStepIndex = scenario.steps.findIndex((candidate) => candidate.key === "proposed_appointment");
@@ -4631,6 +4655,7 @@ function shouldAnswerInspectionBookingIntent(text) {
 }
 
 function handleScriptedStaffReply(text) {
+  if (answerInspectionWrongName(text)) return;
   if (shouldAnswerInspectionBookingIntent(text)) {
     rememberFutureScriptedAchievements(text, -1);
     const index = scenario.steps.findIndex(step => step.key === "asked_availability");
@@ -6360,6 +6385,11 @@ function asksInspectionPickupLocation(text) {
 }
 
 function inspectionLlmCandidates(text) {
+  const wrongName = inspectionWrongNameAudio(text);
+  if (wrongName) {
+    const item = audioIndex.get(wrongName);
+    if (item?.status === "ready" && audioPath(wrongName)) return [{id:wrongName, action:"inspection_wrong_name", text:item.text}];
+  }
   const extras = pickupExtraCandidates(text);
   if (!isVehicleInspectionScenario() || state.ended || isInspectionFinalClosingThanks(text)
     || hasInspectionAppointmentProposalEvidence(text) || hasScriptedAppointmentRecapEvidence(text)
@@ -6430,6 +6460,7 @@ function inspectionLlmCandidates(text) {
 function applyInspectionLlmSelection(text, selection) {
   const candidate = inspectionLlmCandidates(text).find(c => c.id === selection?.id);
   if (!candidate) return false;
+  if (candidate.action === "inspection_wrong_name") return answerInspectionWrongName(text);
   if (candidate.action === "inspection_extra") return applyPickupExtra(text, candidate);
   // Score only the original speech. Model choices are never evidence of achievement.
   rememberFutureScriptedAchievements(text, -1);
@@ -6473,7 +6504,8 @@ function handleInspectionLlmReply(text) {
   const transcript = state.transcript;
   const activeScenario = scenario;
   const request = { text, live: true, candidates,
-    context: { phase: `inspection:${state.inspectionPickupPhase || state.scriptStep}`,
+    context: { phase: candidates.some(c => c.action === "inspection_wrong_name")
+      ? `inspection:identity:${String(scenario.customerName).slice(0, 25)}` : `inspection:${state.inspectionPickupPhase || state.scriptStep}`,
       additionalAnswered: hasInspectionOilChangeRequest(), timeExplained: state.inspectionDurationQuestionAsked === true },
     history: transcript.slice(0, -1).filter(m => ["staff", "customer"].includes(m.role))
       .slice(-4).map(m => ({ role: m.role, text: m.text.slice(0, 250) })) };
