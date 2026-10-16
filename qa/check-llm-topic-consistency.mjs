@@ -5,13 +5,13 @@ for(const id of ['vehicle-inspection-phone-followup','vehicle-inspection-pickup-
  const s=session(id,async()=>null);
  s.run('state.inspectionPickupActive=true;state.inspectionPickupPhase="location";state.inspectionPickupReason="work";');
  const cases=[
- ['荷物を降ろしておいていただけますか？',[]],
+ ['荷物を降ろしておいていただけますか？',['inspection_ack_understood']],
  ['現在の走行距離は何キロですか？',['inspection_mileage']],
  ['お車の調子はいかがですか？',['inspection_work']],
  ['連絡先はこの携帯でよろしいですか？',['inspection_contact']],
  ['引取場所はどちらですか？',id.includes('pickup')?['inspection_location']:[]],
  ['お持ち込みが難しい理由を教えていただけますか？',id.includes('pickup')?['inspection_reason']:[]],
- ['荷物を降ろしてご来店ください。',[]],
+ ['荷物を降ろしてご来店ください。',['inspection_ack_understood']],
  ];
  for(const [text,expected] of cases) {
   assert.deepEqual(JSON.parse(s.run(`JSON.stringify(inspectionLlmCandidates(${JSON.stringify(text)}).map(c=>c.action))`)),expected,text);

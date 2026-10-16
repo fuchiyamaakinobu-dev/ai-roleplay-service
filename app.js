@@ -2,6 +2,7 @@ const scenarios = window.ROLEPLAY_SCENARIOS || [window.ROLEPLAY_SCENARIO];
 let scenario = scenarios[0];
 const audioDb = window.ROLEPLAY_AUDIO_DB || { basePath: "audio/", items: [] };
 const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
+let inspectionAcknowledgementSelection = null;
 
 let speechRecognition = null;
 let speechListening = false;
@@ -832,7 +833,54 @@ function commitMessage(role, text, options = {}) {
   if (typeof options.onCommitted === "function") options.onCommitted();
 }
 
+function inspectionAcknowledgementCandidates(text) {
+  if (!isVehicleInspectionScenario() || state.ended || isInspectionIncompleteOrNoiseUtterance(text)
+    || isInspectionFinalClosingThanks(text) || hasInspectionSelfIntroduction(normalizeScriptedText(text))
+    || hasCourtesyExpression(normalizeScriptedText(text))
+    || inspectionAppointmentDateCandidates(text).length) return [];
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  let action, ids;
+  if (/(?:お持ち(?!込)|持参|降ろ|ご準備|ご用意|ご確認|ロックナット|アダプタ|分前にご来店)/.test(q)
+    && /(?:ください|いただけ|お願い)/.test(q)) {
+    action = "inspection_ack_understood";
+    ids = ["inspection_explained_lock_and_arrival_customer"];
+  } else if (isScriptedQuestion(q)) {
+    if (/(?:どちら|どっち|それとも|何|いつ|いくつ)/.test(q)) return [];
+    const operation = /(?:予約|手続き|お手続き|このまま|代車.{0,14}(?:用意|手配)|引取.{0,14}手配)/.test(q);
+    if (!operation || !/(?:よろしい|大丈夫|いいですか)/.test(q)
+      || /(?:不要|できません|できない|キャンセル|変更)/.test(q)) return [];
+    action = "inspection_ack_consent";
+    ids = ["inspection_pickup_confirmed_customer", "inspection_recapped_appointment_customer"];
+  } else if (/(?:お持ち(?!込)|持参|ご用意ください|降ろ|ロックナット|アダプタ|ご準備|ご確認ください|分前にご来店)/.test(q)) {
+    action = "inspection_ack_understood";
+    ids = ["inspection_explained_lock_and_arrival_customer"];
+  } else if (/(?:です|ます|ください)[。！!]*$/.test(q)
+    && !/(?:希望|お願い|入庫|来店|引取|代車)/.test(q)) {
+    action = "inspection_ack_listening";
+    ids = ["inspection_thanked_customer_retry", "inspection_explained_lock_and_arrival_customer"];
+  } else return [];
+  return ids.map(id => audioIndex.get(id)).filter(item => item?.status === "ready" && audioPath(item.id))
+    .map(item => ({id:item.id,text:item.text,action}));
+}
+
+function contextualInspectionAcknowledgement(role, text, options) {
+  if (role !== "customer" || !isVehicleInspectionScenario()
+    || !["はい。", "分かりました。", "お願いします。", "はい、お願いします。", "大丈夫ですよ。"].includes(text)) return {text, options};
+  // Only substitute neutral replies. Never replace a date, preference, factual answer or question.
+  const staff = state.transcript.filter(m => m.role === "staff").at(-1)?.text;
+  if (!staff) return {text, options};
+  const candidates = inspectionAcknowledgementCandidates(staff);
+  if (!candidates.length) return {text, options};
+  const previous = state.transcript.filter(m => m.role === "customer").at(-1)?.text;
+  const selected = inspectionAcknowledgementSelection?.text === staff
+    ? candidates.find(c => c.id === inspectionAcknowledgementSelection.id) : null;
+  const candidate = selected && (selected.text !== previous || candidates.length === 1) ? selected
+    : candidates.find(c => c.text !== previous) || candidates[0];
+  return {text:candidate.text,options:{...options,audioId:candidate.id}};
+}
+
 function addMessage(role, text, options = {}) {
+  ({text, options} = contextualInspectionAcknowledgement(role, text, options));
   if (role === "customer" && isPickupInspectionScenario() && state.pickupAudioMemory
     && !state.pickupAudioMemory.location && options.audioId === "inspection_pickup_location_customer") {
     state.pickupAudioMemory.location = "home";
@@ -6465,7 +6513,7 @@ function inspectionLlmCandidates(text) {
   const question = inspectionLastQuestionClause(text);
   // Instructions such as unloading luggage need acknowledgement, not a factual-question answer.
   if (!isScriptedQuestion(normalizeScriptedText(question)) && !inspectionPickupReasonQuestion(question)
-    && !shouldAnswerInspectionBookingIntent(text)) return extras;
+    && !shouldAnswerInspectionBookingIntent(text)) return extras.length ? extras : inspectionAcknowledgementCandidates(text);
   const candidates = [];
   const add = (id, action) => {
     const item = audioIndex.get(id);
@@ -6522,12 +6570,17 @@ function inspectionLlmCandidates(text) {
   if (extras.some(c => c.id === "inspection_pickup_workplace_request")) {
     return [...candidates.filter(c => c.action !== "inspection_location"), ...extras];
   }
-  return [...candidates, ...extras];
+  return candidates.length || extras.length ? [...candidates, ...extras] : inspectionAcknowledgementCandidates(text);
 }
 
 function applyInspectionLlmSelection(text, selection) {
   const candidate = inspectionLlmCandidates(text).find(c => c.id === selection?.id);
   if (!candidate) return false;
+  if (candidate.action.startsWith("inspection_ack_")) {
+    inspectionAcknowledgementSelection = {text,id:candidate.id};
+    try { handleScriptedStaffReply(text); } finally { inspectionAcknowledgementSelection = null; }
+    return true;
+  }
   if (candidate.action === "inspection_pickup_confirmation") return answerInspectionPickupArrangementConfirmation(text);
   if (candidate.action === "inspection_pickup_choice") return answerInspectionPickupChoice(text);
   if (candidate.action === "inspection_wrong_name") return answerInspectionWrongName(text);
