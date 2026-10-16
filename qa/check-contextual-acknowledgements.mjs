@@ -32,7 +32,11 @@ for(const id of ['vehicle-inspection-phone-followup','vehicle-inspection-pickup-
  s.run("state.transcript.push({role:'staff',text:'受付内容をご案内いたします。'});addMessage('customer','はい。',{audioId:'inspection_thanked_customer_retry',immediate:true});");
  assert.equal(s.run('state.transcript.at(-1).text'),'はい。');
  s.run("state.transcript.push({role:'staff',text:'受付内容をご案内いたします。'});addMessage('customer','はい。',{audioId:'inspection_thanked_customer_retry',immediate:true});");
- assert.equal(s.run('state.transcript.at(-1).text'),'分かりました。');
+ assert.equal(s.run('state.transcript.at(-1).text'),'ええ。');
+ assert.equal(s.run('state.transcript.at(-1).audioId'),'inspection_ack_listening_ee');
+ assert.ok(fs.existsSync(new URL('../'+s.run('audioPath("inspection_ack_listening_ee")'),import.meta.url)));
+ assert.equal(s.run('inspectionAcknowledgementCandidates("書類をお持ちください。").some(c=>c.id==="inspection_ack_listening_ee")'),false);
+ assert.equal(s.run('inspectionAcknowledgementCandidates("予約の手続きを進めてもよろしいでしょうか？").some(c=>c.id==="inspection_ack_listening_ee")'),false);
  const before=s.run('state.transcript.length');
  s.run("state.transcript.push({role:'staff',text:'現在の走行距離は何キロですか？'});addMessage('customer','今、3万キロくらいです。',{audioId:'inspection_current_mileage_customer',immediate:true});");
  assert.equal(s.run('state.transcript.at(-1).audioId'),'inspection_current_mileage_customer');

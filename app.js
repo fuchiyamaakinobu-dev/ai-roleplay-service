@@ -857,7 +857,7 @@ function inspectionAcknowledgementCandidates(text) {
   } else if (/(?:です|ます|ください)[。！!]*$/.test(q)
     && !/(?:希望|お願い|入庫|来店|引取|代車)/.test(q)) {
     action = "inspection_ack_listening";
-    ids = ["inspection_thanked_customer_retry", "inspection_explained_lock_and_arrival_customer"];
+    ids = ["inspection_thanked_customer_retry", "inspection_ack_listening_ee", "inspection_explained_lock_and_arrival_customer"];
   } else return [];
   return ids.map(id => audioIndex.get(id)).filter(item => item?.status === "ready" && audioPath(item.id))
     .map(item => ({id:item.id,text:item.text,action}));
@@ -865,7 +865,7 @@ function inspectionAcknowledgementCandidates(text) {
 
 function contextualInspectionAcknowledgement(role, text, options) {
   if (role !== "customer" || !isVehicleInspectionScenario()
-    || !["はい。", "分かりました。", "お願いします。", "はい、お願いします。", "大丈夫ですよ。"].includes(text)) return {text, options};
+    || !["はい。", "ええ。", "分かりました。", "お願いします。", "はい、お願いします。", "大丈夫ですよ。"].includes(text)) return {text, options};
   // Only substitute neutral replies. Never replace a date, preference, factual answer or question.
   const staff = state.transcript.filter(m => m.role === "staff").at(-1)?.text;
   if (!staff) return {text, options};

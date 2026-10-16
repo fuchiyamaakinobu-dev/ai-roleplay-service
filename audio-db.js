@@ -490,3 +490,8 @@ window.ROLEPLAY_AUDIO_DB.items.push(...[
   ['inspection_confirmed_identity_retry', 'どちらにおかけですか？'],
   ['inspection_identity_missing_after_introduction', 'はい、どちらにおかけですか？']
 ].map(([id, text]) => ({id, label:text, text, file:`${id}.mp3`, status:'ready'})));
+// User-supplied listening acknowledgement; never a choice or consent answer.
+window.ROLEPLAY_AUDIO_DB.items.push({
+  id:'inspection_ack_listening_ee',label:'説明への相づち・ええ',text:'ええ。',
+  file:'inspection_ack_listening_ee.mp3',status:'ready'
+});
