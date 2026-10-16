@@ -4049,7 +4049,7 @@ function answerInspectionPickupChoice(text) {
     startInspectionPickupRequest("店内待機と引取の選択への返答として、引取希望を伝えました。", true);
   } else {
     state.turn += 1;
-    const item = audioIndex.get("inspection_pickup_request_customer");
+    const item = audioIndex.get("inspection_pickup_still_requested");
     addMessage("customer", item.text, {audioId:item.id});
     renderProgress();
   }
@@ -6413,7 +6413,8 @@ function asksInspectionPickupLocation(text) {
 
 function inspectionLlmCandidates(text) {
   if (isInspectionPickupChoiceQuestion(text)) {
-    const item = audioIndex.get("inspection_pickup_request_customer");
+    const item = audioIndex.get(state.inspectionPickupPhase
+      ? "inspection_pickup_still_requested" : "inspection_pickup_request_customer");
     if (item?.status === "ready" && audioPath(item.id)) return [{id:item.id,action:"inspection_pickup_choice",text:item.text}];
   }
   const wrongName = inspectionWrongNameAudio(text);
