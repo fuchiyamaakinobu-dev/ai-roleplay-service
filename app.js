@@ -2674,7 +2674,10 @@ function inspectionAppointmentDateCandidates(text) {
     .filter((match) => normalized[match.index - 1] !== "月")
     .filter((match) => {
       const followingText = normalized.slice(match.index + match[0].length);
-      return !/^[、,。.]*(?:以降|以後|から|より|まで)/.test(followingText);
+      const precedingText = normalized.slice(0, match.index);
+      return !/^[、,。.]*(?:以降|以後|から|より|まで)/.test(followingText)
+        && !/^(?:間|車検|点検|お預かり|預かり|程度|ほど|かか|掛か)/.test(followingText)
+        && !/(?:作業|所要|期間|預かり|お預かり|最短|最長|約|およそ|\d+泊)(?:時間|日数)?(?:は|が|に|で|を|として)?$/.test(precedingText);
     })
     .map((match) => {
       const precedingMonths = [...normalized.slice(0, match.index).matchAll(/(\d{1,2})月/g)];
@@ -4056,6 +4059,34 @@ function answerInspectionPickupChoice(text) {
   return true;
 }
 
+function asksInspectionPickupArrangementConfirmation(text) {
+  if (!isPickupInspectionScenario() || state.ended || state.proposedAppointment
+    || !state.inspectionPickupActive || !["reason", "proposal", "location"].includes(state.inspectionPickupPhase)) return false;
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  return isScriptedQuestion(q)
+    && /(?:引取|引き取|取りに)/.test(q)
+    && /(?:手配|受付|伺|承|お願い|進め|引取で|引き取りで)/.test(q)
+    && /(?:よろしい|よろしかった|大丈夫|いいですか|いいでしょうか)/.test(q)
+    && !/(?:難しい場合|難しければ|無理な場合|できません|できない|不要|ではなく|ではない)/.test(q);
+}
+
+function answerInspectionPickupArrangementConfirmation(text) {
+  if (!asksInspectionPickupArrangementConfirmation(text)) return false;
+  rememberFutureScriptedAchievements(text, -1);
+  const evidence = inspectionPickupProposalEvidence(text, state.inspectionPickupReason);
+  markInspectionPickupMetric("pickup_circumstance_acknowledged", evidence.acknowledged, text);
+  markInspectionPickupMetric("pickup_alternative_proposed", evidence.alternative, text);
+  markInspectionPickupMetric("pickup_choice_preserved", evidence.choicePreserved, text);
+  state.inspectionPickupOutcome = "pickup";
+  state.inspectionPickupPhase = "location";
+  state.turn += 1;
+  const item = audioIndex.get("inspection_pickup_confirmed_customer");
+  addMessage("customer", item.text, {audioId:item.id});
+  els.speechNote.textContent = "引取手配に同意しました。引取場所と具体的な日時を確認してください。";
+  renderProgress();
+  return true;
+}
+
 function inspectionCustomerResponseAudioId(
   customerResponseOverride,
   partialPhaseResponse,
@@ -4683,6 +4714,7 @@ function shouldAnswerInspectionBookingIntent(text) {
 function handleScriptedStaffReply(text) {
   if (answerInspectionWrongName(text)) return;
   if (answerInspectionPickupChoice(text)) return;
+  if (answerInspectionPickupArrangementConfirmation(text)) return;
   if (shouldAnswerInspectionBookingIntent(text)) {
     rememberFutureScriptedAchievements(text, -1);
     const index = scenario.steps.findIndex(step => step.key === "asked_availability");
@@ -6412,6 +6444,10 @@ function asksInspectionPickupLocation(text) {
 }
 
 function inspectionLlmCandidates(text) {
+  if (asksInspectionPickupArrangementConfirmation(text)) {
+    const item = audioIndex.get("inspection_pickup_confirmed_customer");
+    if (item?.status === "ready" && audioPath(item.id)) return [{id:item.id,action:"inspection_pickup_confirmation",text:item.text}];
+  }
   if (isInspectionPickupChoiceQuestion(text)) {
     const item = audioIndex.get(state.inspectionPickupPhase
       ? "inspection_pickup_still_requested" : "inspection_pickup_request_customer");
@@ -6492,6 +6528,7 @@ function inspectionLlmCandidates(text) {
 function applyInspectionLlmSelection(text, selection) {
   const candidate = inspectionLlmCandidates(text).find(c => c.id === selection?.id);
   if (!candidate) return false;
+  if (candidate.action === "inspection_pickup_confirmation") return answerInspectionPickupArrangementConfirmation(text);
   if (candidate.action === "inspection_pickup_choice") return answerInspectionPickupChoice(text);
   if (candidate.action === "inspection_wrong_name") return answerInspectionWrongName(text);
   if (candidate.action === "inspection_extra") return applyPickupExtra(text, candidate);
