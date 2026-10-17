@@ -833,7 +833,20 @@ function commitMessage(role, text, options = {}) {
   if (typeof options.onCommitted === "function") options.onCommitted();
 }
 
+function isInspectionServiceDismissal(text) {
+  return /(?:よそ|他店|他のお店|別のお店).{0,12}(?:入れてください|行ってください|頼んでください)|(?:車検|車|予約).{0,8}(?:お願いしたくない|受け付けません|受けたくない)/.test(normalizeScriptedText(text));
+}
+
+function answerInspectionServiceDismissal(text) {
+  if (!isVehicleInspectionScenario() || !isInspectionServiceDismissal(text)) return false;
+  state.turn += 1;
+  addMessage("customer", "それで、どうしたらいいですか？", { audioId: "inspection_asked_availability_retry" });
+  renderProgress();
+  return true;
+}
+
 function inspectionAcknowledgementCandidates(text) {
+  if (isInspectionServiceDismissal(text)) return [];
   if (!isVehicleInspectionScenario() || state.ended || isInspectionIncompleteOrNoiseUtterance(text)
     || isInspectionFinalClosingThanks(text) || hasInspectionSelfIntroduction(normalizeScriptedText(text))
     || hasCourtesyExpression(normalizeScriptedText(text))
@@ -2702,8 +2715,14 @@ function isInspectionDeadlineDateCandidate(normalized, date) {
     || /^[、,。.]*(?:が|で)?満了/.test(followingText);
 }
 
-function inspectionAppointmentDateCandidates(text) {
+function inspectionAdmissionScheduleText(text) {
   const normalized = normalizeScriptedText(text);
+  // 返却予定は入庫予約と別の日時。明示された返却部分だけを除外する。
+  return normalized.replace(/(?:翌日|作業後|返却(?:日時|日)?は|納車(?:日時|日)?は)[^。！？!?]*(?:お引き渡し|引き渡し|お返し|返却|納車)[^。！？!?]*/g, "");
+}
+
+function inspectionAppointmentDateCandidates(text) {
+  const normalized = inspectionAdmissionScheduleText(text);
   const explicitDates = [...normalized.matchAll(/(\d{1,2})月(\d{1,2})日/g)]
     .filter((match) => {
       const followingText = normalized.slice(match.index + match[0].length);
@@ -2746,7 +2765,7 @@ function inspectionAppointmentDateCandidates(text) {
 }
 
 function inspectionAppointmentProposalMatch(text) {
-  const normalized = normalizeScriptedText(text);
+  const normalized = inspectionAdmissionScheduleText(text);
   const dates = inspectionAppointmentDateCandidates(normalized);
   if (dates.length !== 1) return null;
   const date = dates[0];
@@ -3700,7 +3719,7 @@ function isInspectionFinalClosingThanks(text) {
 }
 
 function hasScriptedAppointmentRecapEvidence(text) {
-  const normalized = normalizeScriptedText(text);
+  const normalized = inspectionAdmissionScheduleText(text);
   const hasDateAndTime = /\d{1,2}月\d{1,2}日/.test(normalized)
     && /\d{1,2}時/.test(normalized);
   return hasDateAndTime && /(?:予約|予定|お待ち|来店)/.test(normalized);
@@ -3938,6 +3957,8 @@ function inspectionPickupReasonFromQuestion(text) {
 
 function inspectionPickupReasonQuestion(text) {
   const normalized = normalizeScriptedText(text);
+  if (/(?:家族|ご主人).{0,30}(?:一緒|同伴).{0,30}(?:来|越|難し|いかが|可能)/.test(normalized)
+    && !/(?:なぜ|どうして|理由|事情)/.test(normalized)) return false;
   const politeReasonRequest = /(?:理由|事情).{0,24}(?:教えて|お聞かせ|伺い|お聞き).{0,24}(?:いただきた|いただけ|ください|たく)/.test(normalized);
   if (!isScriptedQuestion(normalized) && !politeReasonRequest) return false;
   // 開放質問に加え、実績で使われた「お仕事でご都合が悪いですか」など、
@@ -4028,7 +4049,7 @@ function shouldStartInspectionPickupAfterDuration(step, analysis) {
 function asksInspectionDirectVisitInvitation(text) {
   const normalized = normalizeScriptedText(text);
   const hasVisitWording = /(?:ご入庫|入庫|ご入校|入校|ご来店|来店|お越し|来ていただ|来てもら|来ること|(?:当社|弊社|店舗|お店).{0,8}(?:寄って|よって)いただ|店(?:で|内で|の方で).{0,8}待)/.test(normalized);
-  const asksOrRequestsVisit = /(?:お願い|いただけ|いただき|いただいて|できます|可能|いかが|よろしい|いいですか)/.test(normalized);
+  const asksOrRequestsVisit = /(?:お願い|いただけ|いただき|いただいて|できます|可能|いかが|よろしい|いいですか|難しいですか)/.test(normalized);
   return hasVisitWording
     && asksOrRequestsVisit
     && (isScriptedQuestion(normalized) || /(?:お願いしたい|お願いでき)/.test(normalized));
@@ -4263,10 +4284,9 @@ function handleInspectionPickupBranchReply(text) {
     // ない限り引取から来店へ自動変更しない。
     if (asksVisit) {
       // 引取を希望し続ける理由に合わない再提案だけでは、来店へ変更しない。
-      // 仕事・競合比較など従来の再確認は維持し、運転負担には具体策を必要とする。
-      const unresolvedDrivingBurden = ["driving", "distance"].includes(state.inspectionPickupReason)
-        && !inspectionPickupProposalEvidence(text, state.inspectionPickupReason).alternative;
-      if (unresolvedDrivingBurden) {
+      // どの理由でも、単なる来店可否の再確認では引取希望を変更しない。
+      const unresolvedPickupReason = !inspectionPickupProposalEvidence(text, state.inspectionPickupReason).proposal;
+      if (unresolvedPickupReason) {
         const retryKey = "inspection-pickup-unfit-visit";
         if (!state.questionRepeats?.[retryKey]) {
           state.questionRepeats = state.questionRepeats || {};
@@ -4278,7 +4298,7 @@ function handleInspectionPickupBranchReply(text) {
         } else {
           continueSpeechInputWithoutCustomerReply("理由に合う代替案か、引取場所を確認してください。");
         }
-        els.speechNote.textContent = "運転・距離の不安が解消されていないため、引取希望を維持しています。";
+        els.speechNote.textContent = "引取希望の理由に合う具体策がないため、希望を維持しています。";
         renderProgress();
         return true;
       }
@@ -4369,7 +4389,7 @@ function confirmInspectionPickupAppointmentCandidate(allowPreparationSkip = fals
 }
 
 function inspectionPickupAppointmentReproposal(text) {
-  const normalized = normalizeScriptedText(text);
+  const normalized = inspectionAdmissionScheduleText(text);
   // 誤った最終復唱は既存どおり未達採点。明示的な再提案だけを変更する。
   if (/(?:最後|最終|復唱|確認させて)/.test(normalized)
     || !/(?:いかが|変更|よろしい|よろしかった)/.test(normalized)
@@ -4760,6 +4780,7 @@ function shouldAnswerInspectionBookingIntent(text) {
 }
 
 function handleScriptedStaffReply(text) {
+  if (answerInspectionServiceDismissal(text)) return;
   if (answerInspectionWrongName(text)) return;
   if (answerInspectionPickupChoice(text)) return;
   if (answerInspectionPickupArrangementConfirmation(text)) return;
@@ -6615,6 +6636,7 @@ function applyInspectionLlmSelection(text, selection) {
 }
 
 function handleInspectionLlmReply(text) {
+  if (answerInspectionServiceDismissal(text)) return;
   const rejected = isPickupInspectionScenario() && state.pickupAudioMemory?.rejected;
   if (rejected?.kind === "later_time" && !state.pickupAudioMemory.adjusted
     && !inspectionAppointmentDateCandidates(text).length && /\d{1,2}時(?!間)/.test(normalizeScriptedText(text))) {
