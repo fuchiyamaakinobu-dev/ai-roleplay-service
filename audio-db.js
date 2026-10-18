@@ -494,4 +494,8 @@ window.ROLEPLAY_AUDIO_DB.items.push(...[
 window.ROLEPLAY_AUDIO_DB.items.push({
   id:'inspection_ack_listening_ee',label:'説明への相づち・ええ',text:'ええ。',
   file:'inspection_ack_listening_ee.mp3',status:'ready'
+});window.ROLEPLAY_AUDIO_DB.items.push({
+  id:'roleplay_terminated_inappropriate_speech',label:'不適切な発言による終了案内',
+  text:'不適切な発言があった為、ロープレを終了します',
+  file:'roleplay_terminated_inappropriate_speech.mp3',status:'ready'
 });

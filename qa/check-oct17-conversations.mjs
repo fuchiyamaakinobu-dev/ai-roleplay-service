@@ -8,7 +8,10 @@ for(const mode of ['llm','off','failure','rule']) {
  if(mode==='off')s.run('window.ROLEPLAY_INTENT_ASSIST.enabled=()=>false');
  s.run(realAdd);s.run("interactionDelayMs=()=>0;commitMessage=(role,text,options)=>state.transcript.push({role,text,audioId:options.audioId});");
  for(const text of ['じゃあよそで入れてください','車お願いしたくないんですけど']) {
-  await s.say(text);assert.equal(s.run('state.transcript.at(-1).audioId'),'inspection_asked_availability_retry');
+  const d=session('vehicle-inspection-pickup-delivery',async()=>null);
+  d.run('renderResults=()=>{};');await d.say(text);
+  assert.equal(d.run('state.ended'),true);
+  assert.equal(d.run('state.transcript.at(-1).audioId'),'roleplay_terminated_inappropriate_speech');
  }
  for(const reason of ['driving','distance','work','misunderstanding','competitor']) {
   s.run(`state.inspectionPickupActive=true;state.inspectionPickupPhase='location';state.inspectionPickupReason='${reason}';state.inspectionPickupOutcome='pickup';state.questionRepeats={};`);

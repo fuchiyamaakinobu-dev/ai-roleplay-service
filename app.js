@@ -838,10 +838,14 @@ function isInspectionServiceDismissal(text) {
 }
 
 function answerInspectionServiceDismissal(text) {
-  if (!isVehicleInspectionScenario() || !isInspectionServiceDismissal(text)) return false;
+  if (!isInspectionServiceDismissal(text)) return false;
+  if (state.ended) return true;
   state.turn += 1;
-  addMessage("customer", "それで、どうしたらいいですか？", { audioId: "inspection_asked_availability_retry" });
-  renderProgress();
+  state.ended = true;
+  addMessage("system", "不適切な発言があった為、ロープレを終了します", {
+    audioId: "roleplay_terminated_inappropriate_speech", immediate: true
+  });
+  finishRoleplay({ keepCustomerPlayback: true });
   return true;
 }
 
@@ -6676,6 +6680,7 @@ function handleReply(event) {
   stopCustomerPlayback();
   clearStaffInput();
   addMessage("staff", text);
+  if (answerInspectionServiceDismissal(text)) return;
   if (scenario.mode === "staff-led-scripted") {
     return handleInspectionLlmReply(text);
   }
