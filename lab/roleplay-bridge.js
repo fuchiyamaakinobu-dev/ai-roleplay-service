@@ -123,7 +123,7 @@
     async select(request) {
       const currentTrace = trace;
       if (currentTrace) { currentTrace.route = 'LLMへ問い合わせ中'; renderTrace(); }
-      if (request.text.length > 600) return null;
+      if (request.text.length > 2000) return null;
       status.textContent = '会話の流れから返答を選んでいます…';
       try {
         const response = await fetch(api('/api/select'), { method: 'POST', headers: { 'Content-Type': 'application/json' },

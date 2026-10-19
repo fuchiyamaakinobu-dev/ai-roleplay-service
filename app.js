@@ -6649,8 +6649,32 @@ function inspectionLlmCandidates(text) {
   return candidates.length || extras.length ? [...candidates, ...extras] : inspectionAcknowledgementCandidates(text);
 }
 
+function inspectionAllSpeechCandidates(text) {
+  const specific = inspectionLlmCandidates(text);
+  if (specific.length || state.ended || state.scriptStep < 4
+    || isInspectionFinalClosingThanks(text) || hasScriptedAppointmentRecapEvidence(text)
+    || inspectionAppointmentDateCandidates(text).length
+    || hasInspectionSelfIntroduction(normalizeScriptedText(text))) return specific;
+  // For previously unknown wording, the model receives state-safe factual answers.
+  // It must classify the actual question before choosing one; no keyword match is required.
+  const candidates = [];
+  const add = (id, action) => { const item = audioIndex.get(id);
+    if (item?.status === 'ready' && audioPath(id)) candidates.push({id,action,text:item.text}); };
+  add(inspectionHighMileage() ? inspectionMileageReply().audioId : 'inspection_current_mileage_customer','inspection_mileage');
+  add(hasInspectionOilChangeRequest() ? 'inspection_additional_service_none_customer' : 'inspection_asked_vehicle_concerns_customer','inspection_work');
+  add('inspection_confirmed_reminder_contact_customer','inspection_contact');
+  if (state.inspectionPickupActive && state.inspectionPickupReason) {
+    const reason = inspectionPickupReasons.find(r => r.key === state.inspectionPickupReason);
+    if (reason) add(reason.audioId,'inspection_reason');
+    if (['location','confirmation'].includes(state.inspectionPickupPhase)) {
+      add(state.pickupAudioMemory?.location === 'workplace' ? 'inspection_pickup_workplace_request' : 'inspection_pickup_location_customer','inspection_location');
+    }
+  }
+  return candidates;
+}
+
 function applyInspectionLlmSelection(text, selection) {
-  const candidate = inspectionLlmCandidates(text).find(c => c.id === selection?.id);
+  const candidate = inspectionAllSpeechCandidates(text).find(c => c.id === selection?.id);
   if (!candidate) return false;
   if (['inspection_return_confirmation','inspection_loaner_offer','inspection_pending_pickup'].includes(candidate.action)) {
     return applyInspectionSpeechAnalysis(text, selection);
@@ -6700,10 +6724,10 @@ function handleInspectionLlmReply(text) {
     && !inspectionAppointmentDateCandidates(text).length && /\d{1,2}時(?!間)/.test(normalizeScriptedText(text))) {
     text = `${rejected.month}月${rejected.day}日 ${text}`;
   }
-  if (handlePickupAudioMemory(text)) return;
   const resolver = window.ROLEPLAY_INTENT_ASSIST;
-  const candidates = inspectionLlmCandidates(text);
-  if (!resolver?.enabled() || !resolver.select || !candidates.length) return handleScriptedStaffReply(text);
+  const candidates = inspectionAllSpeechCandidates(text);
+  const fallback = () => { if (!handlePickupAudioMemory(text)) return handleScriptedStaffReply(text); };
+  if (!resolver?.enabled() || !resolver.select) return fallback();
   const transcript = state.transcript;
   const activeScenario = scenario;
   const request = { text, live: true, candidates,
@@ -6717,6 +6741,7 @@ function handleInspectionLlmReply(text) {
   return Promise.resolve().then(() => resolver.select(request)).catch(() => null).then(selection => {
     if (state.transcript !== transcript || scenario !== activeScenario || state.ended || !state.started) return;
     setCustomerReplyPending(false);
+    if (handlePickupAudioMemory(text)) return;
     if (!applyInspectionLlmSelection(text, selection)) {
       const extras = pickupExtraCandidates(text);
       if (extras.length === 1) applyPickupExtra(text, extras[0]);
@@ -6744,11 +6769,10 @@ function handleReply(event) {
 
   const resolver = window.ROLEPLAY_INTENT_ASSIST;
   const candidates = llmReplyCandidates(analysis);
-  if (resolver?.enabled() && resolver.select && candidates.length
-    && analysis.decision !== "pickup_accepted_immediately" && analysis.decision !== "needs_more_context") {
+  if (resolver?.enabled() && resolver.select) {
     const transcript = state.transcript;
     const activeScenario = scenario;
-    const request = { text, live: true, candidates,
+    const request = { text, live: true, candidates: ['pickup_accepted_immediately','needs_more_context'].includes(analysis.decision) ? [] : candidates,
       context: { phase: state.currentState, additionalAnswered: state.additionalServiceAnswered,
         timeExplained: candidates.some(c => c.action === "request_pickup") },
       history: state.transcript.slice(0, -1).filter(m => ["staff", "customer"].includes(m.role))
