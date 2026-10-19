@@ -59,7 +59,7 @@
   const traces = [];
   const labels = {question:'質問',request:'お願い・依頼',explanation:'説明',acknowledgement:'相づち',unclear:'判断不能',
     listening:'説明への相づち',instruction:'依頼の理解',consent:'手続きへの承諾',pickup_confirmation:'引取手配の確認',identity:'本人確認',booking_intent:'入庫意思',weekday:'曜日希望',mileage:'走行距離',work:'車両状態・作業希望',contact:'連絡先',pickup_reason:'引取理由',pickup_location:'引取場所',
-    delivery_location:'返却場所',duration:'作業時間',waiting:'待ち方',loaner:'代車',appointment:'予約日時',other:'その他'};
+    return_confirmation:'作業後の返却確認',loaner_offer:'代車の用意・利用提案',booking_procedure:'引取未解決の手続き確認',delivery_location:'返却場所',duration:'作業時間',waiting:'待ち方',loaner:'代車',appointment:'予約日時',other:'その他'};
   const renderTrace = () => {
     traceView.textContent = traces.length ? traces.slice().reverse().map(t => [
       'スタッフ：' + t.text,

@@ -4785,6 +4785,7 @@ function shouldAnswerInspectionBookingIntent(text) {
 
 function handleScriptedStaffReply(text) {
   if (answerInspectionServiceDismissal(text)) return;
+  if (applyInspectionSpeechAnalysis(text)) return;
   if (answerInspectionWrongName(text)) return;
   if (answerInspectionPickupChoice(text)) return;
   if (answerInspectionPickupArrangementConfirmation(text)) return;
@@ -6516,7 +6517,57 @@ function asksInspectionPickupLocation(text) {
     && !/(?:電話|携帯|連絡先|番号|返却|納車|お返し|届け)/.test(q);
 }
 
+function inspectionSpeechAnalysisCandidates(text) {
+  if (!isVehicleInspectionScenario() || state.ended || isInspectionServiceDismissal(text)) return [];
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  const n = normalizeScriptedText(text);
+  if (asksCurrentMileage(q) || asksInspectionVehicleConcerns(q)
+    || asksInspectionPickupLocation(q) || asksInspectionReminderContactDestination(q)) return [];
+  if (/(?:どちら|どっち|それとも|何時|何日|いつ|どこ)/.test(q)) return [];
+  let action, id;
+  // Only a final return confirmation, never a new admission proposal or location question.
+  if (/(?:引き渡し|お渡し|お返し|返却|納車)/.test(q)
+    && /(?:翌日|作業後|終わ|完了|返却|納車)/.test(n)
+    && /(?:時|日|作業後|終わ)/.test(n)
+    && !inspectionAppointmentDateCandidates(text).length) {
+    action = 'inspection_return_confirmation';
+    id = state.pickupAudioMemory?.delivery === 'home'
+      ? 'inspection_delivery_home_request' : 'inspection_explained_lock_and_arrival_customer';
+  } else if (/代車/.test(n) && /(?:代車|そちら|乗っていただ)/.test(q) && /(?:用意|手配|準備|乗っていただ)/.test(n)
+    && !/(?:不要|できない|できません|難し|ありません|ない)/.test(q)) {
+    action = 'inspection_loaner_offer';
+    id = 'inspection_recapped_appointment_customer';
+  } else if (state.inspectionPickupActive && (hasExplicitBookingContinuationConfirmation(text)
+    || /(?:予約|手続き)/.test(q) && /(?:進め|続け)/.test(q) && /(?:よろしい|いいですか)/.test(q))) {
+    action = 'inspection_pending_pickup';
+    id = 'inspection_pickup_still_requested';
+  } else return [];
+  const item = audioIndex.get(id);
+  return item?.status === 'ready' && audioPath(id) ? [{id, action, text:item.text}] : [];
+}
+
+function applyInspectionSpeechAnalysis(text, selection = null) {
+  const candidate = inspectionSpeechAnalysisCandidates(text)[0];
+  if (!candidate) return false;
+  const topics = {inspection_return_confirmation:'return_confirmation',inspection_loaner_offer:'loaner_offer',inspection_pending_pickup:'booking_procedure'};
+  if (selection && (selection.id !== candidate.id || selection.topic !== topics[candidate.action]
+    || !['question','request','explanation'].includes(selection.kind)
+    || !selection.evidence?.trim() || !text.includes(selection.evidence))) return false;
+  // Preserve the admission date and pickup branch. Analysis does not establish a booking.
+  rememberFutureScriptedAchievements(text, -1);
+  if (candidate.action === 'inspection_loaner_offer') {
+    state.inspectionLoanerRequested = true;
+    state.inspectionWaitingMethod = 'loaner';
+  }
+  state.turn += 1;
+  addMessage('customer', candidate.text, {audioId:candidate.id});
+  renderProgress();
+  return true;
+}
+
 function inspectionLlmCandidates(text) {
+  const semantic = inspectionSpeechAnalysisCandidates(text);
+  if (semantic.length) return semantic;
   if (asksInspectionPickupArrangementConfirmation(text)) {
     const item = audioIndex.get("inspection_pickup_confirmed_customer");
     if (item?.status === "ready" && audioPath(item.id)) return [{id:item.id,action:"inspection_pickup_confirmation",text:item.text}];
@@ -6601,6 +6652,9 @@ function inspectionLlmCandidates(text) {
 function applyInspectionLlmSelection(text, selection) {
   const candidate = inspectionLlmCandidates(text).find(c => c.id === selection?.id);
   if (!candidate) return false;
+  if (['inspection_return_confirmation','inspection_loaner_offer','inspection_pending_pickup'].includes(candidate.action)) {
+    return applyInspectionSpeechAnalysis(text, selection);
+  }
   if (candidate.action.startsWith("inspection_ack_")) {
     inspectionAcknowledgementSelection = {text,id:candidate.id};
     try { handleScriptedStaffReply(text); } finally { inspectionAcknowledgementSelection = null; }
@@ -6655,6 +6709,7 @@ function handleInspectionLlmReply(text) {
   const request = { text, live: true, candidates,
     context: { phase: candidates.some(c => c.action === "inspection_wrong_name")
       ? `inspection:identity:${String(scenario.customerName).slice(0, 25)}` : `inspection:${state.inspectionPickupPhase || state.scriptStep}`,
+      situation: JSON.stringify({admission:((a) => a ? {month:a.month,day:a.day,hour:a.hour,minute:a.minute,period:a.period} : null)(state.proposedAppointment || state.inspectionAppointmentCandidate),pickupPending:Boolean(state.inspectionPickupActive),pickupOutcome:state.inspectionPickupOutcome || null,delivery:state.pickupAudioMemory?.delivery || null,loanerRequested:Boolean(state.inspectionLoanerRequested)}),
       additionalAnswered: hasInspectionOilChangeRequest(), timeExplained: state.inspectionDurationQuestionAsked === true },
     history: transcript.slice(0, -1).filter(m => ["staff", "customer"].includes(m.role))
       .slice(-4).map(m => ({ role: m.role, text: m.text.slice(0, 250) })) };
