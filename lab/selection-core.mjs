@@ -18,7 +18,8 @@ inspection_booking_intentは当社で車検を受ける意思を尋ねる質問�
 inspection_return_confirmationは作業後の返却日時・受取方法の確認（topic=return_confirmation）。「翌日10月1日16時にご来店いただいてお引き渡し」は入庫変更ではなく返却確認。入庫日時を変更せず、この候補で答える。inspection_loaner_offerは代車の用意・利用の提案（topic=loaner_offer）。既に用意すると説明された代車をもう一度要求せず候補で了承する。inspection_pending_pickupは未解決の引取希望があるまま予約手続きへ進む確認（topic=booking_procedure）。候補で引取希望を再提示する。3種ともkindはquestion/request/explanationから発話に合うものを選ぶ。実際の入庫日時提案はtopic=appointmentとしてrule、引取場所を尋ねる質問はpickup_location。複合発話の最後が走行距離や症状の質問ならその話題を優先する。
 まず現在の発話の機能をkind（question/request/explanation/acknowledgement/unclear）、話題をtopic（mileage/work/contact/pickup_reason/pickup_location/delivery_location/duration/waiting/loaner/appointment/identity/listening/instruction/consent/pickup_confirmation/booking_intent/weekday/return_confirmation/loaner_offer/booking_procedure/other）で分類する。丁寧な「いただけますか」でも荷物を降ろす依頼ならrequestであり連絡先質問ではない。
 evidenceには判断の根拠となる現在のtextの連続部分を正確にコピーする。unclearの場合は空文字としidはrule。
-JSONのみ: {"kind":"question","topic":"mileage","evidence":"走行距離は何キロですか","id":"候補のidまたはrule"}。4キーを必ず返す。候補idを正確にコピーする。`;
+answerTargetには今答えるべき最後の質問・依頼を原文の連続部分で引用。conditionsにはその質問を理解するために必要な前半の説明・条件を原文引用で最大3個入れる。説明のみならanswerTargetはその説明、判断不能なら空文字。前半の了承確認より後半の具体的質問を優先。候補が不足する場合もanswerTargetとconditionsを返しidはrule。
+JSONのみ: {"answerTarget":"走行距離は何キロですか","conditions":[],"kind":"question","topic":"mileage","evidence":"走行距離は何キロですか","id":"候補のidまたはrule"}。6キーを必ず返す。候補idを正確にコピーする。`;
 export function validSelection(v) {
   return v && typeof v === 'object' && Object.keys(v).sort().join(',') === 'candidates,context,history,live,text'
     && v.live === true && typeof v.text === 'string' && !!v.text.trim() && v.text.length <= 2000
@@ -38,12 +39,17 @@ export function validSelection(v) {
       && typeof c.text === 'string' && c.text.length > 0 && c.text.length <= 200);
 }
 export function validateSelection(value, input) {
-  if (!value || Object.keys(value).sort().join(',') !== 'evidence,id,kind,topic' || typeof value.id !== 'string'
+  if (!value || !['evidence,id,kind,topic','answerTarget,conditions,evidence,id,kind,topic'].includes(Object.keys(value).sort().join(',')) || typeof value.id !== 'string'
     || !['question','request','explanation','acknowledgement','unclear'].includes(value.kind)
     || !['mileage','work','contact','pickup_reason','pickup_location','delivery_location','duration','waiting','loaner','appointment','identity','listening','instruction','consent','pickup_confirmation','booking_intent','weekday','return_confirmation','loaner_offer','booking_procedure','other'].includes(value.topic)
     || typeof value.evidence !== 'string' || value.evidence.length > 2000
     || (value.kind === 'unclear' ? value.evidence !== '' || value.id !== 'rule'
       : !value.evidence.trim() || !input.text.includes(value.evidence))) throw new Error('invalid_output');
+  if ('answerTarget' in value && (typeof value.answerTarget !== 'string'
+    || value.answerTarget.length > 2000 || (value.kind !== 'unclear' && !value.answerTarget.trim())
+    || value.answerTarget && !input.text.includes(value.answerTarget)
+    || !Array.isArray(value.conditions) || value.conditions.length > 3
+    || value.conditions.some(t => typeof t !== 'string' || !t.trim() || !input.text.includes(t)))) throw new Error('invalid_focus');
   if (value.id !== 'rule' && !input.candidates.some(c => c.id === value.id)) throw new Error('invalid_output');
   const candidate = input.candidates.find(c => c.id === value.id);
   const expected = {

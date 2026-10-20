@@ -64,6 +64,8 @@
     traceView.textContent = traces.length ? traces.slice().reverse().map(t => [
       'スタッフ：' + t.text,
       'LLM判定：' + (t.meaning || '未実行（対象外・既存ルール）'),
+      '答える対象：' + (t.answerTarget || '—'),
+      '前提条件：' + (t.conditions?.join(' ／ ') || '—'),
       '根拠：' + (t.evidence || '—'),
       'LLM選択：' + (t.selected || 'なし'),
       '経路：' + (t.route || '既存ルール／応答待ち'),
@@ -135,6 +137,8 @@
         if (currentTrace) {
           currentTrace.meaning = choice ? (labels[choice.kind] || choice.kind) + ' ／ ' + (labels[choice.topic] || choice.topic) : '判定取得なし';
           currentTrace.evidence = choice?.evidence;
+          currentTrace.answerTarget = choice?.answerTarget;
+          currentTrace.conditions = choice?.conditions;
           currentTrace.selected = choice?.rejectedId ? choice.rejectedId + '（意味と音声が不一致のため拒否）' : choice?.id || 'なし';
           currentTrace.selectedId = choice?.id !== 'rule' ? choice?.id : null;
           currentTrace.route = choice?.id === 'rule' ? 'LLM保留・不適合 → 既存ルール' : data.llm?.status === 'ok' ? 'アプリ適用待ち' : '既存ルール（' + (data.llm?.status || '応答なし') + '）';
@@ -143,7 +147,7 @@
         const candidate = request.candidates.find(c => c.id === choice?.id);
         if (data.llm?.status === 'ok' && candidate) {
           status.textContent = `LLM選択：「${candidate.text}」（${(data.elapsedMs / 1000).toFixed(2)}秒）`;
-          return { id: candidate.id };
+          return { ...choice, id: candidate.id };
         }
         status.textContent = data.llm?.status === 'cooldown'
           ? '15秒間隔の利用制限のため、今回は既存ルールで応答します。'

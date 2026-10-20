@@ -7,7 +7,7 @@ const results={saveResult(){},recordStart(){}};
 let used=0, refresh;
 const window={ROLEPLAY_RESULTS:results,ROLEPLAY_LLM_CONFIG:{public:true,apiBase:'https://api.example.com'},setInterval(fn,ms){assert.equal(ms,60000);refresh=fn;}};
 const c=vm.createContext({window,document:{createElement:node,querySelector:s=>{assert.equal(s,'.topbar');return node('root')},querySelectorAll:()=>{throw Error('public links must be preserved')}},AbortSignal,
- fetch:async url=>{urls.push(url);if(!url.endsWith('/status'))used++;return {ok:true,json:async()=>url.endsWith('/status')?{ready:true,used,limit:50}:{llm:{status:'ok',judgement:{id:'distance',kind:'question',topic:'mileage',evidence:'何キロ'}}}}}});
+ fetch:async url=>{urls.push(url);if(!url.endsWith('/status'))used++;return {ok:true,json:async()=>url.endsWith('/status')?{ready:true,used,limit:50}:{llm:{status:'ok',judgement:{id:'distance',kind:'question',topic:'mileage',evidence:'何キロ',answerTarget:'何キロ',conditions:[]}}}}}});
 vm.runInContext(fs.readFileSync(new URL('../audio-db.js',import.meta.url),'utf8'),c);
 vm.runInContext(fs.readFileSync(new URL('../lab/roleplay-bridge.js',import.meta.url),'utf8'),c);
 await new Promise(r=>setImmediate(r));
@@ -17,7 +17,8 @@ assert.equal(toggle.checked,true);
 assert.equal(window.ROLEPLAY_INTENT_ASSIST.enabled(),true);
 const remaining=nodes.find(n=>n.textContent?.includes('本日のLLM残り'));
 assert.match(remaining.textContent,/50／50回/);
-await window.ROLEPLAY_INTENT_ASSIST.select({text:'何キロ',candidates:[{id:'distance',text:'3万キロ'}]});
+const selection=await window.ROLEPLAY_INTENT_ASSIST.select({text:'何キロ',candidates:[{id:'distance',text:'3万キロ'}]});
+assert.equal(selection.kind,'question');assert.equal(selection.topic,'mileage');assert.equal(selection.answerTarget,'何キロ');assert.equal(selection.conditions.length,0);
 await new Promise(r=>setImmediate(r));
 assert.deepEqual(urls,['https://api.example.com/api/status','https://api.example.com/api/select','https://api.example.com/api/status']);
 assert.match(remaining.textContent,/49／50回/);

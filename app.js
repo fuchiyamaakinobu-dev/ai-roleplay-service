@@ -6694,18 +6694,24 @@ function inspectionLlmCandidates(text) {
 }
 
 function inspectionAllSpeechCandidates(text) {
-  const specific = inspectionLlmCandidates(text);
-  if (specific.length || state.ended || state.scriptStep < 4
+  let specific = inspectionLlmCandidates(text);
+  const finalQuestion = normalizeScriptedText(inspectionLastQuestionClause(text));
+  if (asksInspectionVehicleConcerns(finalQuestion) && !/(?:オイル|交換|追加|作業)/.test(finalQuestion)) {
+    const item = audioIndex.get("inspection_vehicle_condition_no_concerns");
+    if (item?.status === "ready") specific = [...specific.filter(c=>c.action !== "inspection_work" && c.id !== item.id),{id:item.id,text:item.text,action:"inspection_extra"}];
+  }
+  const compoundQuestion = text.split(/[？?。]/).filter(t=>t.trim()).length > 1 && isScriptedQuestion(normalizeScriptedText(inspectionLastQuestionClause(text)));
+  if ((!compoundQuestion && specific.length) || state.ended || state.scriptStep < 4
     || isInspectionFinalClosingThanks(text) || hasScriptedAppointmentRecapEvidence(text)
     || inspectionAppointmentDateCandidates(text).length
     || hasInspectionSelfIntroduction(normalizeScriptedText(text))) return specific;
   // For previously unknown wording, the model receives state-safe factual answers.
   // It must classify the actual question before choosing one; no keyword match is required.
-  const candidates = [];
-  const add = (id, action) => { const item = audioIndex.get(id);
+  const candidates = [...specific];
+  const add = (id, action) => { if (candidates.some(c=>c.id===id)) return; const item = audioIndex.get(id);
     if (item?.status === 'ready' && audioPath(id)) candidates.push({id,action,text:item.text}); };
   add(inspectionHighMileage() ? inspectionMileageReply().audioId : 'inspection_current_mileage_customer','inspection_mileage');
-  add(hasInspectionOilChangeRequest() ? 'inspection_additional_service_none_customer' : 'inspection_asked_vehicle_concerns_customer','inspection_work');
+  if (!specific.some(c=>c.id==='inspection_vehicle_condition_no_concerns')) add(hasInspectionOilChangeRequest() ? 'inspection_additional_service_none_customer' : 'inspection_asked_vehicle_concerns_customer','inspection_work');
   add('inspection_confirmed_reminder_contact_customer','inspection_contact');
   if (state.inspectionPickupActive && state.inspectionPickupReason) {
     const reason = inspectionPickupReasons.find(r => r.key === state.inspectionPickupReason);
@@ -6720,6 +6726,11 @@ function inspectionAllSpeechCandidates(text) {
 function applyInspectionLlmSelection(text, selection) {
   const candidate = inspectionAllSpeechCandidates(text).find(c => c.id === selection?.id);
   if (!candidate) return false;
+  const originalCandidates = inspectionLlmCandidates(text);
+  if (originalCandidates.length && !originalCandidates.some(c=>c.id===candidate.id)
+    && (!selection.answerTarget?.trim() || !text.includes(selection.answerTarget)
+      || !selection.evidence?.trim() || !text.includes(selection.evidence)
+      || selection.kind !== 'question')) return false;
   if (['inspection_return_confirmation','inspection_loaner_offer','inspection_pending_pickup'].includes(candidate.action)) {
     return applyInspectionSpeechAnalysis(text, selection);
   }

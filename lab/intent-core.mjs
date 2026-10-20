@@ -46,7 +46,7 @@ export async function judgeWithGroq(text, { apiKey, fetchImpl = fetch, timeoutMs
       method: 'POST', signal: controller.signal,
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: MODEL, temperature: 0, reasoning_effort: 'none', max_completion_tokens: 320,
+        model: MODEL, temperature: 0, reasoning_effort: 'none', max_completion_tokens: 700,
         response_format: { type: 'json_object' },
         messages: [{ role: 'system', content: selection ? SELECTION_PROMPT : PROMPT }, { role: 'user', content: JSON.stringify(selection || { text }) }]
       })
