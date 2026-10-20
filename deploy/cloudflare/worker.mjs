@@ -18,13 +18,14 @@ export class RoleplayBudget {
     const result = await this.state.storage.transaction(async storage => {
       const value = await storage.get('budget') || {day:'',used:0,last:0,blockedUntil:0};
       if (path === '/block') {
-        await storage.put('budget',{...value,blockedUntil:now+86400000});
+        const input = await request.json().catch(()=>({}));
+        const seconds = Number.isFinite(input.retryAfterSeconds) ? Math.max(1,Math.min(86400,input.retryAfterSeconds)) : 60;
+        await storage.put('budget',{...value,blockedUntil:now+seconds*1000});
         return 'provider_limit';
       }
       const used = value.day === dayAt(now) ? value.used : 0;
       if (now < value.blockedUntil) return 'provider_limit';
       if (used >= 50) return 'daily_limit';
-      if (value.last && now - value.last < 15000) return 'cooldown';
       await storage.put('budget',{day:dayAt(now),used:used+1,last:now,blockedUntil:value.blockedUntil});
       return 'ok';
     });
@@ -76,7 +77,7 @@ export async function handle(request, env, judge = judgeWithGroq) {
     if (allowance.status !== 'ok') return reply({status:allowance.status});
     const started = Date.now();
     const llm = await judge(input.text,{apiKey:env.GROQ_API_KEY,selection:input});
-    if (llm.status === 'provider_limit') await budget.fetch('https://budget/block',{method:'POST'});
+    if (llm.status === 'provider_limit') await budget.fetch('https://budget/block',{method:'POST',body:JSON.stringify({retryAfterSeconds:llm.retryAfterSeconds})});
     return reply(llm,Date.now()-started);
   } catch { return cors(json({llm:{status:'service_error'}},503)); }
 }

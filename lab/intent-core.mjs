@@ -51,7 +51,12 @@ export async function judgeWithGroq(text, { apiKey, fetchImpl = fetch, timeoutMs
         messages: [{ role: 'system', content: selection ? SELECTION_PROMPT : PROMPT }, { role: 'user', content: JSON.stringify(selection || { text }) }]
       })
     });
-    if (!response.ok) return { status: response.status === 429 ? 'provider_limit' : 'provider_error' };
+    if (!response.ok) {
+      if (response.status !== 429) return {status:'provider_error'};
+      const header = response.headers?.get('retry-after');
+      const seconds = header && /^\d+(?:\.\d+)?$/.test(header) ? Number(header) : header ? (Date.parse(header)-Date.now())/1000 : NaN;
+      return {status:'provider_limit',retryAfterSeconds:Number.isFinite(seconds) ? Math.max(1,Math.ceil(seconds)) : 60};
+    }
     const body = await response.json();
     if (body.choices?.[0]?.finish_reason !== 'stop') return { status: 'invalid_output' };
     try {

@@ -850,13 +850,24 @@ function answerInspectionServiceDismissal(text) {
 }
 
 function inspectionAcknowledgementCandidates(text) {
+  const completeExplanation = /(?:朝.*預か.*夕方.*返|作業時間).*(?:できますが|ございますが)[。]*$/.test(normalizeScriptedText(text));
   if (isInspectionServiceDismissal(text)) return [];
-  if (!isVehicleInspectionScenario() || state.ended || isInspectionIncompleteOrNoiseUtterance(text)
+  if (!isVehicleInspectionScenario() || state.ended || (isInspectionIncompleteOrNoiseUtterance(text) && !completeExplanation)
     || isInspectionFinalClosingThanks(text) || hasInspectionSelfIntroduction(normalizeScriptedText(text))
     || hasCourtesyExpression(normalizeScriptedText(text))
     || inspectionAppointmentDateCandidates(text).length) return [];
+  const n = normalizeScriptedText(text);
   const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  const instruction = /(?:持ってきて|持参|お持ち|荷物|荷室|トランク|工具|分前)/.test(n)
+    && /(?:ください|いただけ|お願い|空に)/.test(n) && !isScriptedQuestion(q);
+  const consent = /(?:オイル交換|予約|手続き)/.test(n)
+    && /(?:よろしい|よろしかった|大丈夫|いいですか)/.test(q)
+    && !/(?:不要|できません|できない|キャンセル|変更|どちら|何|いつ)/.test(q);
   let action, ids;
+  if (instruction) return ['inspection_explained_lock_and_arrival_customer'].map(id => audioIndex.get(id))
+    .filter(item => item?.status === 'ready').map(item => ({id:item.id,text:item.text,action:'inspection_ack_understood'}));
+  if (consent) return ['inspection_recapped_appointment_customer','inspection_pickup_confirmed_customer'].map(id => audioIndex.get(id))
+    .filter(item => item?.status === 'ready').map(item => ({id:item.id,text:item.text,action:'inspection_ack_consent'}));
   if (/(?:お持ち(?!込)|持参|降ろ|ご準備|ご用意|ご確認|ロックナット|アダプタ|分前にご来店)/.test(q)
     && /(?:ください|いただけ|お願い)/.test(q)) {
     action = "inspection_ack_understood";
@@ -871,7 +882,7 @@ function inspectionAcknowledgementCandidates(text) {
   } else if (/(?:お持ち(?!込)|持参|ご用意ください|降ろ|ロックナット|アダプタ|ご準備|ご確認ください|分前にご来店)/.test(q)) {
     action = "inspection_ack_understood";
     ids = ["inspection_explained_lock_and_arrival_customer"];
-  } else if (/(?:です|ます|ください)[。！!]*$/.test(q)
+  } else if (/(?:です|ます|できますが|ございますが|ください)[。！!]*$/.test(q)
     && !/(?:希望|お願い|入庫|来店|引取|代車)/.test(q)) {
     action = "inspection_ack_listening";
     ids = ["inspection_thanked_customer_retry", "inspection_ack_listening_ee", "inspection_explained_lock_and_arrival_customer"];
@@ -886,7 +897,13 @@ function contextualInspectionAcknowledgement(role, text, options) {
   // Only substitute neutral replies. Never replace a date, preference, factual answer or question.
   const staff = state.transcript.filter(m => m.role === "staff").at(-1)?.text;
   if (!staff) return {text, options};
-  const candidates = inspectionAcknowledgementCandidates(staff);
+  let candidates = inspectionAcknowledgementCandidates(staff);
+  // Only vary a neutral reply after legacy date validation, without changing state.
+  if (!candidates.length && inspectionAppointmentDateCandidates(staff).length
+    && /(?:いかが|お願いできます|よろし)/.test(staff) && !state.inspectionPickupActive) {
+    const item = audioIndex.get('inspection_explained_lock_and_arrival_customer');
+    if (item?.status === 'ready') candidates = [{id:item.id,text:item.text}];
+  }
   if (!candidates.length) return {text, options};
   const previous = state.transcript.filter(m => m.role === "customer").at(-1)?.text;
   const selected = inspectionAcknowledgementSelection?.text === staff
@@ -6533,7 +6550,7 @@ function inspectionSpeechAnalysisCandidates(text) {
     action = 'inspection_return_confirmation';
     id = state.pickupAudioMemory?.delivery === 'home'
       ? 'inspection_delivery_home_request' : 'inspection_explained_lock_and_arrival_customer';
-  } else if (/代車/.test(n) && /(?:代車|そちら|乗っていただ)/.test(q) && /(?:用意|手配|準備|乗っていただ)/.test(n)
+  } else if (/代車/.test(n) && (/(?:代車|そちら|乗っていただ)/.test(q) || /^(?:いかがですか|よろしいでしょうか)[？?。]*$/.test(q)) && /(?:用意|手配|準備|乗っていただ)/.test(n)
     && !/(?:不要|できない|できません|難し|ありません|ない)/.test(q)) {
     action = 'inspection_loaner_offer';
     id = 'inspection_recapped_appointment_customer';
@@ -6582,6 +6599,8 @@ function inspectionLlmCandidates(text) {
     const item = audioIndex.get(wrongName);
     if (item?.status === "ready" && audioPath(wrongName)) return [{id:wrongName, action:"inspection_wrong_name", text:item.text}];
   }
+  const acknowledgements = inspectionAcknowledgementCandidates(text);
+  if (acknowledgements.some(c => ['inspection_ack_consent','inspection_ack_listening'].includes(c.action))) return acknowledgements;
   const extras = pickupExtraCandidates(text);
   if (!isVehicleInspectionScenario() || state.ended || isInspectionFinalClosingThanks(text)
     || hasInspectionAppointmentProposalEvidence(text) || hasScriptedAppointmentRecapEvidence(text)
