@@ -4802,6 +4802,8 @@ function shouldAnswerInspectionBookingIntent(text) {
 
 function handleScriptedStaffReply(text) {
   if (answerInspectionServiceDismissal(text)) return;
+  const waiting = inspectionStoreWaitingCandidate(text);
+  if (waiting) { applyPickupExtra(text, waiting); return; }
   if (applyInspectionSpeechAnalysis(text)) return;
   if (answerInspectionWrongName(text)) return;
   if (answerInspectionPickupChoice(text)) return;
@@ -6432,6 +6434,27 @@ function pickupAudioSettings() {
   return state.pickupAudioMemory;
 }
 
+function inspectionStoreWaitingCandidate(text) {
+  if (!isVehicleInspectionScenario() || state.ended || state.scriptStep < 4
+    || ['over60000','120000'].includes(state.inspectionMileageVariant)
+    || state.inspectionLoanerRequested || ['loaner','family'].includes(state.inspectionWaitingMethod)) return null;
+  const memory = state.pickupAudioMemory;
+  if (isPickupInspectionScenario() && (state.inspectionPickupOutcome !== 'visit'
+    || memory?.settings?.waiting && memory.settings.waiting !== 'store' || memory?.family)) return null;
+  if (state.inspectionPickupOutcome === 'pickup'
+    || state.inspectionPickupActive && state.inspectionPickupPhase !== 'resolved') return null;
+  const q = inspectionLastQuestionClause(text);
+  if (!asksInspectionWaitingMethodConfirmation(q)
+    || /(?:それとも|どちら|どっち|代車|引取)/.test(q)) return null;
+  // Use the latest duration explanation, including the current compound utterance.
+  const duration = [...state.transcript.filter(m=>m.role==='staff').map(m=>m.text),text]
+    .filter(t=>/(?:分|時間|泊|日車検)/.test(normalizeScriptedText(t))).at(-1);
+  if (!duration || !hasSupportedInspectionDuration(duration)
+    || /(?:泊|夕方|翌日|待てません|待つことはできません|お待ちいただけません)/.test(normalizeScriptedText(duration))) return null;
+  const item = audioIndex.get('inspection_duration_accepted_wait_in_store');
+  return item?.status === 'ready' ? {id:item.id,text:item.text,action:'inspection_extra'} : null;
+}
+
 function pickupExtraCandidates(text) {
   const memory = pickupAudioSettings();
   if (!memory || state.ended || isInspectionFinalClosingThanks(text)
@@ -6583,6 +6606,8 @@ function applyInspectionSpeechAnalysis(text, selection = null) {
 }
 
 function inspectionLlmCandidates(text) {
+  const waiting = inspectionStoreWaitingCandidate(text);
+  if (waiting) return [waiting];
   const semantic = inspectionSpeechAnalysisCandidates(text);
   if (semantic.length) return semantic;
   if (asksInspectionPickupArrangementConfirmation(text)) {
