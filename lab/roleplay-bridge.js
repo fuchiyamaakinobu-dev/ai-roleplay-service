@@ -107,10 +107,11 @@
   window.ROLEPLAY_INTENT_ASSIST = {
     traceMessage(message) {
       if (message.role === 'staff') {
-        trace = { text: message.text };
+        trace = { text: message.text, staffMessage: message };
         traces.push(trace);
         if (traces.length > 20) traces.shift();
       } else if (message.role === 'customer' && trace) {
+        message.responseSource = trace.selectedId ? (trace.selectedId === message.audioId ? 'llm' : 'adjusted') : 'rule';
         trace.reply = message.text; trace.audioId = message.audioId; trace.audioSrc = message.audioSrc;
         if (trace.selectedId && trace.selectedId !== message.audioId) trace.route = 'LLM選択と異なる音声をアプリが採用';
         else if (trace.selectedId) trace.route = 'LLM選択をアプリが採用';
@@ -135,6 +136,7 @@
         if (!toggle.checked) return null;
         const choice = data.llm?.judgement;
         if (currentTrace) {
+          if (currentTrace.staffMessage && data.llm?.status === 'ok' && choice) currentTrace.staffMessage.responseSource = 'analyzed';
           currentTrace.meaning = choice ? (labels[choice.kind] || choice.kind) + ' ／ ' + (labels[choice.topic] || choice.topic) : '判定取得なし';
           currentTrace.evidence = choice?.evidence;
           currentTrace.answerTarget = choice?.answerTarget;

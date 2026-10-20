@@ -104,7 +104,14 @@ function detailsCell(item) {
   transcript.className = "history-transcript";
   (item.transcript || []).forEach((message) => {
     const role = message.role === "staff" ? "スタッフ" : message.role === "customer" ? "AIお客様" : "システム";
-    addText(transcript, "p", `${role}：${message.text}`);
+    const labels={llm:'LLM選択を採用',adjusted:'LLM選択後にアプリが変更',rule:'既存ルール',analyzed:'LLM分析済み'};
+    const source=Object.hasOwn(labels,message.responseSource)?message.responseSource:'';
+    const line=document.createElement('p');
+    line.textContent=role+'：'+message.text;
+    const badge=document.createElement('span');
+    badge.className='response-source'+(source?' source-'+source:'');
+    badge.textContent=source?labels[source]:'判定記録なし';
+    line.prepend(badge);transcript.append(line);
   });
   if (!(item.transcript || []).length) addText(transcript, "p", "会話ログなし");
   content.append(transcript);

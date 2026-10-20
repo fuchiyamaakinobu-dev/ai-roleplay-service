@@ -964,6 +964,9 @@ function renderConversation() {
     .filter(({ message }) => !message.hiddenFromConversation)
     .map(({ message, index }) => {
       const roleClass = message.role === "customer" ? "customer" : message.role === "staff" ? "staff" : "system";
+      const sourceLabels = {llm:'LLM選択を採用',adjusted:'LLM選択後にアプリが変更',rule:'既存ルール',analyzed:'LLM分析済み'};
+      const source = Object.hasOwn(sourceLabels,message.responseSource) ? message.responseSource : '';
+      const sourceBadge = source ? '<span class="response-source source-'+source+'">'+sourceLabels[source]+'</span>' : '';
       const speaker = message.role === "customer" ? "AIお客様" : message.role === "staff" ? "スタッフ" : "判定メモ";
       const audioButton = message.role === "customer"
         ? `<button class="play-audio" type="button" data-audio-index="${index}" aria-label="お客様音声を再生">再生</button>`
@@ -978,7 +981,7 @@ function renderConversation() {
       return `
         <div class="message ${roleClass}">
           <div class="message-top">
-            <span class="speaker">${speaker}</span>
+            <span class="speaker">${speaker}</span>${sourceBadge}
             <span class="message-tools">${audioButton}${issueButton}</span>
           </div>
           <span>${messageText}</span>
@@ -6909,7 +6912,8 @@ function finishRoleplay(options = {}) {
       recommendedTalk: result.recommendedTalk || "",
       transcript: state.transcript.slice(0, 300).map((message) => ({
         role: message.role,
-        text: String(message.text || "").slice(0, 1000)
+        text: String(message.text || "").slice(0, 1000),
+        responseSource: ["llm","adjusted","rule","analyzed"].includes(message.responseSource) ? message.responseSource : "unknown"
       }))
     });
   }

@@ -75,7 +75,8 @@ async function saveResult(payload) {
         role: cleanText(message.role, 20),
         // 採点は画面内の原文で完了させ、外部履歴へ保存する直前だけ
         // 10～11桁またはハイフン区切りの電話番号らしい文字列を伏せる。
-        text: maskPhoneNumbers(message.text)
+        text: maskPhoneNumbers(message.text),
+        responseSource: ["llm","adjusted","rule","analyzed"].includes(message.responseSource) ? message.responseSource : "unknown"
       }))
     });
     notify("saved", "採点結果を履歴へ保存しました。");

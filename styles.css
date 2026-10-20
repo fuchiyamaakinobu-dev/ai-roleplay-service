@@ -1411,3 +1411,5 @@ textarea:focus {
     border-color: #000 !important;
   }
 }
+
+.response-source{display:inline-block;font-size:12px;font-weight:600;border-radius:4px;padding:2px 6px;margin:3px 6px;border:1px solid #94a3b8;color:#334155;background:#f1f5f9}.source-llm{color:#075985;background:#e0f2fe;border-color:#0284c7}.source-adjusted{color:#92400e;background:#fef3c7;border-color:#d97706}.source-rule{color:#475569;background:#f1f5f9}.source-analyzed{color:#6b21a8;background:#f3e8ff;border-color:#a855f7}
