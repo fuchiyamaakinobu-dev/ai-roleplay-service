@@ -917,7 +917,8 @@ function addMessage(role, text, options = {}) {
   // All reply paths must use the same customer mileage as scoring.
   if (role === 'customer' && isVehicleInspectionScenario()
     && ['inspection_current_mileage_customer','inspection_current_mileage_and_duration_customer','inspection_current_mileage_over60000_customer','inspection_current_mileage_120000_customer'].includes(options.audioId)) {
-    const mileage = inspectionMileageReply();
+    const preserveLow = !['over60000','120000'].includes(state.inspectionMileageVariant) && ['inspection_current_mileage_customer','inspection_current_mileage_and_duration_customer'].includes(options.audioId);
+    const mileage = preserveLow ? {text:audioIndex.get(options.audioId).text,audioId:options.audioId} : inspectionMileageReply();
     text = mileage.text; options = {...options,audioId:mileage.audioId};
   }
   if (role === 'customer' && options.audioId === 'inspection_confirmed_reminder_contact_customer') {
