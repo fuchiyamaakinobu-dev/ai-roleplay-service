@@ -110,7 +110,7 @@ function detailsCell(item) {
     line.textContent=role+'：'+message.text;
     const badge=document.createElement('span');
     badge.className='response-source'+(source?' source-'+source:'');
-    badge.textContent=source?labels[source]:'判定記録なし';
+    badge.textContent=(source?labels[source]:'判定記録なし')+(message.responseReason?'：'+String(message.responseReason).slice(0,80):'');
     line.prepend(badge);transcript.append(line);
   });
   if (!(item.transcript || []).length) addText(transcript, "p", "会話ログなし");

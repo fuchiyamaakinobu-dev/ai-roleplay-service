@@ -9,16 +9,14 @@ const resultHandler = source.slice(resultHandlerStart, resultHandlerEnd);
 
 assert.notEqual(resultHandlerStart, -1, "音声認識のresult処理が見つかりません");
 assert.notEqual(resultHandlerEnd, -1, "音声認識のresult処理を切り出せません");
-assert.match(
-  resultHandler,
-  /発言途中として相づちを返し、同じ未確認項目を継続します。/,
-  "未完了発話を相づちへ渡す案内がありません"
-);
-assert.match(
-  resultHandler,
-  /stopSpeechInput\(\{ preserveSession: true \}\)[\s\S]*?replyForm\.requestSubmit\(\)/,
-  "未完了発話を記録して相づち処理へ渡していません"
-);
+// Updated requirement: incomplete speech stays in the input, with no customer turn.
+const calls={};let timer,submits=0,stops=0;
+const eventContext={speechRecognition:{addEventListener:(name,fn)=>calls[name]=fn},speechListening:true,state:{ended:false},rapidEnds:0,networkFailures:0,speechBaseText:'',speechDecisionTimer:null,els:{staffInput:{value:''},speechNote:{textContent:''},replyForm:{requestSubmit:()=>submits++}},window:{clearTimeout(){},setTimeout:fn=>{timer=fn;return 1}},speechDecisionDelayMs:()=>0,looksLikeCompleteJapaneseSentence:t=>t.endsWith('お願いします。'),stopSpeechInput:()=>stops++};
+vm.createContext(eventContext);vm.runInContext(resultHandler,eventContext);
+const emit=t=>{const r=[{transcript:t}];r.isFinal=true;calls.result({results:[r]});timer();};
+emit('それから');assert.equal(submits,0);assert.equal(stops,0);assert.equal(eventContext.els.staffInput.value,'それから');
+emit('受付に三');assert.equal(submits,0);
+emit('受付に15分かかりますので早めのご来店をお願いします。');assert.equal(submits,1);assert.equal(stops,1);
 assert.doesNotMatch(
   source,
   /function acknowledgeAndContinue\(/,

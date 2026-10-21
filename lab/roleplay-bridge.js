@@ -60,6 +60,8 @@
   const labels = {question:'質問',request:'お願い・依頼',explanation:'説明',acknowledgement:'相づち',unclear:'判断不能',
     listening:'説明への相づち',instruction:'依頼の理解',consent:'手続きへの承諾',pickup_confirmation:'引取手配の確認',identity:'本人確認',booking_intent:'入庫意思',weekday:'曜日希望',mileage:'走行距離',work:'車両状態・作業希望',contact:'連絡先',pickup_reason:'引取理由',pickup_location:'引取場所',
     return_confirmation:'作業後の返却確認',loaner_offer:'代車の用意・利用提案',booking_procedure:'引取未解決の手続き確認',delivery_location:'返却場所',duration:'作業時間',waiting:'待ち方',loaner:'代車',appointment:'予約日時',other:'その他'};
+  const reasons = {selected:'LLM選択',off:'LLMがOFF',not_configured:'API未接続',not_requested:'LLM呼び出し対象外',daily_limit:'日次上限に到達',provider_limit:'Groqの利用制限',timeout:'応答待ち時間超過',network_error:'通信失敗',service_error:'サーバーエラー',provider_error:'Groq応答エラー',invalid_output:'LLM出力形式の不一致',input_limit:'入力文字数上限',rule:'LLMが判断を保留',topic_mismatch:'話題と音声の不一致',candidate_missing:'候補外の音声',adjusted:'LLM選択と異なる音声をアプリが採用'};
+  const setReason = (t,key) => {if(t){t.reason=reasons[key] || '原因を特定できず';if(t.staffMessage)t.staffMessage.responseReason=t.reason;}};
   const renderTrace = () => {
     traceView.textContent = traces.length ? traces.slice().reverse().map(t => [
       'スタッフ：' + t.text,
@@ -69,6 +71,7 @@
       '根拠：' + (t.evidence || '—'),
       'LLM選択：' + (t.selected || 'なし'),
       '経路：' + (t.route || '既存ルール／応答待ち'),
+      '理由：' + (t.reason || '未記録'),
       '実際の返答：' + (t.reply || '応答待ち'),
       '音声ID：' + (t.audioId || '—'),
       '音声再生：' + (t.playback || '未確認')
@@ -108,10 +111,12 @@
     traceMessage(message) {
       if (message.role === 'staff') {
         trace = { text: message.text, staffMessage: message };
+        setReason(trace,!toggle.checked?'off':toggle.disabled?'not_configured':'not_requested');
         traces.push(trace);
         if (traces.length > 20) traces.shift();
       } else if (message.role === 'customer' && trace) {
         message.responseSource = trace.selectedId ? (trace.selectedId === message.audioId ? 'llm' : 'adjusted') : 'rule';
+        message.responseReason = message.responseSource === 'adjusted' ? reasons.adjusted : trace.reason;
         trace.reply = message.text; trace.audioId = message.audioId; trace.audioSrc = message.audioSrc;
         if (trace.selectedId && trace.selectedId !== message.audioId) trace.route = 'LLM選択と異なる音声をアプリが採用';
         else if (trace.selectedId) trace.route = 'LLM選択をアプリが採用';
@@ -126,15 +131,16 @@
     async select(request) {
       const currentTrace = trace;
       if (currentTrace) { currentTrace.route = 'LLMへ問い合わせ中'; renderTrace(); }
-      if (request.text.length > 2000) return null;
+      if (request.text.length > 2000) { setReason(currentTrace,'input_limit'); return null; }
       status.textContent = '会話の流れから返答を選んでいます…';
       try {
         const response = await fetch(api('/api/select'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request), signal: AbortSignal.timeout(7000) });
-        if (!response.ok) throw new Error();
+        if (!response.ok) {setReason(currentTrace,'service_error');return null;}
         const data = await response.json();
-        if (!toggle.checked) return null;
+        if (!toggle.checked) {setReason(currentTrace,'off');return null;}
         const choice = data.llm?.judgement;
+        setReason(currentTrace,data.llm?.status !== 'ok' ? data.llm?.status : choice?.rejectedId ? 'topic_mismatch' : choice?.id==='rule' ? 'rule' : request.candidates.some(c=>c.id===choice?.id)?'selected':'candidate_missing');
         if (currentTrace) {
           if (currentTrace.staffMessage && data.llm?.status === 'ok' && choice) currentTrace.staffMessage.responseSource = 'analyzed';
           currentTrace.meaning = choice ? (labels[choice.kind] || choice.kind) + ' ／ ' + (labels[choice.topic] || choice.topic) : '判定取得なし';
@@ -155,7 +161,8 @@
           ? '15秒間隔の利用制限のため、今回は既存ルールで応答します。'
           : `LLM選択を採用できませんでした（${data.llm?.status || '応答なし'}${choice?.id === 'rule' ? '・既存処理を選択' : ''}）。今回は既存ルールで応答します。`;
         return null;
-      } catch {
+      } catch (error) {
+        setReason(currentTrace,['TimeoutError','AbortError'].includes(error?.name)?'timeout':'network_error');
         if (currentTrace) { currentTrace.route = '通信失敗 → 既存ルール'; renderTrace(); }
         status.textContent = '通信を確認できないため、既存ルールで応答します。'; return null;
       } finally { void refreshUsage(); }

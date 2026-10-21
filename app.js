@@ -914,6 +914,18 @@ function contextualInspectionAcknowledgement(role, text, options) {
 }
 
 function addMessage(role, text, options = {}) {
+  // All reply paths must use the same customer mileage as scoring.
+  if (role === 'customer' && isVehicleInspectionScenario()
+    && ['inspection_current_mileage_customer','inspection_current_mileage_and_duration_customer','inspection_current_mileage_over60000_customer','inspection_current_mileage_120000_customer'].includes(options.audioId)) {
+    const mileage = inspectionMileageReply();
+    text = mileage.text; options = {...options,audioId:mileage.audioId};
+  }
+  if (role === 'customer' && options.audioId === 'inspection_confirmed_reminder_contact_customer') {
+    const latest = state.transcript.filter(m=>m.role==='staff').at(-1)?.text || '';
+    if (!asksInspectionReminderContactDestination(inspectionLastQuestionClause(latest))) {
+      text = 'はい。'; options = {...options,audioId:'inspection_thanked_customer_retry'};
+    }
+  }
   ({text, options} = contextualInspectionAcknowledgement(role, text, options));
   if (role === "customer" && isPickupInspectionScenario() && state.pickupAudioMemory
     && !state.pickupAudioMemory.location && options.audioId === "inspection_pickup_location_customer") {
@@ -966,7 +978,7 @@ function renderConversation() {
       const roleClass = message.role === "customer" ? "customer" : message.role === "staff" ? "staff" : "system";
       const sourceLabels = {llm:'LLM選択を採用',adjusted:'LLM選択後にアプリが変更',rule:'既存ルール',analyzed:'LLM分析済み'};
       const source = Object.hasOwn(sourceLabels,message.responseSource) ? message.responseSource : '';
-      const sourceBadge = source ? '<span class="response-source source-'+source+'">'+sourceLabels[source]+'</span>' : '';
+      const sourceBadge = source ? '<span class="response-source source-'+source+'">'+sourceLabels[source]+(message.responseReason?'：'+escapeHtml(message.responseReason):'')+'</span>' : '';
       const speaker = message.role === "customer" ? "AIお客様" : message.role === "staff" ? "スタッフ" : "判定メモ";
       const audioButton = message.role === "customer"
         ? `<button class="play-audio" type="button" data-audio-index="${index}" aria-label="お客様音声を再生">再生</button>`
@@ -6385,7 +6397,7 @@ function hasConfirmedInspectionAppointmentRecap(text) {
     && Number(match.minute || 0) === Number(appointment.minute || 0)
     && appointmentPeriodsMatch(appointment, match)
     && inspectionAppointmentRouteMatchesRecap(text)
-    && /(?:お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|予約です|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います|(?:引取|引き取り|取りに).{0,12}伺う.{0,12}(?:予約|予定))/.test(normalizeScriptedText(text));
+    && /(?:ご予約入れさせていただきます|ご予約を入れさせていただきます|ご予約を承ります|車検させていただきます|お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|予約です|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います|(?:引取|引き取り|取りに).{0,12}伺う.{0,12}(?:予約|予定))/.test(normalizeScriptedText(text));
 }
 
 function llmReplyCandidates(analysis) {
@@ -6913,7 +6925,8 @@ function finishRoleplay(options = {}) {
       transcript: state.transcript.slice(0, 300).map((message) => ({
         role: message.role,
         text: String(message.text || "").slice(0, 1000),
-        responseSource: ["llm","adjusted","rule","analyzed"].includes(message.responseSource) ? message.responseSource : "unknown"
+        responseSource: ["llm","adjusted","rule","analyzed"].includes(message.responseSource) ? message.responseSource : "unknown",
+        responseReason: String(message.responseReason || "").slice(0,80)
       }))
     });
   }
@@ -7525,11 +7538,8 @@ function setupSpeech() {
           els.speechNote.textContent = "発言が完了したため、自動的に次へ進みます。";
           els.replyForm.requestSubmit();
         } else {
-          // Web Speech APIが発話途中をisFinalにした場合も、その断片を採点せず
-          // AIお客様の短い相づちへ渡す。相づちMP3の終了後にマイクを再開する。
-          stopSpeechInput({ preserveSession: true });
-          els.speechNote.textContent = "発言途中として相づちを返し、同じ未確認項目を継続します。";
-          els.replyForm.requestSubmit();
+          // Keep the partial text and microphone active until the utterance is complete.
+          els.speechNote.textContent = "発言の続きをお話しください。入力内容は保持しています。";
         }
       }, speechDecisionDelayMs());
     } else {

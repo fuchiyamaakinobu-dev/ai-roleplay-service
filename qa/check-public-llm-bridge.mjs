@@ -4,10 +4,10 @@ import vm from 'node:vm';
 const nodes=[],urls=[];
 const node=tag=>{const n={tag,style:{},setAttribute(){},append(){},after(){},addEventListener(){}};nodes.push(n);return n;};
 const results={saveResult(){},recordStart(){}};
-let used=0, refresh;
+let used=0, refresh, simulated=null;
 const window={ROLEPLAY_RESULTS:results,ROLEPLAY_LLM_CONFIG:{public:true,apiBase:'https://api.example.com'},setInterval(fn,ms){assert.equal(ms,60000);refresh=fn;}};
 const c=vm.createContext({window,document:{createElement:node,querySelector:s=>{assert.equal(s,'.topbar');return node('root')},querySelectorAll:()=>{throw Error('public links must be preserved')}},AbortSignal,
- fetch:async url=>{urls.push(url);if(!url.endsWith('/status'))used++;return {ok:true,json:async()=>url.endsWith('/status')?{ready:true,used,limit:50}:{llm:{status:'ok',judgement:{id:'distance',kind:'question',topic:'mileage',evidence:'何キロ',answerTarget:'何キロ',conditions:[]}}}}}});
+ fetch:async url=>{if(!url.endsWith('/status') && simulated){if(simulated==='network')throw Error('offline');if(simulated==='timeout')throw Object.assign(Error('timeout'),{name:'TimeoutError'});return {ok:true,json:async()=>({llm:{status:simulated}})};}urls.push(url);if(!url.endsWith('/status'))used++;return {ok:true,json:async()=>url.endsWith('/status')?{ready:true,used,limit:50}:{llm:{status:'ok',judgement:{id:'distance',kind:'question',topic:'mileage',evidence:'何キロ',answerTarget:'何キロ',conditions:[]}}}}}});
 vm.runInContext(fs.readFileSync(new URL('../audio-db.js',import.meta.url),'utf8'),c);
 vm.runInContext(fs.readFileSync(new URL('../lab/roleplay-bridge.js',import.meta.url),'utf8'),c);
 await new Promise(r=>setImmediate(r));
@@ -37,4 +37,12 @@ assert.match(remaining.textContent,/50／50回/,'Server day reset updates displa
 assert.ok(nodes.filter(n=>n.tag==='audio').every(n=>n.src.startsWith('./audio-ondoku/')));
 assert.ok(!nodes.some(n=>n.textContent?.includes('ONにすると')));
 assert.equal(await window.ROLEPLAY_INTENT_ASSIST.resolve('test'),null);
+toggle.checked=true;
+for(const [status,expected] of [['daily_limit','日次上限に到達'],['provider_limit','Groqの利用制限'],['network','通信失敗'],['timeout','応答待ち時間超過']]){
+ simulated=status;const m={role:'staff',text:'質問'};window.ROLEPLAY_INTENT_ASSIST.traceMessage(m);
+ await window.ROLEPLAY_INTENT_ASSIST.select({text:'質問',candidates:[]});
+ const reply={role:'customer',text:'はい',audioId:'ack'};window.ROLEPLAY_INTENT_ASSIST.traceMessage(reply);
+ assert.equal(m.responseReason,expected);assert.equal(reply.responseReason,expected);
+}
+toggle.checked=false;const off={role:'staff',text:'質問'};window.ROLEPLAY_INTENT_ASSIST.traceMessage(off);assert.equal(off.responseReason,'LLMがOFF');
 console.log('公開画面: 履歴保存維持・リンク維持・公開API接続・相対音声パス OK');
