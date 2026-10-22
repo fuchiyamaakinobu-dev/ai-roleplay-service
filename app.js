@@ -1746,7 +1746,8 @@ function asksInspectionCallTimingPermission(text) {
     && !/(?:\d{1,2}(?:月|日|時|分)|午前|午後)/.test(normalized);
   // 「あともう少しだけお電話大丈夫ですか」のように「時間」を省いた
   // 通話継続確認も、持参品など現在工程の了承ではなく質問そのものへ答える。
-  const hasContinuedCallPermission = /(?:あと|もう少し).{0,12}(?:お?電話|お話).{0,12}(?:よろしい|大丈夫|構いません|可能)/.test(normalized)
+  const hasContinuedCallPermission = /(?:聞きたいこと|お聞きしたいこと).{0,30}(?:この)?お電話.{0,8}(?:よろしい|大丈夫)/.test(normalized)
+    || /(?:あと|もう少し).{0,12}(?:お?電話|お話).{0,12}(?:よろしい|大丈夫|構いません|可能)/.test(normalized)
     || /(?:お?電話|お話).{0,12}(?:あと|もう少し).{0,12}(?:よろしい|大丈夫|構いません|可能)/.test(normalized);
   const asksPermission = /(?:いい|よろしい|よろしかった|大丈夫|構いません|可能)/.test(normalized);
   return (hasCurrentCallContext || hasBareTimePermission || hasContinuedCallPermission) && asksPermission;
@@ -4537,6 +4538,8 @@ function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly =
   }
   const concerns = asksInspectionVehicleConcerns(decisionText);
   const callPermission = !concerns && (asksInspectionCallTimingPermission(decisionText)
+    || /^(?:よろしい|大丈夫)(?:ですか|でしょうか)[？?。]*$/.test(normalizeScriptedText(decisionText))
+      && asksInspectionCallTimingPermission(text)
     || hasBookingContinuationConfirmation(decisionText)
     || /(?:お?電話|お話).{0,12}(?:よろしい|よろしかった|大丈夫)/.test(normalizeScriptedText(decisionText))
       && asksInspectionCallTimingPermission(text));
@@ -4698,7 +4701,7 @@ function inspectionWaitingPlanExplained(text) {
 
 function inspectionDirectArrivalConfirmation(text) {
   const stoppingBy = /(?:当社|弊社|店舗|お店).{0,8}(?:寄って|よって)いただ/.test(normalizeScriptedText(text));
-  return Boolean(state.inspectionAppointmentCandidate || state.proposedAppointment || stoppingBy && state.inspectionMileageAsked)
+  return Boolean(state.inspectionAppointmentCandidate || state.proposedAppointment || state.inspectionMileageAsked)
     && (/(?:来店|お越し|来ていただ)/.test(normalizeScriptedText(text)) || stoppingBy)
     && asksInspectionDirectVisitInvitation(text);
 }
@@ -4732,7 +4735,10 @@ function handleInspectionPickupPreparation(text, decisionText) {
   if (asksInspectionLoanerNeed(decisionText)) {
     return handleInspectionPickupPriorityReply(text, decisionText, true);
   }
-  if (inspectionDirectArrivalConfirmation(decisionText)) {
+  // 読点で「よろしいですか」だけが切り出された場合は、直前の来店依頼も参照する。
+  const bareConsentQuestion = /^(?:よろしい|よろしかった|大丈夫)(?:ですか|でしょうか)[？?。]*$/.test(normalizeScriptedText(decisionText));
+  const arrivalQuestion = bareConsentQuestion ? String(text).split(/[。！？!?]/).filter(part => part.trim()).at(-1) || decisionText : decisionText;
+  if (inspectionDirectArrivalConfirmation(arrivalQuestion)) {
     rememberFutureScriptedAchievements(text, -1);
     startInspectionPickupRequest("日時候補後の来店可否確認に対し、引取希望を伝えました。");
     return true;
