@@ -53,8 +53,8 @@ assert.equal(distance.say('9月の30日10時半から来ていただいてもい
 assert.equal(distance.run('state.inspectionPickupOutcome'), 'pickup');
 assert.equal(distance.run('state.inspectionPickupPhase'), 'confirmation');
 const responses = distance.run('state.transcript.filter(m=>m.role==="customer").length');
-distance.say('来店してもらえたらうれしいんですがいかがですか');
-assert.equal(distance.run('state.transcript.filter(m=>m.role==="customer").length'), responses, '同じ訂正を繰り返さない');
+assert.equal(distance.say('来店してもらえたらうれしいんですがいかがですか').text, '今回は引き取りでお願いしたいです。');
+assert.equal(distance.run('state.transcript.filter(m=>m.role==="customer").length'), responses + 1, '再質問にも引取希望を回答する');
 assert.equal(distance.say('ご家族と一緒に来ることは可能ですか？').text, 'それなら、お店に持って行きます。');
 assert.equal(distance.run('state.inspectionPickupOutcome'), 'visit');
 

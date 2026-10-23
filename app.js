@@ -27,6 +27,7 @@ const state = {
   scriptStep: 0,
   proposedAppointment: null,
   inspectionAppointmentIncomplete: false,
+  inspectionBookingCancelled: false,
   variantSeed: 0,
   pickupReason: null,
   currentObjection: null,
@@ -341,6 +342,7 @@ function selectScenario(scenarioId) {
   state.proposedAppointment = null;
   state.inspectionAppointmentCandidate = null;
   state.inspectionAppointmentIncomplete = false;
+  state.inspectionBookingCancelled = false;
   state.serviceTimeExplained = false;
   state.serviceTimeNeedsReconfirmation = false;
   state.appointmentDateConfirmed = false;
@@ -1519,6 +1521,7 @@ function startRoleplay() {
   state.inspectionAppointmentCandidate = null;
   state.inspectionAppointmentIncomplete = false;
   state.variantSeed = Math.floor(Math.random() * 1000);
+  state.inspectionBookingCancelled = false;
   state.inspectionMileageVariant = isPickupInspectionScenario() ? ["30000", "over60000", "120000"][Math.floor(Math.random() * 3)] : "30000";
   state.pickupReason = null;
   state.currentObjection = null;
@@ -2756,7 +2759,7 @@ function isInspectionDeadlineDateCandidate(normalized, date) {
 function inspectionAdmissionScheduleText(text) {
   const normalized = normalizeScriptedText(text);
   // 返却予定は入庫予約と別の日時。明示された返却部分だけを除外する。
-  return normalized.replace(/(?:翌日|作業後|返却(?:日時|日)?は|納車(?:日時|日)?は)[^。！？!?]*(?:お引き渡し|引き渡し|お返し|返却|納車)[^。！？!?]*/g, "");
+  return normalized.replace(/(?:翌日|作業後|返却(?:日時|日)?は|納車(?:日時|日)?は)[^。！？!?]*(?:お引き渡し|引き渡し|お返し|返却|納車|お届け)[^。！？!?]*/g, "");
 }
 
 function inspectionAppointmentDateCandidates(text) {
@@ -4334,7 +4337,8 @@ function handleInspectionPickupBranchReply(text) {
             audioId: "inspection_pickup_still_requested"
           });
         } else {
-          continueSpeechInputWithoutCustomerReply("理由に合う代替案か、引取場所を確認してください。");
+          state.turn += 1;
+          addMessage("customer", "今回は引き取りでお願いしたいです。", {audioId:"inspection_pickup_still_requested"});
         }
         els.speechNote.textContent = "引取希望の理由に合う具体策がないため、希望を維持しています。";
         renderProgress();
@@ -4736,7 +4740,7 @@ function handleInspectionPickupPreparation(text, decisionText) {
     return handleInspectionPickupPriorityReply(text, decisionText, true);
   }
   // 読点で「よろしいですか」だけが切り出された場合は、直前の来店依頼も参照する。
-  const bareConsentQuestion = /^(?:よろしい|よろしかった|大丈夫)(?:ですか|でしょうか)[？?。]*$/.test(normalizeScriptedText(decisionText));
+  const bareConsentQuestion = /^(?:(?:よろしい|よろしかった|大丈夫)(?:ですか|でしょうか)|いかが(?:ですか|でしょうか))[？?。]*$/.test(normalizeScriptedText(decisionText));
   const arrivalQuestion = bareConsentQuestion ? String(text).split(/[。！？!?]/).filter(part => part.trim()).at(-1) || decisionText : decisionText;
   if (inspectionDirectArrivalConfirmation(arrivalQuestion)) {
     rememberFutureScriptedAchievements(text, -1);
@@ -4822,7 +4826,43 @@ function shouldAnswerInspectionBookingIntent(text) {
   );
 }
 
+function handleInspectionBookingOutcome(text) {
+  if (!isPickupInspectionScenario()) return false;
+  const n = normalizeScriptedText(text);
+  const cancel = /予約(?:は|を)?(?:無し|なし|取り消し|取消|キャンセル)(?:ということで|で|に|を|します|してください|お願いします)/.test(n)
+    && !/(?:しない|しません|ではない|ではありません|場合|なら)/.test(n);
+  if (cancel) {
+    state.inspectionBookingCancelled = true;
+    state.proposedAppointment = null;
+    state.inspectionAppointmentCandidate = null;
+    state.inspectionAppointmentIncomplete = true;
+    state.scriptedPartialReplies.inspectionPickupDate = null;
+  }
+  if (state.inspectionBookingCancelled) {
+    state.turn += 1;
+    if (isInspectionFinalClosingThanks(text)) {
+      state.ended = true;
+      addMessage('customer', 'ありがとうございました。', {audioId:'inspection_closed_politely_customer', onCommitted:()=>finishRoleplay({keepCustomerPlayback:true})});
+    } else {
+      addMessage('customer', '分かりました。', {audioId:'inspection_explained_lock_and_arrival_customer'});
+    }
+    renderProgress();
+    return true;
+  }
+  // 紹介への了承は、来店や予約の成立とは別に扱う。
+  if (state.inspectionPickupActive && /(?:他|ほか|別)のお?店|他店|他店舗/.test(n)
+    && /(?:紹介|やってもら|させてもら|さしてもら)/.test(n)
+    && isScriptedQuestion(n)) {
+    state.turn += 1;
+    addMessage('customer', 'お願いします。', {audioId:'inspection_recapped_appointment_customer'});
+    renderProgress();
+    return true;
+  }
+  return false;
+}
+
 function handleScriptedStaffReply(text) {
+  if (handleInspectionBookingOutcome(text)) return;
   if (answerInspectionServiceDismissal(text)) return;
   const waiting = inspectionStoreWaitingCandidate(text);
   if (waiting) { applyPickupExtra(text, waiting); return; }
@@ -6588,7 +6628,9 @@ function inspectionSpeechAnalysisCandidates(text) {
   if (/(?:どちら|どっち|それとも|何時|何日|いつ|どこ)/.test(q)) return [];
   let action, id;
   // Only a final return confirmation, never a new admission proposal or location question.
-  if (/(?:引き渡し|お渡し|お返し|返却|納車)/.test(q)
+  const returnQuestion = /^(?:いかがですか|いかがでしょうか|よろしいですか|よろしいでしょうか)[？?。]*$/.test(q)
+    ? n.split(/[。！？!?]/).filter(Boolean).at(-1) || q : q;
+  if (/(?:引き渡し|お渡し|お返し|返却|納車|お届け)/.test(returnQuestion)
     && /(?:翌日|作業後|終わ|完了|返却|納車)/.test(n)
     && /(?:時|日|作業後|終わ)/.test(n)
     && !inspectionAppointmentDateCandidates(text).length) {
@@ -6616,6 +6658,10 @@ function applyInspectionSpeechAnalysis(text, selection = null) {
     || !['question','request','explanation'].includes(selection.kind)
     || !selection.evidence?.trim() || !text.includes(selection.evidence))) return false;
   // Preserve the admission date and pickup branch. Analysis does not establish a booking.
+  if (candidate.action === 'inspection_return_confirmation') {
+    state.pickupAudioMemory = state.pickupAudioMemory || {};
+    state.pickupAudioMemory.returnSchedule = {text};
+  }
   rememberFutureScriptedAchievements(text, -1);
   if (candidate.action === 'inspection_loaner_offer') {
     state.inspectionLoanerRequested = true;
@@ -6795,6 +6841,7 @@ function applyInspectionLlmSelection(text, selection) {
 }
 
 function handleInspectionLlmReply(text) {
+  if (handleInspectionBookingOutcome(text)) return;
   if (answerInspectionServiceDismissal(text)) return;
   const rejected = isPickupInspectionScenario() && state.pickupAudioMemory?.rejected;
   if (rejected?.kind === "later_time" && !state.pickupAudioMemory.adjusted
@@ -7282,6 +7329,10 @@ function scoreScriptedRoleplay() {
       || (typeof inspectionConversationMetricAchieved === "function"
         && inspectionConversationMetricAchieved(metric.key));
   });
+  if (state.inspectionBookingCancelled) {
+    achieved.proposed_appointment = false;
+    achieved.recapped_appointment = false;
+  }
 
   if (typeof isPickupInspectionScenario === "function" && isPickupInspectionScenario()
     && state.inspectionPickupActive && !state.proposedAppointment) {

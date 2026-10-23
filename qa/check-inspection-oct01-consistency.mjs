@@ -59,8 +59,8 @@ driving.run('state.inspectionPickupActive=true; state.inspectionPickupPhase="loc
 assert.equal(driving.say('お店でお待ちいただいて1時間半でできる車検ができるのですがご来店いただけないでしょうか').text, '今回は引き取りでお願いしたいです。');
 assert.equal(driving.run('state.inspectionPickupOutcome'), 'pickup');
 const replyCount = driving.run('state.transcript.filter(x=>x.role==="customer").length');
-driving.say('90分でできますが、ご来店いただけますか？');
-assert.equal(driving.run('state.transcript.filter(x=>x.role==="customer").length'), replyCount, '引取希望の訂正を繰り返さない');
+assert.equal(driving.say('90分でできますが、ご来店いただけますか？').text, '今回は引き取りでお願いしたいです。');
+assert.equal(driving.run('state.transcript.filter(x=>x.role==="customer").length'), replyCount + 1, '再質問にも引取希望を回答する');
 driving.say('ご家族と一緒にご来店いただけますか？');
 assert.equal(driving.run('state.inspectionPickupOutcome'), 'visit');
 
