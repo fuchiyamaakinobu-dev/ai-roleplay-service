@@ -2812,8 +2812,11 @@ function inspectionAppointmentProposalMatch(text) {
   const date = dates[0];
   const following = normalized.slice(date.end);
   const timeMatches = [...following.matchAll(/(午前|午後)?(\d{1,2})時(?!間)(?:(半)|(\d{1,2})分)?/g)];
-  if (timeMatches.length !== 1) return null;
-  const timeMatch = timeMatches[0];
+  const correctedTime = timeMatches.length === 2
+    && /(?:じゃ|ではなく|訂正|やっぱり|変更して)/.test(following.slice(timeMatches[0].index + timeMatches[0][0].length, timeMatches[1].index))
+    && !/(?:または|それとも|どちら)/.test(following);
+  if (timeMatches.length !== 1 && !correctedTime) return null;
+  const timeMatch = correctedTime ? timeMatches[1] : timeMatches[0];
   return {
     month: date.month,
     day: date.day,
@@ -4829,6 +4832,22 @@ function shouldAnswerInspectionBookingIntent(text) {
 function handleInspectionBookingOutcome(text) {
   if (!isPickupInspectionScenario()) return false;
   const n = normalizeScriptedText(text);
+  if (!state.inspectionBookingCancelled && !state.proposedAppointment && !state.inspectionPickupPhase
+    && /(?:今回の)?車検(?:を|は)?お願いできます(?:か|でしょうか)/.test(n)) {
+    rememberFutureScriptedAchievements(text, -1);
+    state.turn += 1;
+    addMessage('customer', 'お願いしたいんですけど、いつできますか？', {audioId:'inspection_asked_availability_customer'});
+    renderProgress();
+    return true;
+  }
+  if (!state.inspectionBookingCancelled && state.inspectionPickupActive
+    && /お?休み(?:とか)?(?:は|が|って)?(?:あります|ございます|いつ|何曜)/.test(n)
+    && isScriptedQuestion(n)) {
+    state.turn += 1;
+    addMessage('customer', '土日がいいです。', {audioId:'inspection_day_preference_answer'});
+    renderProgress();
+    return true;
+  }
   const cancel = /予約(?:は|を)?(?:無し|なし|取り消し|取消|キャンセル)(?:ということで|で|に|を|します|してください|お願いします)/.test(n)
     && !/(?:しない|しません|ではない|ではありません|場合|なら)/.test(n);
   if (cancel) {
@@ -7224,6 +7243,13 @@ function inspectionSpecificImprovement(metricKey) {
     .map((message) => normalizeScriptedText(message.text))
     .filter(Boolean);
   const staffEvidence = staffUtterances.join(" ");
+
+  if (metricKey === "explained_lock_and_arrival") {
+    const arrival = /(?:10分|十分|15分|十五分)/.test(staffEvidence) && /(?:早め|前)/.test(staffEvidence);
+    const tool = hasLockNutToolExpression(staffEvidence);
+    if (arrival && !tool) return "ロックナットを使用している場合は専用工具を持参することを、明確に案内してください（早めの来店案内は確認済み）";
+    if (tool && !arrival) return "10分または15分前の来店を案内してください（ロックナット用具の案内は確認済み）";
+  }
 
   if (metricKey === "explained_available_period") {
     const expiryDate = normalizeScriptedText(scenario.expiryDate || "");
