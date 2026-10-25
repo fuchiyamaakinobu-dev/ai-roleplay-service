@@ -4270,6 +4270,22 @@ function handleInspectionPickupBranchReply(text) {
 
   if (state.inspectionPickupPhase === "proposal") {
     const evidence = inspectionPickupProposalEvidence(text, state.inspectionPickupReason);
+    // 整備説明の利点だけでは運転・距離・仕事の負担は解消しない。
+    // 予約工程へ落とさず、現在の引取理由を保持して回答する。
+    const explanationBenefit = /(?:整備|車の状況|お車の状況|工場)/.test(normalized)
+      && /(?:説明|お伝え|アドバイス|報告)/.test(normalized)
+      && /(?:直接|詳しく|確実|確認)/.test(normalized);
+    if (explanationBenefit && !evidence.alternative && !evidence.choicePreserved
+      && ["work", "distance", "driving"].includes(state.inspectionPickupReason)
+      && !hasInspectionAppointmentProposalEvidence(text)
+      && !asksInspectionVehicleConcerns(inspectionLastQuestionClause(text))
+      && !asksInspectionLoanerNeed(inspectionLastQuestionClause(text))) {
+      const reason = inspectionPickupReasons.find(item => item.key === state.inspectionPickupReason);
+      state.turn += 1;
+      addMessage("customer", reason.text, {audioId:reason.audioId});
+      renderProgress();
+      return true;
+    }
     if (!evidence.alternative && asksInspectionDirectVisitInvitation(text)
       || !evidence.acknowledged && !evidence.alternative && !evidence.choicePreserved) {
       // 運転不安・距離などの事情に合う代替案も、引取を選べる説明もない
