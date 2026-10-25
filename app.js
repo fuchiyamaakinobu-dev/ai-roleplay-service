@@ -7347,7 +7347,31 @@ function lastInspectionRecapDateMismatch() {
   return state.analyses.filter(item => item.appointmentRecapCheck).at(-1)?.dateMismatch === true;
 }
 
+function inspectionStorageScoringEvidence() {
+  if (!isVehicleInspectionScenario()) return {storage:false,nonWaiting:false,loaner:false,completion:false,pickup:false};
+  const messages = state.transcript || [];
+  let storage = false;
+  for (let i=0;i<messages.length;i++) {
+    if (messages[i].role !== 'staff') continue;
+    const t = normalizeScriptedText(messages[i].text);
+    if (!/(?:預かり|預からせ|ワンデー|1日車検|一日車検)/.test(t)
+      || /(?:預かりません|預からない|待っている間|お待ちいただく間|店内でお待ち|90分|1時間半)/.test(t)) continue;
+    const reply = messages.slice(i+1).find(m=>m.role==='customer' || m.role==='staff');
+    if (reply?.role==='customer' && /^(?:はい|お願いします|分かりました|わかりました|大丈夫|では、その)/.test(reply.text)) storage = true;
+  }
+  const staff = messages.filter(m=>m.role==='staff').map(m=>normalizeScriptedText(m.text));
+  const pickup = state.inspectionPickupOutcome === 'pickup';
+  const nonWaiting = storage || pickup || ['loaner', 'family'].includes(state.inspectionWaitingMethod);
+  const loaner = staff.some(t=>asksInspectionLoanerNeed(t));
+  const completion = staff.flatMap(t=>t.split(/[。！？!?]/)).some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|納車)/.test(t)
+    && /(?:当日|本日|今日|翌日|明日|あした|あさって|明後日|\d{1,2}月\d{1,2}日|\d{1,2}日(?:の|に|は))/.test(t)
+    && /\d{1,2}時(?!間)/.test(t)
+    && !/(?:未定|わかりません|分かりません|決まっていません)/.test(t));
+  return {storage,nonWaiting,loaner,completion,pickup};
+}
+
 function scoreScriptedRoleplay() {
+  const storageEvidence = inspectionStorageScoringEvidence();
   const notApplicableKeys = new Set(
     state.analyses
       .filter((analysis) => analysis.scripted && analysis.notApplicable === true)
@@ -7359,6 +7383,8 @@ function scoreScriptedRoleplay() {
       && /(?:取りに来て|引き取りでお願い|引取を希望)/.test(item.text))) {
     scenario.scoring.filter(metric => metric.key.startsWith("pickup_")).forEach(metric => notApplicableKeys.add(metric.key));
   }
+  if (storageEvidence.storage) notApplicableKeys.delete('explained_loaner');
+  if (storageEvidence.pickup) notApplicableKeys.delete('explained_lock_and_arrival');
   const applicableScoring = scenario.scoring.filter((metric) => !notApplicableKeys.has(metric.key));
   const optionalAfterAppointmentKeys = new Set(
     (scenario.steps || [])
@@ -7388,6 +7414,10 @@ function scoreScriptedRoleplay() {
     achieved.confirmed_waiting = state.inspectionWaitingMethod === "loaner";
   }
   const recapDateMismatch = state.analyses.filter(item => item.appointmentRecapCheck).at(-1)?.dateMismatch === true;
+  if (storageEvidence.storage) achieved.explained_loaner = storageEvidence.loaner;
+  if (storageEvidence.pickup) achieved.explained_lock_and_arrival = hasLockNutToolExpression(
+    state.transcript.filter(m=>m.role==='staff').map(m=>normalizeScriptedText(m.text)).join(' '));
+  const completionMissing = storageEvidence.nonWaiting && !storageEvidence.completion;
   if (recapDateMismatch) achieved.recapped_appointment = false;
 
   const retryCount = state.analyses.filter((analysis) =>
@@ -7414,15 +7444,21 @@ function scoreScriptedRoleplay() {
   const minimumAppointmentPenalty = minimumAppointmentMissing ? 20 : 0;
   const score = Math.max(
     0,
-    Math.min(100, baseScore - Math.min(20, retryCount * 2) - minimumAppointmentPenalty)
+    Math.min(100, baseScore - Math.min(20, retryCount * 2) - minimumAppointmentPenalty - (completionMissing ? 5 : 0))
   );
   const good = applicableScoring
     .filter((metric) => achieved[metric.key])
-    .map((metric) => `${metric.action}ことができています`);
+    .map((metric) => storageEvidence.pickup && metric.key === 'explained_lock_and_arrival'
+      ? 'ロックナット用の専用工具をご案内できています'
+      : storageEvidence.storage && metric.key === 'explained_loaner'
+        ? '代車の必要性を確認できています'
+        : `${metric.action}ことができています`);
   const improve = applicableScoring
     .filter((metric) => !achieved[metric.key]
       && !(recapDateMismatch && metric.key === "recapped_appointment"))
     .map((metric) => {
+      if (metric.key === 'explained_loaner' && storageEvidence.storage) return '預かり車検に了承いただいた後は、代車が必要か確認してください（代車確認項目は未達）';
+      if (metric.key === 'explained_lock_and_arrival' && storageEvidence.pickup) return 'ロックナットを使用している場合の専用工具をご用意いただく案内をしてください（引取納車のため早め来店案内は不要）';
       if (metric.key === "explained_duration_and_wait" && !state.inspectionMileageAsked) {
         return "現在の走行距離を確認し、その結果に応じた作業時間・受付方法を案内してください";
       }
@@ -7449,6 +7485,11 @@ function scoreScriptedRoleplay() {
     improve.unshift("日付の案内が曖昧です。予約時と最終確認の日時が一致していません（予約復唱5点は未達・合計点は対象配点で100点換算）。");
   }
 
+  if (storageEvidence.storage && !storageEvidence.loaner) {
+    const index = improve.findIndex(text => text.includes('代車確認項目は未達'));
+    if (index >= 0) improve.unshift(...improve.splice(index, 1));
+  }
+  if (completionMissing) improve.unshift('待ち車検以外では、予定終了日と時刻を説明してください（5点減点）');
   const judgements = scenario.scoring.map((metric) => {
     const attempts = state.analyses.filter((analysis) =>
       analysis.stepKey === metric.key && analysis.notApplicable !== true
@@ -7458,8 +7499,12 @@ function scoreScriptedRoleplay() {
       : notApplicableKeys.has(metric.key)
       ? "対象外（店内待ち提案済み）"
       : achieved[metric.key] ? "○" : "要改善";
-    return `${metric.label}: ${status}${attempts.length > 1 ? `（${attempts.length}回発話）` : ""}`;
+    const label = storageEvidence.pickup && metric.key === 'explained_lock_and_arrival' ? 'ロックナット専用工具の案内' : storageEvidence.storage && metric.key === 'explained_loaner' ? '代車の必要性確認' : metric.label;
+    return `${label}: ${status}${attempts.length > 1 ? `（${attempts.length}回発話）` : ""}`;
   });
+
+  if (storageEvidence.nonWaiting) judgements.push(`予定終了日時: ${storageEvidence.completion ? '○' : '要改善（5点減点）'}`);
+  if (storageEvidence.pickup) judgements.push('10分・15分前来店案内: 対象外（引取納車）');
 
   return {
     score,

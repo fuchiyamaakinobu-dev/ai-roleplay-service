@@ -325,6 +325,8 @@ const scoreContext = {
     ]
   }
 };
+// This isolated scoring test has no storage/pickup conversation. Branch evidence is tested in check-storage-scoring.mjs.
+scoreContext.inspectionStorageScoringEvidence = () => ({storage:false, nonWaiting:false, loaner:false, completion:false, pickup:false});
 vm.createContext(scoreContext);
 vm.runInContext(
   `${appSource.slice(scoreStart, scoreEnd)}\nthis.scoreScriptedRoleplay = scoreScriptedRoleplay;`,

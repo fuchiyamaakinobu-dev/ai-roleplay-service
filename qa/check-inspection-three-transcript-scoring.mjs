@@ -41,6 +41,8 @@ const context = {
     steps: [],
     scoring: []
   },
+  isVehicleInspectionScenario: () => true,
+  asksInspectionLoanerNeed: text => /代車.*(?:必要|ご利用|利用).*(?:ですか|ますか|でしょうか)/.test(text),
   normalizeScriptedText: normalize,
   hasInspectionSelfIntroduction: (text) => /トヨタモビリティ.*(?:申します|でございます)/.test(text),
   hasCourtesyExpression: (text) => /(?:いつも|日頃).*(?:お世話になって(?:おります|います|ます)|ありがとう)/.test(text),
