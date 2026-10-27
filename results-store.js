@@ -77,7 +77,13 @@ async function saveResult(payload) {
         // 10～11桁またはハイフン区切りの電話番号らしい文字列を伏せる。
         text: maskPhoneNumbers(message.text),
         responseSource: ["llm","adjusted","rule","analyzed"].includes(message.responseSource) ? message.responseSource : "unknown",
-        responseReason: cleanText(message.responseReason,80)
+        responseReason: cleanText(message.responseReason,80),
+        ...(message.emergencyAudio ? {emergencyAudio:{
+          intendedText:maskPhoneNumbers(message.emergencyAudio.intendedText),
+          intendedAudioId:cleanText(message.emergencyAudio.intendedAudioId,120),
+          staffText:maskPhoneNumbers(message.emergencyAudio.staffText),
+          reason:'missing_registered_audio'
+        }} : {})
       }))
     });
     notify("saved", "採点結果を履歴へ保存しました。");

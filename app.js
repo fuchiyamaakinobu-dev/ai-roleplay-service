@@ -788,7 +788,30 @@ function registered12MonthCustomerMessage(role, text, audioId) {
   };
 }
 
+function inspectionEmergencyAudio(text, audioId) {
+  if (!isVehicleInspectionScenario()) return null;
+  const item = audioIndex.get(audioId);
+  if (item?.text === text && audioPath(audioId)) return null;
+  const matching = [...audioIndex.values()].find(item => item.text === text && audioPath(item.id));
+  if (matching) return {text, audioId:matching.id};
+  const staffText = state.transcript.filter(m => m.role === 'staff').at(-1)?.text || '';
+  const issue = {key:'missing-response|' + text, text, audioId:audioId || '未登録',
+    audioFile:item?.file || '音声ファイルなし', staffText,
+    reason:'適切な登録音声なし。「はい。」で非常代替。本来の返答：' + text + '／スタッフ：' + staffText,
+    createdAt:new Date().toISOString(), status:'needed'};
+  try {
+    const issues = JSON.parse(localStorage.getItem('roleplayAudioIssues') || '[]');
+    issues.unshift(issue);
+    localStorage.setItem('roleplayAudioIssues', JSON.stringify(issues));
+  } catch (_) { /* Transcript retains the record even when local storage is unavailable. */ }
+  return {text:'はい。', audioId:'inspection_thanked_customer_retry',
+    emergencyAudio:{intendedText:text, intendedAudioId:audioId || '', staffText, reason:'missing_registered_audio'}};
+}
+
 function commitMessage(role, text, options = {}) {
+  const emergency = role === 'customer' ? inspectionEmergencyAudio(text, options.audioId || '') : null;
+  if (emergency) { text = emergency.text; options = {...options,audioId:emergency.audioId,emergencyAudio:emergency.emergencyAudio}; }
+
   const registeredCustomerMessage = registered12MonthCustomerMessage(
     role,
     text,
@@ -800,6 +823,7 @@ function commitMessage(role, text, options = {}) {
     at: new Date().toISOString(),
     audioId: registeredCustomerMessage.audioId,
     audioSrc: audioPath(registeredCustomerMessage.audioId),
+    ...(options.emergencyAudio ? {emergencyAudio:options.emergencyAudio} : {}),
     hiddenFromConversation: options.hiddenFromConversation === true
   };
   state.transcript.push(message);
@@ -893,12 +917,36 @@ function inspectionAcknowledgementCandidates(text) {
     .map(item => ({id:item.id,text:item.text,action}));
 }
 
+function inspectionNeutralReplyForContext(staff) {
+  const n = normalizeScriptedText(staff);
+  const question = isScriptedQuestion(n);
+  const history = state.transcript.filter(m => m.role === 'staff').map(m => normalizeScriptedText(m.text));
+  const durationKnown = history.some(t => /(?:90分|1時間半|[0-9]+時間|[0-9]+分(?:程度|ほど|で|かか))/.test(t)
+    || /(?:終了|終わ|完了|返却|お返し)/.test(t) && /[0-9]+時(?!間)/.test(t));
+  if (asksInspectionIdentityConfirmation(staff)) return 'inspection_confirmed_identity_customer';
+  if (/(?:ワンデー|1日車検|一日車検)/.test(n)) return durationKnown ? 'inspection_confirmed_booking_time_customer' : 'inspection_explained_duration_and_wait_retry';
+  if (/(?:預かり|預からせ)/.test(n) && question) return 'inspection_confirmed_booking_time_customer';
+  if (/(?:工具|持参|ご準備|荷室|トランク|車検証|自賠責|納税)/.test(n)
+    && /(?:ください|お願い|ご用意|ご準備)/.test(n)) return 'inspection_explained_lock_and_arrival_customer';
+  if (/(?:代車|お届け|返却|完了|終了)/.test(n) && /(?:用意|伺います|予定です|します|いたします)/.test(n)
+    && !/(?:何時|いつ|どのくらい)/.test(n)) return 'inspection_explained_lock_and_arrival_customer';
+  if (/(?:よろしくお願い|予約.{0,12}(?:入れます|入れて|承り))/.test(n)) return 'inspection_recapped_appointment_customer';
+  if (question && /(?:待ち車検|町車検)/.test(n)) return durationKnown ? 'inspection_recapped_appointment_customer' : 'inspection_explained_duration_and_wait_retry';
+  if (question && /(?:電話|手続き|お時間|聞きたい)/.test(n)) return 'inspection_confirmed_booking_time_customer';
+  if (question && /(?:いかが|よろしい|大丈夫)/.test(n)) return durationKnown ? 'inspection_confirmed_booking_time_customer' : 'inspection_explained_duration_and_wait_retry';
+  if (/^(?:はい[。、]*)?(?:どうも|本日は|ご予約|それでは|では|はい|ええ|[。、])*ありがとう(?:ございます|ございました)[。！!]*$/.test(n)) return 'inspection_thanked_customer_customer';
+  return null;
+}
+
 function contextualInspectionAcknowledgement(role, text, options) {
   if (role !== "customer" || !isVehicleInspectionScenario()
-    || !["はい。", "ええ。", "分かりました。", "お願いします。", "はい、お願いします。", "大丈夫ですよ。"].includes(text)) return {text, options};
+    || !["はい。", "ええ。", "分かりました。", "お願いします。", "はい、お願いします。", "大丈夫ですよ。", "ありがとうございました。"].includes(text)) return {text, options};
   // Only substitute neutral replies. Never replace a date, preference, factual answer or question.
   const staff = state.transcript.filter(m => m.role === "staff").at(-1)?.text;
   if (!staff) return {text, options};
+  const explicitId = ['はい。','ええ。','ありがとうございました。'].includes(text) ? inspectionNeutralReplyForContext(staff) : null;
+  const explicit = explicitId && audioIndex.get(explicitId);
+  if (explicit) return {text:explicit.text,options:{...options,audioId:explicit.id}};
   let candidates = inspectionAcknowledgementCandidates(staff);
   // Only vary a neutral reply after legacy date validation, without changing state.
   if (!candidates.length && inspectionAppointmentDateCandidates(staff).length
@@ -3021,7 +3069,7 @@ function asksInspectionIdentityConfirmation(text) {
   const normalized = normalizeScriptedText(text);
   const customerName = normalizeScriptedText(scenario.customerName || "").replace(/様$/, "");
   if (!customerName || !normalized.includes(customerName) || !isScriptedQuestion(normalized)) return false;
-  return new RegExp(`${customerName}(?:様|さん)?(?:のお電話|のお宅|ご本人|様)?(?:でいらっしゃいます|でしょうか|ですか|で?よろしい(?:ですか|でしょうか))`).test(normalized);
+  return new RegExp(`${customerName}(?:様|さん)?(?:のお電話|のお宅|のお客|ご本人|様)?(?:でいらっしゃいます|でしょうか|ですか|で?よろしい(?:ですか|でしょうか))`).test(normalized);
 }
 
 function inspectionWrongNameAudio(text) {
@@ -4848,6 +4896,29 @@ function shouldAnswerInspectionBookingIntent(text) {
 function handleInspectionBookingOutcome(text) {
   if (!isPickupInspectionScenario()) return false;
   const n = normalizeScriptedText(text);
+  if (isPickupInspectionScenario() && !state.inspectionBookingCancelled && !state.proposedAppointment
+    && !state.inspectionPickupActive && !state.inspectionPickupOutcome
+    && /(?:理由|事情|難し|できない|都合)/.test(n)
+    && inspectionPickupReasonQuestion(text) && /(?:来店|引取|引き取|持ち込)/.test(n)) {
+    state.inspectionPickupActive = true;
+    state.inspectionPickupPhase = 'reason';
+    return handleInspectionPickupBranchReply(text);
+  }
+  const benefitInvitation = /(?:来店|お越し)/.test(n) && /(?:工場|整備結果|直接.*説明)/.test(n) && isScriptedQuestion(n);
+  if (isPickupInspectionScenario() && benefitInvitation && !state.inspectionBookingCancelled && !state.proposedAppointment) {
+    const count = state.transcript.filter(m => m.role === 'staff' && /(?:来店|お越し)/.test(m.text) && /(?:いかが|いただけ|できますか)/.test(m.text)).length;
+    if (count >= 3) {
+      state.inspectionPickupActive = false;
+      state.inspectionPickupPhase = 'resolved';
+      state.inspectionPickupOutcome = 'visit';
+      confirmInspectionPickupAppointmentCandidate();
+      state.turn += 1;
+      addMessage('customer', 'それなら、お店に持って行きます。', {audioId:'inspection_pickup_visit_agreement'});
+      renderProgress();
+    } else startInspectionPickupRequest('来店促進に対して引取希望を伝えました。', true);
+    return true;
+  }
+
   if (!state.inspectionBookingCancelled && !state.proposedAppointment && !state.inspectionPickupPhase
     && /(?:今回の)?車検(?:を|は)?お願いできます(?:か|でしょうか)/.test(n)) {
     rememberFutureScriptedAchievements(text, -1);

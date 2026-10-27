@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {session} from './check-inspection-llm-selection.mjs';
+const s=session('vehicle-inspection-pickup-delivery',async()=>null);
+s.run(`var savedIssues={};var localStorage={getItem:k=>savedIssues[k]||null,setItem:(k,v)=>savedIssues[k]=v};state.transcript=[{role:'staff',text:'明日何時に終わりますか？'}];`);
+assert.equal(s.run('inspectionEmergencyAudio("大丈夫ですよ。","inspection_confirmed_booking_time_customer")'),null);
+assert.equal(s.run('inspectionEmergencyAudio("分かりました。", "unregistered").audioId'),'inspection_explained_lock_and_arrival_customer');
+assert.equal(s.run('localStorage.getItem("roleplayAudioIssues")'),null);
+const r=s.run('inspectionEmergencyAudio("夕方5時までにお願いしたいです。", "new_audio")');
+assert.equal(r.text,'はい。');assert.equal(r.audioId,'inspection_thanked_customer_retry');assert.equal(r.emergencyAudio.intendedText,'夕方5時までにお願いしたいです。');
+const issue=JSON.parse(s.run('localStorage.getItem("roleplayAudioIssues")'))[0];assert.equal(issue.staffText,'明日何時に終わりますか？');assert.equal(issue.status,'needed');assert.match(issue.reason,/非常代替/);
+s.run('localStorage.setItem=()=>{throw Error("storage full")}');assert.equal(s.run('inspectionEmergencyAudio("新しい希望返答", "").emergencyAudio.intendedText'),'新しい希望返答');
+console.log('適切な既存音声を優先・不足時はい音声・必要文と直前発言を記録・保存失敗時も会話記録保持 OK');
