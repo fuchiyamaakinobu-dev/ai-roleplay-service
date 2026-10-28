@@ -923,6 +923,9 @@ function inspectionNeutralReplyForContext(staff) {
   const history = state.transcript.filter(m => m.role === 'staff').map(m => normalizeScriptedText(m.text));
   const durationKnown = history.some(t => /(?:90分|1時間半|[0-9]+時間|[0-9]+分(?:程度|ほど|で|かか))/.test(t)
     || /(?:終了|終わ|完了|返却|お返し)/.test(t) && /[0-9]+時(?!間)/.test(t));
+  if (/(?:お日にち|日程|都合).*(?:いつ|何日).*(?:ですか|でしょうか|よろしかった)/.test(n)) return 'inspection_day_preference_answer';
+  if (/(?:ご覧いただく|ご確認いただく).*(?:可能|よろし).*(?:ですか|でしょうか)/.test(n)) return 'inspection_confirmed_booking_time_customer';
+  if (/(?:入庫日|[0-9]+月[0-9]+日).*(?:いいでしょうか|いいですか)/.test(n)) return 'inspection_recapped_appointment_customer';
   if (asksInspectionIdentityConfirmation(staff)) return 'inspection_confirmed_identity_customer';
   if (/(?:ワンデー|1日車検|一日車検)/.test(n)) return durationKnown ? 'inspection_confirmed_booking_time_customer' : 'inspection_explained_duration_and_wait_retry';
   if (/(?:預かり|預からせ)/.test(n) && question) return 'inspection_confirmed_booking_time_customer';
@@ -4983,7 +4986,44 @@ function handleInspectionBookingOutcome(text) {
   return false;
 }
 
+function handleInspectionInstructionReply(text) {
+  const n = normalizeScriptedText(text);
+  const replyWithAudio = id => {
+    const item = audioIndex.get(id) || {text:({inspection_thanked_customer_customer:'こちらこそ。',inspection_explained_lock_and_arrival_customer:'分かりました。',inspection_explained_loaner_retry:'代車を用意してもらえますか？',inspection_pickup_still_requested:'今回は引き取りでお願いしたいです。'})[id]};
+    rememberFutureScriptedAchievements(text, -1);
+    state.turn += 1;
+    addMessage('customer', item.text, {audioId:id});
+    renderProgress();
+    return true;
+  };
+  if (/^(?:はい[。、]*)?ありがとうございます[。！!]*$/.test(n)) return replyWithAudio('inspection_thanked_customer_customer');
+  if (/代わりの出した.*必要(?:ですか|でしょうか)/.test(n)) {
+    state.inspectionLoanerRequested = true;
+    state.inspectionWaitingMethod = 'loaner';
+    return replyWithAudio('inspection_explained_loaner_retry');
+  }
+  const instruction = /(?:工具|ロックナット|分.{0,4}前|持参|荷室|トランク)/.test(n)
+    && /(?:ください|お願いいたします|お願いします|お願いできますか)[。！？?]*$/.test(n);
+  if (instruction && !asksCurrentMileage(inspectionLastQuestionClause(text))
+    && !asksInspectionVehicleConcerns(inspectionLastQuestionClause(text))) {
+    return replyWithAudio(hasInspectionPickupVisitConflict(text)
+      ? 'inspection_pickup_still_requested' : 'inspection_explained_lock_and_arrival_customer');
+  }
+  if (!state.proposedAppointment && state.inspectionPickupActive
+    && isInspectionFinalClosingThanks(text) && /(?:本日|失礼)/.test(n)) {
+    state.inspectionAppointmentIncomplete = true;
+    state.ended = true;
+    state.turn += 1;
+    addMessage('customer','こちらこそ。',{audioId:'inspection_thanked_customer_customer',onCommitted:()=>finishRoleplay({keepCustomerPlayback:true})});
+    return true;
+  }
+
+  return false;
+}
+
 function handleScriptedStaffReply(text) {
+  if (handleInspectionInstructionReply(text)) return;
+
   if (handleInspectionBookingOutcome(text)) return;
   if (answerInspectionServiceDismissal(text)) return;
   const waiting = inspectionStoreWaitingCandidate(text);

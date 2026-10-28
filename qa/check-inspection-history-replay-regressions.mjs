@@ -48,7 +48,7 @@ for(const invitation of ['当社へご入庫いただけますでしょうか？
   assert.equal(s.say(invitation),'お願いしたいんですけど、いつできますか？');
   const before=s.run('state.transcript.filter(x=>x.role==="customer").length');
   s.say('ありがとうございます。');
-  assert.equal(s.run('state.transcript.filter(x=>x.role==="customer").length'),before,'お礼の後はスタッフの続き待ち');
+  assert.equal(s.run('state.transcript.filter(x=>x.role==="customer").length'),before+1,'お礼にはこちらこそと返答してスタッフの続き待ち');
   assert.equal(s.say('このままご予約をさせていただきたいのですが、よろしいでしょうか？'),'お願いします。');
   assert.equal(s.say('8月30日はいかがでしょうか？'),'何時が空いていますか？');
   s.say('ありがとうございます。');
