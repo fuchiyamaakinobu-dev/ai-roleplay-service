@@ -112,6 +112,14 @@ function detailsCell(item) {
     badge.className='response-source'+(source?' source-'+source:'');
     badge.textContent=(source?labels[source]:'判定記録なし')+(message.responseReason?'：'+String(message.responseReason).slice(0,80):'');
     line.prepend(badge);transcript.append(line);
+    if (message.emergencyAudio) {
+      const note=document.createElement('p');
+      note.className='audio-emergency-note';
+      note.textContent='音声不足による非常代替「はい。」／必要な返答：'+String(message.emergencyAudio.intendedText || '')
+        +'／元の音声ID：'+String(message.emergencyAudio.intendedAudioId || '未登録')
+        +'／直前のスタッフ発言：'+String(message.emergencyAudio.staffText || '');
+      transcript.append(note);
+    }
   });
   if (!(item.transcript || []).length) addText(transcript, "p", "会話ログなし");
   content.append(transcript);

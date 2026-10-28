@@ -926,6 +926,8 @@ function inspectionNeutralReplyForContext(staff) {
   if (asksInspectionIdentityConfirmation(staff)) return 'inspection_confirmed_identity_customer';
   if (/(?:ワンデー|1日車検|一日車検)/.test(n)) return durationKnown ? 'inspection_confirmed_booking_time_customer' : 'inspection_explained_duration_and_wait_retry';
   if (/(?:預かり|預からせ)/.test(n) && question) return 'inspection_confirmed_booking_time_customer';
+  if (/(?:お預かり|預からせ)/.test(n) && /(?:ご来店|来店)/.test(n)
+    && /(?:いただければと思います|いただきます|お願いします)[。！!]*$/.test(n)) return 'inspection_explained_lock_and_arrival_customer';
   if (/(?:工具|持参|ご準備|荷室|トランク|車検証|自賠責|納税)/.test(n)
     && /(?:ください|お願い|ご用意|ご準備)/.test(n)) return 'inspection_explained_lock_and_arrival_customer';
   if (/(?:代車|お届け|返却|完了|終了)/.test(n) && /(?:用意|伺います|予定です|します|いたします)/.test(n)
@@ -2576,7 +2578,7 @@ function asksInspectionWaitingMethodConfirmation(text) {
 function asksInspectionLoanerNeed(text) {
   const normalized = normalizeScriptedText(text);
   const hasLoanerContext = /(?:代車|代わりのお車|代わりの車|代替車)/.test(normalized);
-  const asksNeedOrUse = /(?:必要|使い|お使い|利用|用意|準備|手配|外出|あった方|あったほう|あれば|ある方|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
+  const asksNeedOrUse = /(?:必要|使い|お使い|利用|乗って|用意|準備|手配|外出|あった方|あったほう|あれば|ある方|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
   const isChoiceQuestion = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized)
     || /(?:いかがいたしましょう|どうされます|どうします)/.test(normalized);
   return hasLoanerContext && asksNeedOrUse && isChoiceQuestion;
@@ -4896,6 +4898,20 @@ function shouldAnswerInspectionBookingIntent(text) {
 function handleInspectionBookingOutcome(text) {
   if (!isPickupInspectionScenario()) return false;
   const n = normalizeScriptedText(text);
+  // Explicit final recap must receive a reply even when the scripted step was already passed.
+  if (!state.inspectionBookingCancelled && state.proposedAppointment
+    && /(?:最終確認|最後の確認|復唱)/.test(n) && hasScriptedAppointmentRecapEvidence(text)
+    && !isScriptedQuestion(n)) {
+    const matches = confirmedInspectionAppointmentMatches(text);
+    const passed = hasConfirmedInspectionAppointmentRecap(text);
+    state.analyses.push({scripted:true,stepKey:'recapped_appointment',passed,recapped_appointment:passed,
+      appointmentRecapCheck:true,dateMismatch:!matches,evidence:[text]});
+    state.turn += 1;
+    addMessage('customer','お願いします。',{audioId:'inspection_recapped_appointment_customer'});
+    renderProgress();
+    return true;
+  }
+
   if (isPickupInspectionScenario() && !state.inspectionBookingCancelled && !state.proposedAppointment
     && !state.inspectionPickupActive && !state.inspectionPickupOutcome
     && /(?:理由|事情|難し|できない|都合)/.test(n)
@@ -6550,7 +6566,7 @@ function hasConfirmedInspectionAppointmentRecap(text) {
     && Number(match.minute || 0) === Number(appointment.minute || 0)
     && appointmentPeriodsMatch(appointment, match)
     && inspectionAppointmentRouteMatchesRecap(text)
-    && /(?:ご予約入れさせていただきます|ご予約を入れさせていただきます|ご予約を承ります|車検させていただきます|お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|予約です|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います|(?:引取|引き取り|取りに).{0,12}伺う.{0,12}(?:予約|予定))/.test(normalizeScriptedText(text));
+    && /(?:ご予約入れさせていただきます|ご予約を入れさせていただきます|ご予約を承ります|車検(?:の方)?(?:を)?(?:させていただきます|受け付けさせていただきます)|お待ちしております|ご来店をお待ち|予約を承りました|予約でございます|予約です|引取.{0,12}伺います|取りに伺います|自宅.{0,8}伺います|(?:引取|引き取り|取りに).{0,12}伺う.{0,12}(?:予約|予定))/.test(normalizeScriptedText(text));
 }
 
 function llmReplyCandidates(analysis) {
@@ -7434,7 +7450,7 @@ function inspectionStorageScoringEvidence() {
   const pickup = state.inspectionPickupOutcome === 'pickup';
   const nonWaiting = storage || pickup || ['loaner', 'family'].includes(state.inspectionWaitingMethod);
   const loaner = staff.some(t=>asksInspectionLoanerNeed(t));
-  const completion = staff.flatMap(t=>t.split(/[。！？!?]/)).some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|納車)/.test(t)
+  const completion = staff.flatMap(t=>t.split(/[。！？!?]/)).some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|お?引き渡し|納車)/.test(t)
     && /(?:当日|本日|今日|翌日|明日|あした|あさって|明後日|\d{1,2}月\d{1,2}日|\d{1,2}日(?:の|に|は))/.test(t)
     && /\d{1,2}時(?!間)/.test(t)
     && !/(?:未定|わかりません|分かりません|決まっていません)/.test(t));
