@@ -4122,7 +4122,7 @@ function markPickupRouteBaseStepsNotApplicable() {
 function inspectionPickupVisitResponse(reason, text = "") {
   if (/(?:近く|近い|近隣|最寄り).{0,20}(?:店舗|店)/.test(normalizeScriptedText(text))
     && !inspectionVisitStoreName(text)) {
-    return { text: "近くのお店は、どちらのお店になりますか？" };
+    return { text: "近くのお店は、どちらのお店になりますか？", audioId: "inspection_nearby_store_question_customer" };
   }
   if (reason === "work") {
     return state.variantSeed % 2 === 0
