@@ -1450,6 +1450,7 @@ function looksLikeCompleteJapaneseSentence(text) {
   }
   // 語尾の句点だけで完成文とみなさない。Web Speech APIが
   // 「お使いのヤリスが。」のような助詞終わりをisFinalで返す場合も続きを待つ。
+  if (hasCompleteInspectionWaitingProposal(text)) return true;
   if (/(?:が|を|に|の|と|で|へ|から|ので|けど|ですが|ますが|ましたが)$/.test(withoutTrailingPunctuation)) {
     return false;
   }
@@ -1529,6 +1530,14 @@ function isInspectionOperationalNoiseUtterance(text) {
   const normalized = normalizeScriptedText(text);
   return /(?:送信ボタン|マイク(?:つけ|付け|入れ)|コメント転換|間違えた|多分|まあいいや|次.*(?:何|なん)でしたっけ|聞き忘れ)/.test(normalized)
     || /^なんで(?:ですか)?[?？。]*$/.test(normalized);
+}
+
+function hasCompleteInspectionWaitingProposal(text) {
+  const n = text.replace(/\s+/g, "").replace(/[、。,.！？!?]+$/g, "");
+  return /(?:60|75|90|六十|七十五|九十)分(?:車検)?/.test(n)
+    && /(?:待っている間|お待ち|店内で待)/.test(n)
+    && /(?:ご利用|利用|お待ち|待って)(?:[^。！？!?]){0,40}(?:よろしいかと思いますが|いただければと思いますが|いかがでしょうか)$/.test(n)
+    && !/(?:待てません|待つことはできません|お待ちいただけません|店内待ちはできません|それとも|代車|引取)/.test(n);
 }
 
 function isInspectionIncompleteOrNoiseUtterance(text) {
@@ -6668,7 +6677,7 @@ function inspectionStoreWaitingCandidate(text) {
   if (state.inspectionPickupOutcome === 'pickup'
     || state.inspectionPickupActive && state.inspectionPickupPhase !== 'resolved') return null;
   const q = inspectionLastQuestionClause(text);
-  if (!asksInspectionWaitingMethodConfirmation(q)
+  if ((!asksInspectionWaitingMethodConfirmation(q) && !hasCompleteInspectionWaitingProposal(text))
     || /(?:それとも|どちら|どっち|代車|引取)/.test(q)) return null;
   // Use the latest duration explanation, including the current compound utterance.
   const duration = [...state.transcript.filter(m=>m.role==='staff').map(m=>m.text),text]
