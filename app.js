@@ -860,7 +860,7 @@ function commitMessage(role, text, options = {}) {
 }
 
 function isInspectionServiceDismissal(text) {
-  return /(?:よそ|他店|他のお店|別のお店).{0,12}(?:入れてください|行ってください|頼んでください)|(?:車検|車|予約).{0,8}(?:お願いしたくない|受け付けません|受けたくない)/.test(normalizeScriptedText(text));
+  return /(?:よそ|他店|他のお店|別のお店).{0,12}(?:入れてください|行ってください|頼んでください|やってください|受けてください|やっていただいて構いません)|(?:車検|車|予約).{0,8}(?:お願いしたくない|受け付けません|受けたくない)/.test(normalizeScriptedText(text));
 }
 
 function answerInspectionServiceDismissal(text) {
@@ -968,6 +968,30 @@ function contextualInspectionAcknowledgement(role, text, options) {
   return {text:candidate.text,options:{...options,audioId:candidate.id}};
 }
 
+const inspectionQuestionTopics = [
+  {key:'duration',label:'作業時間',question:/(?:どれくらい|どのくらい|どれぐらい).*(?:時間|かか)|何時間/,answer:t=>/(?:[0-9一二三]+時間|[0-9]+分|[0-9一二三]+泊[0-9一二三]+日|[0-9一二三]+日(?:ほど|くらい|で|お預かり))/.test(t)},
+  {key:'time',label:'入庫時刻',question:/何時が空いて|何時に(?:伺|行|来)|具体的な日時/,answer:t=>/\d{1,2}時(?!間)/.test(t)},
+  {key:'store',label:'近隣店舗名',question:/近くのお店は.*どちら/,answer:t=>Boolean(inspectionVisitStoreName(t))},
+  {key:'loaner',label:'代車の用意',question:/代車.*(?:用意して|貸して|借り|できますか)/,answer:t=>/代車/.test(t)&&/(?:用意|貸|ご利用|ございます|ありません|できません|可能|無料)/.test(t)},
+  {key:'documents',label:'持参品',question:/必要な物を教えて|ほかに持って行く物/,answer:t=>/(?:車検証|自賠責|納税証明|ロックナット|専用工具)/.test(t)},
+  {key:'expiry',label:'車検期限',question:/車検はいつまで|いつまでに受け/,answer:t=>/(?:満了|期限|車検切れ)/.test(t)&&/\d{1,2}月\d{1,2}日/.test(t)}
+];
+function inspectionUnansweredQuestions() {
+  if (!isVehicleInspectionScenario()) return [];
+  const staff=state.transcript.filter(m=>m.role==='staff').map(m=>normalizeScriptedText(m.text));
+  return inspectionQuestionTopics.filter(topic=>state.transcript.some(m=>m.role==='customer'&&topic.question.test(normalizeScriptedText(m.text)))&&!staff.some(topic.answer));
+}
+function inspectionRepeatedQuestionReply(text, options) {
+  const topic=inspectionQuestionTopics.find(q=>q.question.test(normalizeScriptedText(text)));
+  if (!topic) return {text,options};
+  const answered=state.transcript.some(m=>m.role==='staff'&&topic.answer(normalizeScriptedText(m.text)));
+  const asked=state.transcript.some(m=>m.role==='customer'&&topic.question.test(normalizeScriptedText(m.text)));
+  if (!answered&&!asked) return {text,options};
+  const id=options.audioId==='inspection_current_mileage_and_duration_customer'?'inspection_current_mileage_customer':answered?'inspection_explained_lock_and_arrival_customer':'inspection_ack_listening_ee';
+  const item=audioIndex.get(id);
+  return item ? {text:item.text,options:{...options,audioId:id}} : {text,options};
+}
+
 function addMessage(role, text, options = {}) {
   // All reply paths must use the same customer mileage as scoring.
   if (role === 'customer' && isVehicleInspectionScenario()
@@ -993,6 +1017,7 @@ function addMessage(role, text, options = {}) {
     options = { ...options, audioId: "inspection_pickup_workplace_request" };
     text = audioIndex.get(options.audioId).text;
   }
+  if (role === 'customer' && isVehicleInspectionScenario()) ({text,options}=inspectionRepeatedQuestionReply(text,options));
   const previousMessage = state.transcript[state.transcript.length - 1];
   const delay = role === "customer"
     && previousMessage?.role === "staff"
@@ -3079,6 +3104,15 @@ function confirmedInspectionAppointmentMatches(text) {
   );
 }
 
+function inspectionAppointmentContradicts(text) {
+  const a=state.proposedAppointment;
+  if (!a) return false;
+  if (inspectionAppointmentProposalMatch(text)) return !confirmedInspectionAppointmentMatches(text);
+  const n=normalizeScriptedText(text), d=n.match(/(\d{1,2})月(\d{1,2})日/), t=n.match(/(\d{1,2})時(半|\d{1,2}分)?/);
+  return Boolean(d && (Number(d[1])!==Number(a.month)||Number(d[2])!==Number(a.day))
+    || t && (Number(t[1])!==Number(a.hour)|| (t[2]==='半'?30:parseInt(t[2]||'0'))!==Number(a.minute||0)));
+}
+
 function asksInspectionIdentityConfirmation(text) {
   const normalized = normalizeScriptedText(text);
   const customerName = normalizeScriptedText(scenario.customerName || "").replace(/様$/, "");
@@ -4064,12 +4098,12 @@ function inspectionPickupReasonFromQuestion(text) {
 function inspectionPickupReasonQuestion(text) {
   const normalized = normalizeScriptedText(text);
   if (/(?:家族|ご主人).{0,30}(?:一緒|同伴).{0,30}(?:来|越|難し|いかが|可能)/.test(normalized)
-    && !/(?:なぜ|どうして|理由|事情)/.test(normalized)) return false;
+    && !/(?:なぜ|どうして|理由|事情|状況)/.test(normalized)) return false;
   const politeReasonRequest = /(?:理由|事情).{0,24}(?:教えて|お聞かせ|伺い|お聞き).{0,24}(?:いただきた|いただけ|ください|たく)/.test(normalized);
   if (!isScriptedQuestion(normalized) && !politeReasonRequest) return false;
   // 開放質問に加え、実績で使われた「お仕事でご都合が悪いですか」など、
   // 理由を仮定して確かめる自然な質問も理由確認として扱う。
-  return /(?:なぜ|どうして|理由|事情|差し支え|不都合|どのような)/.test(normalized)
+  return /(?:なぜ|どうして|理由|事情|状況|差し支え|不都合|どのような)/.test(normalized)
     || Boolean(inspectionPickupReasonFromQuestion(normalized));
 }
 
@@ -4538,7 +4572,7 @@ function inspectionVisitStoreName(text) {
   const normalized = normalizeScriptedText(text)
     .replace(/\d{1,2}月\d{1,2}日/g, "")
     .replace(/(?:午前|午後)?\d{1,2}時(?:半|\d{1,2}分)?/g, "");
-  const matches = [...normalized.matchAll(/(?:^|[、。]|近い|近くの|に|の|は)([一-龯ァ-ヶーA-Za-z0-9]{1,16}店)(?=という|と言う|って|に|で|へ|の|[、。]|$)/g)];
+  const matches = [...normalized.matchAll(/(?:^|[、。]|近い|近くの|ですと|例えば|に|の|は)([一-龯ァ-ヶーA-Za-z0-9]{1,16}店)(?=という|と言う|って|に|で|へ|の|[、。]|$)/g)];
   return matches.map((match) => match[1]).find((name) => !/^(?:店舗|近隣店|最寄店)$/.test(name)) || null;
 }
 
@@ -4582,7 +4616,7 @@ function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly =
   if (state.inspectionPickupActive && state.inspectionPickupReason
     && inspectionPickupReasonQuestion(decisionText)
     && (!asksInspectionDirectVisitInvitation(decisionText)
-      || /(?:なぜ|どうして|理由|事情)/.test(normalizeScriptedText(decisionText)))
+      || /(?:なぜ|どうして|理由|事情|状況)/.test(normalizeScriptedText(decisionText)))
     && !hasInspectionAppointmentProposalEvidence(decisionText)) {
     const reason = inspectionPickupReasons.find((item) => item.key === state.inspectionPickupReason);
     if (reason) {
@@ -4910,14 +4944,25 @@ function shouldAnswerInspectionBookingIntent(text) {
 function handleInspectionBookingOutcome(text) {
   if (!isPickupInspectionScenario()) return false;
   const n = normalizeScriptedText(text);
+  const reply = id => {rememberFutureScriptedAchievements(text,-1);state.turn+=1;addMessage('customer',audioIndex.get(id).text,{audioId:id});renderProgress();return true;};
+  const last=normalizeScriptedText(inspectionLastQuestionClause(text));
+  if (/(?:電話|お時間|時間).*(?:続け|もう少し|もう少々|このまま)/.test(n) && /(?:よろし|大丈夫|いかが)/.test(last)) return reply('inspection_confirmed_booking_time_customer');
+  if (/(?:用事|外出).*(?:ありますか|ございますか|すること)/.test(last)) return reply('inspection_waiting_followup_loaner_request');
+  if (state.inspectionPickupActive && /(?:来店|お越し|お店)/.test(n)
+    && /(?:土日|土曜|日曜|休日|休み|出勤前)/.test(n)
+    && /(?:可能|いただ|いかが|できます)/.test(n)
+    && state.inspectionPickupReason==='work') {
+    state.inspectionPickupActive=false;state.inspectionPickupOutcome='visit';state.inspectionPickupPhase='resolved';
+    return reply('inspection_pickup_visit_agreement');
+  }
+
   // Explicit final recap must receive a reply even when the scripted step was already passed.
   if (!state.inspectionBookingCancelled && state.proposedAppointment
     && /(?:最終確認|最後の確認|復唱)/.test(n) && hasScriptedAppointmentRecapEvidence(text)
     && !isScriptedQuestion(n)) {
-    const matches = confirmedInspectionAppointmentMatches(text);
     const passed = hasConfirmedInspectionAppointmentRecap(text);
     state.analyses.push({scripted:true,stepKey:'recapped_appointment',passed,recapped_appointment:passed,
-      appointmentRecapCheck:true,dateMismatch:!matches,evidence:[text]});
+      appointmentRecapCheck:true,dateMismatch:inspectionAppointmentContradicts(text),evidence:[text]});
     state.turn += 1;
     addMessage('customer','お願いします。',{audioId:'inspection_recapped_appointment_customer'});
     renderProgress();
@@ -4932,9 +4977,9 @@ function handleInspectionBookingOutcome(text) {
     state.inspectionPickupPhase = 'reason';
     return handleInspectionPickupBranchReply(text);
   }
-  const benefitInvitation = /(?:来店|お越し)/.test(n) && /(?:工場|整備結果|直接.*説明)/.test(n) && isScriptedQuestion(n);
+  const benefitInvitation = /(?:来店|お越し|お店|工場)/.test(n) && /(?:工場|整備結果|直接.*説明)/.test(n) && /(?:説明|お伝え)/.test(n) && isScriptedQuestion(n);
   if (isPickupInspectionScenario() && benefitInvitation && !state.inspectionBookingCancelled && !state.proposedAppointment) {
-    const count = state.transcript.filter(m => m.role === 'staff' && /(?:来店|お越し)/.test(m.text) && /(?:いかが|いただけ|できますか)/.test(m.text)).length;
+    const count = state.transcript.filter(m => m.role === 'staff' && /(?:来店|お越し|お店|工場)/.test(m.text) && /(?:いかが|いただけ|できますか)/.test(m.text)).length;
     if (count >= 3) {
       state.inspectionPickupActive = false;
       state.inspectionPickupPhase = 'resolved';
@@ -5192,7 +5237,7 @@ function handleScriptedStaffReply(text) {
   if (state.proposedAppointment && hasScriptedAppointmentRecapEvidence(text)
     && !inspectionPickupAppointmentReproposal(text)) {
     state.analyses.push({ appointmentRecapCheck: true,
-      dateMismatch: !confirmedInspectionAppointmentMatches(text), evidence: [text] });
+      dateMismatch: inspectionAppointmentContradicts(text), evidence: [text] });
   }
 
   if (inspectionHighMileage() && state.inspectionPickupPhase && !isInspectionFinalClosingThanks(text)) {
@@ -7499,9 +7544,9 @@ function inspectionStorageScoringEvidence() {
   const pickup = state.inspectionPickupOutcome === 'pickup';
   const nonWaiting = storage || pickup || ['loaner', 'family'].includes(state.inspectionWaitingMethod);
   const loaner = staff.some(t=>asksInspectionLoanerNeed(t));
-  const completion = staff.flatMap(t=>t.split(/[。！？!?]/)).some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|お?引き渡し|納車)/.test(t)
+  const completion = staff.some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|お?引き渡し|納車)/.test(t)
     && /(?:当日|本日|今日|翌日|明日|あした|あさって|明後日|\d{1,2}月\d{1,2}日|\d{1,2}日(?:の|に|は))/.test(t)
-    && /\d{1,2}時(?!間)/.test(t)
+    && t.split(/[。！？!?]/).some(part=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|お?引き渡し|納車)/.test(part) && /\d{1,2}時(?!間)/.test(part))
     && !/(?:未定|わかりません|分かりません|決まっていません)/.test(t));
   return {storage,nonWaiting,loaner,completion,pickup};
 }
@@ -7564,6 +7609,8 @@ function scoreScriptedRoleplay() {
     && !optionalAfterAppointmentKeys.has(analysis.stepKey)
     && !(analysis.stepKey === "proposed_appointment" && !achieved.proposed_appointment)
   ).length;
+  const unansweredQuestions = inspectionUnansweredQuestions();
+  const clarificationPenalty = Math.min(20, Math.max(retryCount, unansweredQuestions.length) * 2);
   const earnedPoints = applicableScoring.reduce(
     (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
     0
@@ -7580,7 +7627,7 @@ function scoreScriptedRoleplay() {
   const minimumAppointmentPenalty = minimumAppointmentMissing ? 20 : 0;
   const score = Math.max(
     0,
-    Math.min(100, baseScore - Math.min(20, retryCount * 2) - minimumAppointmentPenalty - (completionMissing ? 5 : 0))
+    Math.min(100, baseScore - clarificationPenalty - minimumAppointmentPenalty - (completionMissing ? 5 : 0))
   );
   const good = applicableScoring
     .filter((metric) => achieved[metric.key])
@@ -7610,6 +7657,7 @@ function scoreScriptedRoleplay() {
       if (specificImprovement) return specificImprovement;
       return `${metric.action}ことを意識すると、より良い応対になります`;
     });
+  if (unansweredQuestions.length) improve.unshift('お客様の質問への回答不足：'+unansweredQuestions.map(q=>q.label).join('・')+'（聞き返し減点と重複せず、未回答1項目につき2点・最大20点）');
   if (retryCount > 0) {
     improve.unshift(`案内不足によるお客様の聞き返しが${retryCount}回ありました`);
   }
