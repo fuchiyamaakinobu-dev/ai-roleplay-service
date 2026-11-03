@@ -7551,6 +7551,20 @@ function inspectionStorageScoringEvidence() {
   return {storage,nonWaiting,loaner,completion,pickup};
 }
 
+function inspectionVoluntaryInsuranceGuidance() {
+  const staff=state.transcript.filter(m=>m.role==='staff').map(m=>normalizeScriptedText(m.text));
+  const insurance=/(?:自動車保険|任意保険)/;
+  const bring=/(?:持参|お持ち|持って|ご用意)/;
+  const purpose=/(?:契約内容|補償内容|保障内容|保険内容).{0,20}(?:確認|説明|見直し)/;
+  let identified=false, brought=false, explained=false;
+  for(const t of staff) {
+    if(insurance.test(t)) identified=true;
+    if(identified && /(?:保険証券|証券)/.test(t) && bring.test(t) && !/(?:不要|必要ありません|持参しなく|持ってこなく)/.test(t)) brought=true;
+    if(identified && purpose.test(t) && !/(?:確認しません|説明しません|見直しません)/.test(t)) explained=true;
+  }
+  return brought && explained;
+}
+
 function scoreScriptedRoleplay() {
   const storageEvidence = inspectionStorageScoringEvidence();
   const notApplicableKeys = new Set(
@@ -7610,6 +7624,8 @@ function scoreScriptedRoleplay() {
     && !(analysis.stepKey === "proposed_appointment" && !achieved.proposed_appointment)
   ).length;
   const unansweredQuestions = inspectionUnansweredQuestions();
+  const insuranceGuidance = inspectionVoluntaryInsuranceGuidance();
+  const insuranceBonus = insuranceGuidance ? 2 : 0;
   const clarificationPenalty = Math.min(20, Math.max(retryCount, unansweredQuestions.length) * 2);
   const earnedPoints = applicableScoring.reduce(
     (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
@@ -7627,7 +7643,7 @@ function scoreScriptedRoleplay() {
   const minimumAppointmentPenalty = minimumAppointmentMissing ? 20 : 0;
   const score = Math.max(
     0,
-    Math.min(100, baseScore - clarificationPenalty - minimumAppointmentPenalty - (completionMissing ? 5 : 0))
+    Math.min(100, baseScore + insuranceBonus - clarificationPenalty - minimumAppointmentPenalty - (completionMissing ? 5 : 0))
   );
   const good = applicableScoring
     .filter((metric) => achieved[metric.key])
@@ -7692,8 +7708,8 @@ function scoreScriptedRoleplay() {
 
   return {
     score,
-    good: good.slice(0, 4),
-    improve: improve.slice(0, 4),
+    good: [...good.slice(0, 4), ...(insuranceGuidance ? ['任意保険の証券持参と契約・補償内容の確認をご案内できています（2点加点・上限100点）'] : [])],
+    improve: [...improve.slice(0, 4), ...(!insuranceGuidance ? ['追加アドバイス（減点なし）：自動車保険（任意保険）の保険証券もお持ちいただき、当日に契約内容・補償内容を確認することをご案内しましょう。例：「自動車保険の保険証券もお持ちください。当日、補償内容を確認させていただきます。」'] : [])],
     recommendedTalkTitle: "推奨トーク",
     recommendedTalk: scenario.recommendedTalk,
     judgements,
