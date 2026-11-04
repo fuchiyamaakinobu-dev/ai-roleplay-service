@@ -2806,7 +2806,7 @@ function hasInspectionAppointmentProposalEvidence(text) {
   // 「予約」「いかが」を使わず来店・店内待ちと日時を一緒に確認する表現も多い。
   const hasProposalContext = /(?:いかが|どうでしょう|よろしい|よろしかった|よろしければ|空いて|空き|予約|予定|ご来店|来店いただ|お越し|お待ち)/.test(normalized);
   const hasCompleteDateTime = Boolean(inspectionAppointmentProposalMatch(normalized));
-  const declaresServiceAvailability = /(?:作業|入庫|車検).{0,20}(?:可能|できます|できる|開始|になります)/.test(normalized);
+  const declaresServiceAvailability = /(?:作業|入庫|車検|受付).{0,20}(?:可能|できます|できる|開始|になります)/.test(normalized);
   return hasConcreteDateOrTime
     && (
       hasProposalContext && isScriptedQuestion(normalized)
@@ -4104,6 +4104,7 @@ function inspectionPickupReasonQuestion(text) {
   // 開放質問に加え、実績で使われた「お仕事でご都合が悪いですか」など、
   // 理由を仮定して確かめる自然な質問も理由確認として扱う。
   return /(?:なぜ|どうして|理由|事情|状況|差し支え|不都合|どのような)/.test(normalized)
+    || /(?:来られない|来れない|来店できない).{0,8}(?:ご)?都合/.test(normalized)
     || Boolean(inspectionPickupReasonFromQuestion(normalized));
 }
 
@@ -4799,8 +4800,8 @@ function inspectionHighMileagePlanExplained() {
     const t = normalizeScriptedText(message.text);
     if (/(?:できません|できない|不可|不要|しません)/.test(t) && !/(?:お預かり|預かり|1日|一日|ワンデー)/.test(t)) return false;
     return state.inspectionMileageVariant === "over60000"
-      ? /(?:1日車検|一日車検|ワンデー|1日お預かり|一日お預かり|1日で|一日で)/.test(t) && !/(?:1日|一日|ワンデー).{0,12}(?:できません|できない|無理)/.test(t)
-      : /(?:お預かり|預かり|預からせ)/.test(t) && !/(?:預かりません|預かれません)/.test(t);
+      ? /(?:1日車検|一日車検|ワンデー|[1一]日(?:お)?預か(?:り|らせ)|1日で|一日で)/.test(t) && !/(?:1日|一日|ワンデー).{0,12}(?:できません|できない|無理)/.test(t)
+      : /(?:お預かり|預かり|預からせ|[1一]泊[2二]日の?車検)/.test(t) && !/(?:預かりません|預かれません)/.test(t);
   });
 }
 function inspectionHighMileageLoanerExplained() {
@@ -4993,7 +4994,8 @@ function handleInspectionBookingOutcome(text) {
   }
 
   if (!state.inspectionBookingCancelled && !state.proposedAppointment && !state.inspectionPickupPhase
-    && /(?:今回の)?車検(?:を|は)?お願いできます(?:か|でしょうか)/.test(n)) {
+    && (/(?:今回の)?車検(?:を|は)?お願いできます(?:か|でしょうか)/.test(n)
+      || /車検[、。]?(?:ぜひ)?お願いしたいんですが[、。]?よろしかったですか/.test(n))) {
     rememberFutureScriptedAchievements(text, -1);
     state.turn += 1;
     addMessage('customer', 'お願いしたいんですけど、いつできますか？', {audioId:'inspection_asked_availability_customer'});
@@ -5007,6 +5009,10 @@ function handleInspectionBookingOutcome(text) {
     addMessage('customer', '土日がいいです。', {audioId:'inspection_day_preference_answer'});
     renderProgress();
     return true;
+  }
+  if (!state.proposedAppointment && !state.inspectionPickupActive && !state.inspectionBookingCancelled
+    && asksOpenInspectionDatePreference(text) && /いつ(?:頃|ごろ).*予定/.test(n)) {
+    return reply('inspection_day_preference_answer');
   }
   const cancel = /予約(?:は|を)?(?:無し|なし|取り消し|取消|キャンセル)(?:ということで|で|に|を|します|してください|お願いします)/.test(n)
     && !/(?:しない|しません|ではない|ではありません|場合|なら)/.test(n);
@@ -7544,7 +7550,11 @@ function inspectionStorageScoringEvidence() {
   const pickup = state.inspectionPickupOutcome === 'pickup';
   const nonWaiting = storage || pickup || ['loaner', 'family'].includes(state.inspectionWaitingMethod);
   const loaner = staff.some(t=>asksInspectionLoanerNeed(t));
-  const completion = staff.some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|お?引き渡し|納車)/.test(t)
+  const timedStorageEnd = staff.some(t =>
+    /(?:当日|翌日|[0-9]{1,2}月[0-9]{1,2}日)/.test(t)
+    && /[0-9]{1,2}時(?:半|[0-9]+分)?(?:ぐらい|ごろ|頃)?まで.{0,12}預か/.test(t)
+    && !/(?:未定|決まっていません)/.test(t));
+  const completion = timedStorageEnd || staff.some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|お?引き渡し|納車)/.test(t)
     && /(?:当日|本日|今日|翌日|明日|あした|あさって|明後日|\d{1,2}月\d{1,2}日|\d{1,2}日(?:の|に|は))/.test(t)
     && t.split(/[。！？!?]/).some(part=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|お?引き渡し|納車)/.test(part) && /\d{1,2}時(?!間)/.test(part))
     && !/(?:未定|わかりません|分かりません|決まっていません)/.test(t));
