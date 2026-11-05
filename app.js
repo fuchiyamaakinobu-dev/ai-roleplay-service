@@ -2926,8 +2926,9 @@ function asksOpenInspectionDatePreference(text) {
     || /(?:教えて|お聞かせ|ございますでしょう)/.test(normalized);
   const asksWhenPlanWorks = /(?:いつ頃|いつごろ|いつ).{0,12}(?:予定|都合)/.test(normalized)
     || /(?:予定|都合).{0,12}(?:いつ頃|いつごろ|いつ)/.test(normalized);
+  const asksWhenConvenient = /いつ(?:頃|ごろ|ぐらい)?(?:が|なら|は)?(?:よろしい|よろしかった|いい|良い|よい)(?:です|でしょう|でした|でしたでしょう)?か[?？。]*$/.test(normalized);
   return (hasPreference && hasDateContext && asksForAnswer)
-    || (asksWhenPlanWorks && asksForAnswer);
+    || (asksWhenPlanWorks && asksForAnswer) || asksWhenConvenient;
 }
 
 function hasInspectionAppointmentCoordinationEvidence(text) {
@@ -5011,7 +5012,7 @@ function handleInspectionBookingOutcome(text) {
     return true;
   }
   if (!state.proposedAppointment && !state.inspectionPickupActive && !state.inspectionBookingCancelled
-    && asksOpenInspectionDatePreference(text) && /いつ(?:頃|ごろ).*予定/.test(n)) {
+    && asksOpenInspectionDatePreference(inspectionLastQuestionClause(text))) {
     return reply('inspection_day_preference_answer');
   }
   const cancel = /予約(?:は|を)?(?:無し|なし|取り消し|取消|キャンセル)(?:ということで|で|に|を|します|してください|お願いします)/.test(n)
