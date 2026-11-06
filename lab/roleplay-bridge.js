@@ -16,7 +16,7 @@
   }
   }
   const panel = document.createElement('section');
-  panel.className = 'manager-steps';
+  panel.className = 'manager-steps decision-panel';
   const label = document.createElement('label');
   const toggle = document.createElement('input');
   toggle.type = 'checkbox';
@@ -35,17 +35,30 @@
   liveView.setAttribute('role', 'status');
   liveView.setAttribute('aria-live', 'polite');
   liveView.setAttribute('aria-label', '現在の返答判定');
+  const flowView = document.createElement('div');
+  flowView.id = 'decisionFlowView';
+  flowView.className = 'decision-flow';
+  flowView.setAttribute('role', 'status');
+  flowView.setAttribute('aria-live', 'polite');
+  flowView.setAttribute('aria-label', '発話から返答までの判定フロー');
+  const textDetails = document.createElement('details');
+  textDetails.id = 'decisionTextDetails';
+  const textSummary = document.createElement('summary');
+  textSummary.textContent = '判定の詳細を読む';
+  textDetails.append(textSummary, liveView);
   const displayLabel = document.createElement('label');
   const displayToggle = document.createElement('input');
   displayToggle.type = 'checkbox';
   displayToggle.id = 'decisionDisplayToggle';
   displayToggle.setAttribute('role', 'switch');
-  displayToggle.setAttribute('aria-controls', 'decisionLiveView');
+  displayToggle.setAttribute('aria-controls', 'decisionFlowView decisionTextDetails');
   liveView.id = 'decisionLiveView';
   displayToggle.checked = false;
   try { displayToggle.checked = localStorage.getItem('roleplayDecisionDisplay') === 'on'; } catch (_) {}
   const applyDisplay = () => {
     liveView.hidden = !displayToggle.checked;
+    flowView.hidden = !displayToggle.checked;
+    textDetails.hidden = !displayToggle.checked;
     displayToggle.setAttribute('aria-checked', String(displayToggle.checked));
   };
   displayToggle.addEventListener('change', () => {
@@ -54,7 +67,7 @@
   });
   applyDisplay();
   displayLabel.append(displayToggle, ' 判定状態を表示（ON／OFF）');
-  panel.append(displayLabel, liveView);
+  panel.append(displayLabel, flowView, textDetails);
   let liveState = null;
   const refreshUsage = async (initial = false) => {
     try {
@@ -88,7 +101,49 @@
     return_confirmation:'作業後の返却確認',loaner_offer:'代車の用意・利用提案',booking_procedure:'引取未解決の手続き確認',delivery_location:'返却場所',duration:'作業時間',waiting:'待ち方',loaner:'代車',appointment:'予約日時',other:'その他'};
   const reasons = {selected:'LLM選択',off:'LLMがOFF',not_configured:'API未接続',not_requested:'LLM呼び出し対象外',daily_limit:'日次上限に到達',provider_limit:'Groqの利用制限',timeout:'応答待ち時間超過',network_error:'通信失敗',service_error:'サーバーエラー',provider_error:'Groq応答エラー',invalid_output:'LLM出力形式の不一致',input_limit:'入力文字数上限',rule:'LLMが判断を保留',topic_mismatch:'話題と音声の不一致',candidate_missing:'候補外の音声',adjusted:'LLM選択と異なる音声をアプリが採用'};
   const setReason = (t,key) => {if(t){t.reason=reasons[key] || '原因を特定できず';if(t.staffMessage)t.staffMessage.responseReason=t.reason;}};
+  const flowElement = (tag, className, text) => {
+    const element = document.createElement(tag);
+    element.className = className;
+    if (text !== undefined) element.textContent = text;
+    return element;
+  };
+  const renderFlow = () => {
+    const heading = flowElement('div','decision-flow-heading');
+    heading.append(flowElement('strong','','現在の返答判定'),flowElement('span','decision-flow-route',trace?.route || '発話待ち'));
+    const grid = flowElement('div','decision-flow-grid');
+    const input = flowElement('section','decision-flow-card decision-flow-input');
+    input.append(flowElement('h3','','認識した発話'),flowElement('p','decision-flow-speech',trace?.text || 'スタッフの発話を待っています。'));
+    if (trace?.answerTarget) input.append(flowElement('p','decision-flow-target','答える対象：'+trace.answerTarget));
+    const candidates = flowElement('section','decision-flow-candidates');
+    candidates.append(flowElement('h3','','返答候補'));
+    const choices = (trace?.candidates || (trace?.candidateTexts || []).map(text=>({text}))).map(c=>({...c}));
+    if (trace?.reply && !choices.some(c=>c.id ? c.id===trace.audioId : c.text===trace.reply)) {
+      choices.push({id:trace.audioId,text:trace.reply,added:true});
+    }
+    if (!choices.length) candidates.append(flowElement('p','decision-flow-empty',trace ? '候補を確認しています。' : '発話後に候補を表示します。'));
+    for (const c of choices) {
+      const adopted = Boolean(trace?.reply && (c.id ? c.id===trace.audioId : c.text===trace.reply));
+      const selected = Boolean(c.id && c.id===trace?.selectedId);
+      const rejected = Boolean(c.id && c.id===trace?.rejectedId);
+      const state = adopted ? 'adopted' : rejected ? 'rejected' : trace?.reply ? 'unused' : 'pending';
+      const row = flowElement('div','decision-flow-option '+state);
+      row.append(flowElement('p','',c.text),flowElement('span','decision-flow-badge',
+        adopted ? (trace.intendedReply ? '非常代替' : '採用') : rejected ? '不適合' : selected ? (trace.reply ? 'LLM選択・未採用' : 'LLM選択') : trace?.reply ? '未採用' : '判定中'));
+      if(c.added) row.append(flowElement('small','',trace.intendedReply ? '音声不足・判断不足による代替' : '既存ルールで採用した返答'));
+      candidates.append(row);
+    }
+    const output = flowElement('section','decision-flow-card decision-flow-output'+(trace?.reply?' adopted':''));
+    output.append(flowElement('h3','','実際の返答'),flowElement('p','decision-flow-speech',trace?.reply || '返答待ち'));
+    if(trace?.intendedReply) output.append(flowElement('p','decision-flow-warning','本来の返答：'+trace.intendedReply));
+    if(trace?.playback) output.append(flowElement('p','decision-flow-target','音声再生：'+trace.playback));
+    const arrow = () => {const n=flowElement('span','decision-flow-arrow','→');n.setAttribute('aria-hidden','true');return n;};
+    grid.append(input,arrow(),candidates,arrow(),output);
+    const footer=flowElement('div','decision-flow-footer');
+    footer.append(flowElement('p','','理由：'+(trace?.reason || '—')),flowElement('p','','予約：'+(liveState?.appointment || '未確定')),flowElement('p','','受付方法・場所：'+(liveState?.route || '未確定')));
+    flowView.replaceChildren(heading,grid,footer);
+  };
   const renderTrace = () => {
+    renderFlow();
     liveView.textContent = [
       '現在の返答判定',
       '処理：' + (trace?.route || '発話待ち'),
@@ -147,7 +202,7 @@
   document.querySelector('.topbar').after(panel);
   window.ROLEPLAY_INTENT_ASSIST = {
     noteDecision(value) {
-      if (trace) { trace.candidateTexts = [value.candidate]; trace.reason = value.reason; }
+      if (trace) { trace.candidateTexts = [value.candidate]; trace.candidates = [{text:value.candidate}]; trace.reason = value.reason; }
       renderTrace();
     },
     resetDecision() { trace = null; liveState = null; renderTrace(); },
@@ -186,7 +241,7 @@
     pickupSettings: () => ({ schedule: scheduleChoice.value, location: locationChoice.value, waiting: waitingChoice.value }),
     async select(request) {
       const currentTrace = trace;
-      if (currentTrace) { currentTrace.candidateTexts = request.candidates.map(c => c.text); currentTrace.route = 'LLM判定中'; renderTrace(); }
+      if (currentTrace) { currentTrace.candidates = request.candidates.map(c=>({id:c.id,text:c.text})); currentTrace.candidateTexts = request.candidates.map(c => c.text); currentTrace.route = 'LLM判定中'; renderTrace(); }
       if (request.text.length > 2000) { setReason(currentTrace,'input_limit'); return null; }
       status.textContent = '会話の流れから返答を選んでいます…';
       try {
@@ -201,7 +256,8 @@
           if (currentTrace.staffMessage && data.llm?.status === 'ok' && choice) currentTrace.staffMessage.responseSource = 'analyzed';
           currentTrace.meaning = choice ? (labels[choice.kind] || choice.kind) + ' ／ ' + (labels[choice.topic] || choice.topic) : '判定取得なし';
           currentTrace.evidence = choice?.evidence;
-          currentTrace.answerTarget = choice?.answerTarget;
+          currentTrace.answerTarget = choice?.answerTarget || currentTrace.answerTarget;
+          currentTrace.rejectedId = choice?.rejectedId;
           currentTrace.conditions = choice?.conditions;
           currentTrace.selected = choice?.rejectedId ? choice.rejectedId + '（意味と音声が不一致のため拒否）' : choice?.id || 'なし';
           currentTrace.selectedId = choice?.id !== 'rule' ? choice?.id : null;

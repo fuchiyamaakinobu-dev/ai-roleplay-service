@@ -188,7 +188,7 @@ h1 {
   margin: 18px 0;
 }
 
-.manager-steps div {
+.manager-steps:not(.decision-panel) div {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -197,7 +197,7 @@ h1 {
   font-weight: 800;
 }
 
-.manager-steps span {
+.manager-steps:not(.decision-panel) span {
   display: inline-grid;
   place-items: center;
   width: 28px;
@@ -1413,3 +1413,30 @@ textarea:focus {
 }
 
 .response-source{display:inline-block;font-size:12px;font-weight:600;border-radius:4px;padding:2px 6px;margin:3px 6px;border:1px solid #94a3b8;color:#334155;background:#f1f5f9}.source-llm{color:#075985;background:#e0f2fe;border-color:#0284c7}.source-adjusted{color:#92400e;background:#fef3c7;border-color:#d97706}.source-rule{color:#475569;background:#f1f5f9}.source-analyzed{color:#6b21a8;background:#f3e8ff;border-color:#a855f7}
+
+/* Live decision flow: actual trace data, not illustrative candidates. */
+.decision-flow[hidden],#decisionTextDetails[hidden]{display:none}
+.decision-flow{margin:16px 0;padding:22px;border-radius:18px;background:#061a36;color:#edfaff;font-family:inherit}
+.decision-flow-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:20px}
+.decision-flow-route{font-size:13px;color:#b8d7e7}
+.decision-flow-grid{display:grid;grid-template-columns:minmax(0,1fr) 32px minmax(0,1.35fr) 32px minmax(0,1fr);align-items:center;gap:12px}
+.decision-flow h3{margin:0 0 12px;font-size:13px;letter-spacing:.04em;color:#c0dae6}
+.decision-flow-card{padding:20px;border:2px solid #4c718b;border-radius:18px;min-width:0}
+.decision-flow-input{border-color:#70e8ff;box-shadow:0 0 12px #21d9f52b}
+.decision-flow p{margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.decision-flow-speech{font-size:clamp(16px,1.6vw,23px);font-weight:700;line-height:1.6}
+.decision-flow-target{font-size:12px;color:#bed4e3;margin-top:14px!important;line-height:1.6}
+.decision-flow-arrow{font-size:30px;color:#00e7ef;text-align:center}
+.decision-flow-candidates{min-width:0;display:grid;gap:10px}
+.decision-flow-candidates h3{margin:0}
+.decision-flow-option{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:16px;border:1px solid #718396;border-radius:14px;background:#20334b;color:#d0dce6;line-height:1.55}
+.decision-flow-option p{font-size:16px;font-weight:600}
+.decision-flow-option small{grid-column:1/-1;color:#c1d2df}
+.decision-flow .adopted{border-color:#00e7ef;background:#073e4e;color:#fff;box-shadow:0 0 12px #00e7ef30}
+.decision-flow-badge{font-size:12px;font-weight:700;padding:4px 8px;border-radius:8px;border:1px solid #9eb2c5;white-space:normal;max-width:110px;text-align:center}
+.adopted .decision-flow-badge{background:#00e7ef;border-color:#00e7ef;color:#052039}
+.rejected .decision-flow-badge,.decision-flow-warning{color:#ffda9c}
+.decision-flow-warning{font-size:13px;margin-top:12px!important}
+.decision-flow-footer{margin-top:20px;padding-top:14px;border-top:1px solid #34516b;display:grid;gap:6px;font-size:12px;color:#c1d9e7}
+@media(max-width:800px){.decision-flow{padding:16px}.decision-flow-grid{grid-template-columns:minmax(0,1fr);gap:10px}.decision-flow-arrow{transform:rotate(90deg);line-height:30px}.decision-flow-heading{align-items:flex-start;flex-direction:column}.decision-flow-card{padding:16px}}
+@media print{.decision-flow{display:none}}
