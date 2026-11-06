@@ -30,6 +30,32 @@
   remaining.setAttribute('role', 'status');
   remaining.textContent = '本日のLLM残り —／50回（全利用者合計）';
   panel.append(label, remaining, status);
+  const liveView = document.createElement('pre');
+  liveView.style.whiteSpace = 'pre-wrap';
+  liveView.setAttribute('role', 'status');
+  liveView.setAttribute('aria-live', 'polite');
+  liveView.setAttribute('aria-label', '現在の返答判定');
+  const displayLabel = document.createElement('label');
+  const displayToggle = document.createElement('input');
+  displayToggle.type = 'checkbox';
+  displayToggle.id = 'decisionDisplayToggle';
+  displayToggle.setAttribute('role', 'switch');
+  displayToggle.setAttribute('aria-controls', 'decisionLiveView');
+  liveView.id = 'decisionLiveView';
+  displayToggle.checked = true;
+  try { displayToggle.checked = localStorage.getItem('roleplayDecisionDisplay') !== 'off'; } catch (_) {}
+  const applyDisplay = () => {
+    liveView.hidden = !displayToggle.checked;
+    displayToggle.setAttribute('aria-checked', String(displayToggle.checked));
+  };
+  displayToggle.addEventListener('change', () => {
+    applyDisplay();
+    try { localStorage.setItem('roleplayDecisionDisplay', displayToggle.checked ? 'on' : 'off'); } catch (_) {}
+  });
+  applyDisplay();
+  displayLabel.append(displayToggle, ' 判定状態を表示（ON／OFF）');
+  panel.append(displayLabel, liveView);
+  let liveState = null;
   const refreshUsage = async (initial = false) => {
     try {
       const response = await fetch(api('/api/status'));
@@ -63,6 +89,16 @@
   const reasons = {selected:'LLM選択',off:'LLMがOFF',not_configured:'API未接続',not_requested:'LLM呼び出し対象外',daily_limit:'日次上限に到達',provider_limit:'Groqの利用制限',timeout:'応答待ち時間超過',network_error:'通信失敗',service_error:'サーバーエラー',provider_error:'Groq応答エラー',invalid_output:'LLM出力形式の不一致',input_limit:'入力文字数上限',rule:'LLMが判断を保留',topic_mismatch:'話題と音声の不一致',candidate_missing:'候補外の音声',adjusted:'LLM選択と異なる音声をアプリが採用'};
   const setReason = (t,key) => {if(t){t.reason=reasons[key] || '原因を特定できず';if(t.staffMessage)t.staffMessage.responseReason=t.reason;}};
   const renderTrace = () => {
+    liveView.textContent = [
+      '現在の返答判定',
+      '処理：' + (trace?.route || '発話待ち'),
+      '答える対象：' + (trace?.answerTarget || '未判定'),
+      '返答候補：' + (trace?.candidateTexts?.join(' ／ ') || '未選定'),
+      '採用した返答：' + (trace?.reply || '未確定'),
+      '理由：' + (trace?.reason || '—'),
+      '予約：' + (liveState?.appointment || '未確定'),
+      '受付方法・場所：' + (liveState?.route || '未確定')
+    ].join('\n');
     traceView.textContent = traces.length ? traces.slice().reverse().map(t => [
       'スタッフ：' + t.text,
       'LLM判定：' + (t.meaning || '未実行（対象外・既存ルール）'),
@@ -108,6 +144,12 @@
   panel.append(extras);
   document.querySelector('.topbar').after(panel);
   window.ROLEPLAY_INTENT_ASSIST = {
+    resetDecision() { trace = null; liveState = null; renderTrace(); },
+    updateDecisionState(value) { liveState = value; renderTrace(); },
+    beginDecision(value) {
+      if (trace) { trace.answerTarget = value.answerTarget; trace.route = '候補を選定中'; }
+      renderTrace();
+    },
     traceMessage(message) {
       if (message.role === 'staff') {
         trace = { text: message.text, staffMessage: message };
@@ -120,6 +162,7 @@
         trace.reply = message.text; trace.audioId = message.audioId; trace.audioSrc = message.audioSrc;
         if (trace.selectedId && trace.selectedId !== message.audioId) trace.route = 'LLM選択と異なる音声をアプリが採用';
         else if (trace.selectedId) trace.route = 'LLM選択をアプリが採用';
+        else trace.route = '既存ルールで返答確定';
       }
       renderTrace();
     },
@@ -130,7 +173,7 @@
     pickupSettings: () => ({ schedule: scheduleChoice.value, location: locationChoice.value, waiting: waitingChoice.value }),
     async select(request) {
       const currentTrace = trace;
-      if (currentTrace) { currentTrace.route = 'LLMへ問い合わせ中'; renderTrace(); }
+      if (currentTrace) { currentTrace.candidateTexts = request.candidates.map(c => c.text); currentTrace.route = 'LLM判定中'; renderTrace(); }
       if (request.text.length > 2000) { setReason(currentTrace,'input_limit'); return null; }
       status.textContent = '会話の流れから返答を選んでいます…';
       try {

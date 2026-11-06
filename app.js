@@ -684,6 +684,13 @@ function handleInspectionCheckpointTest(event) {
 }
 
 function renderProgress() {
+  const booking = state.proposedAppointment;
+  const pendingBooking = state.inspectionAppointmentCandidate;
+  const displayBooking = booking || pendingBooking;
+  window.ROLEPLAY_INTENT_ASSIST?.updateDecisionState?.({
+    appointment: displayBooking ? `${booking ? '確定' : '候補・未確定'}：${displayBooking.month}月${displayBooking.day}日 ${displayBooking.hour}時${Number(displayBooking.minute || 0)}分` : '未確定',
+    route: `${state.inspectionPickupOutcome === 'pickup' ? '引取' : state.inspectionPickupOutcome === 'visit' ? '来店' : '未確定'} ／ ${state.pickupAudioMemory?.location === 'home' ? '自宅' : state.pickupAudioMemory?.location === 'workplace' ? '職場' : '場所未確定'}`
+  });
   const visible = els.progressEnabled?.checked !== false;
   const customerVisible = renderCustomerInfo();
   const usesInspectionCheckpoints = isVehicleInspectionScenario();
@@ -1579,6 +1586,7 @@ function isInspectionIncompleteOrNoiseUtterance(text) {
 }
 
 function startRoleplay() {
+  window.ROLEPLAY_INTENT_ASSIST?.resetDecision?.();
   stopSpeechInput();
   stopCustomerPlayback();
   cancelPendingCustomerReply();
@@ -7225,6 +7233,7 @@ function handleReply(event) {
   stopCustomerPlayback();
   clearStaffInput();
   addMessage("staff", text);
+  window.ROLEPLAY_INTENT_ASSIST?.beginDecision?.({answerTarget: isVehicleInspectionScenario() ? inspectionLastQuestionClause(text) : text});
   if (answerInspectionServiceDismissal(text)) return;
   if (scenario.mode === "staff-led-scripted") {
     return handleInspectionLlmReply(text);
