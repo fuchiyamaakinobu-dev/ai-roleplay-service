@@ -2708,7 +2708,7 @@ function asksCurrentMileage(text) {
   const normalized = normalizeScriptedText(text).toLowerCase();
   const mileageHowMuch = /(?:走行距離|距離数).{0,12}(?:どのくらい|どれくらい|どのぐらい|どれぐらい)/.test(normalized);
   if (!isScriptedQuestion(normalized) && !mileageHowMuch) return false;
-  return /(?:何(?:キロ|km)|(?:走行距離|距離数|距離).{0,20}(?:どのくらい|どれくらい|どのぐらい|どれぐらい|教えて|伺|何|いくつ))/.test(normalized);
+  return /(?:何(?:キロ|km)|(?:走行距離|距離数|距離).{0,20}(?:どのくらい|どれくらい|どのぐらい|どれぐらい|教えて|伺|何|いくつ|わかります|分かります|お分かり))/.test(normalized);
 }
 
 function hasBookingContinuationConfirmation(text) {
@@ -2730,6 +2730,9 @@ function hasBookingContinuationConfirmation(text) {
 
 function hasExplicitBookingContinuationConfirmation(text) {
   const normalized = normalizeScriptedText(text);
+  if (isScriptedQuestion(normalized) && /(?:引き続き|このまま)/.test(normalized)
+    && /(?:車検|予約|手続き)/.test(normalized) && /説明/.test(normalized)
+    && /(?:お電話|お話).{0,12}(?:よろしい|よろしかった|大丈夫)/.test(normalized)) return true;
   return hasBookingContinuationConfirmation(normalized)
     && /(?:予約|手続き|このまま.{0,30}(?:車検|説明)|車検.{0,20}説明)/.test(normalized)
     && /(?:10分|十分|もう少し|少し|お時間)/.test(normalized);
@@ -5020,6 +5023,9 @@ function handleInspectionBookingOutcome(text) {
   if (!isPickupInspectionScenario()) return false;
   const n = normalizeScriptedText(text);
   const reply = id => {rememberFutureScriptedAchievements(text,-1);state.turn+=1;addMessage('customer',audioIndex.get(id).text,{audioId:id});renderProgress();return true;};
+  if (recordInspectionPickupCommitment(text)) return reply('inspection_pickup_confirmed_customer');
+  if (hasExplicitBookingContinuationConfirmation(text) && /(?:お電話|お話)/.test(n)
+    && !/(?:携帯|電話番号|連絡先)/.test(n)) return reply('inspection_confirmed_booking_time_customer');
   const last=normalizeScriptedText(inspectionLastQuestionClause(text));
   if (/(?:電話|お時間|時間).*(?:続け|もう少し|もう少々|このまま)/.test(n) && /(?:よろし|大丈夫|いかが)/.test(last)) return reply('inspection_confirmed_booking_time_customer');
   if (/(?:用事|外出).*(?:ありますか|ございますか|すること)/.test(last)) return reply('inspection_waiting_followup_loaner_request');
@@ -5118,6 +5124,38 @@ function handleInspectionBookingOutcome(text) {
     return true;
   }
   return false;
+}
+
+// Acknowledgement and reservation state share one transition, regardless of LLM use.
+// Keep date acceptance separate from location; method-only consent is not a booking.
+function recordInspectionPickupCommitment(text) {
+  if (!isPickupInspectionScenario() || state.inspectionBookingCancelled || state.proposedAppointment
+    || !(state.inspectionPickupActive || state.inspectionPickupOutcome === 'pickup')) return false;
+  const n = normalizeScriptedText(text);
+  if (/(?:できない|できません|未定|ではなく|キャンセル|変更|それとも|または|返却|お届け|届けられ|納車)/.test(n)) return false;
+  const pickupVisit = /(?:預かりに|取りに).{0,8}(?:行|伺)|(?:自宅|職場).{0,16}(?:伺|行)/.test(n);
+  if (!pickupVisit || !/(?:よろしい|お願いします|伺います|行きます)/.test(n)) return false;
+  let evidence = text;
+  const previous = state.inspectionAppointmentCandidate;
+  // A day without a month may inherit a month only from an accepted pickup date.
+  if (!/\d{1,2}月/.test(n) && previous?.pickupAccepted
+    && new RegExp(`(?:^|\\D)${previous.day}日`).test(n)) evidence = `${previous.month}月${text}`;
+  const proposal = inspectionAppointmentProposalMatch(evidence);
+  if (!proposal || inspectionAppointmentBeforeAvailableFrom(evidence)) return false;
+  state.inspectionAppointmentCandidate = {...proposal,text:evidence,pickupAccepted:true};
+  state.inspectionPickupOutcome = 'pickup';
+  const location = /職場/.test(n) ? 'workplace' : /自宅/.test(n) ? 'home' : state.pickupAudioMemory?.location;
+  if (location) {
+    state.pickupAudioMemory = {...state.pickupAudioMemory,location};
+    state.inspectionPickupActive = false;
+    state.inspectionPickupPhase = 'resolved';
+    markPickupRouteBaseStepsNotApplicable();
+    confirmInspectionPickupAppointmentCandidate();
+  } else {
+    state.inspectionPickupActive = true;
+    state.inspectionPickupPhase = 'location';
+  }
+  return true;
 }
 
 function handleInspectionInstructionReply(text) {
@@ -7635,9 +7673,14 @@ function inspectionStorageScoringEvidence() {
     /(?:当日|翌日|[0-9]{1,2}月[0-9]{1,2}日)/.test(t)
     && /[0-9]{1,2}時(?:半|[0-9]+分)?(?:ぐらい|ごろ|頃)?まで.{0,12}預か/.test(t)
     && !/(?:未定|決まっていません)/.test(t));
-  const completion = timedStorageEnd || staff.some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|お?引き渡し|納車)/.test(t)
+  const sameDayCompletion = staff.some((t,index) => /(?:一日|1日)で.{0,12}(?:終わ|完了)/.test(t)
+    && /(?:終わ|完了|届けられ|お届け|返却|お返し).{0,20}\d{1,2}時|\d{1,2}時.{0,20}(?:終わ|完了|届けられ|お届け|返却|お返し)/.test(t)
+    && !/(?:未定|翌日|明日|変更|または|それとも|わかりません|分かりません)/.test(t)
+    && staff.slice(0,index).some(previous => inspectionAppointmentProposalMatch(previous)
+      && /(?:来店|預かり|引取|引き取り|伺)/.test(previous)));
+  const completion = timedStorageEnd || sameDayCompletion || staff.some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|届けられ|お?引き渡し|納車)/.test(t)
     && /(?:当日|本日|今日|翌日|明日|あした|あさって|明後日|\d{1,2}月\d{1,2}日|\d{1,2}日(?:の|に|は))/.test(t)
-    && t.split(/[。！？!?]/).some(part=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|お?引き渡し|納車)/.test(part) && /\d{1,2}時(?!間)/.test(part))
+    && t.split(/[。！？!?]/).some(part=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|届けられ|お?引き渡し|納車)/.test(part) && /\d{1,2}時(?!間)/.test(part))
     && !/(?:未定|わかりません|分かりません|決まっていません)/.test(t));
   return {storage,nonWaiting,loaner,completion,pickup};
 }
