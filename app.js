@@ -977,7 +977,7 @@ function contextualInspectionAcknowledgement(role, text, options) {
 
 const inspectionQuestionTopics = [
   {key:'duration',label:'作業時間',question:/(?:どれくらい|どのくらい|どれぐらい).*(?:時間|かか)|何時間/,answer:t=>/(?:[0-9一二三]+時間|[0-9]+分|[0-9一二三]+泊[0-9一二三]+日|[0-9一二三]+日(?:ほど|くらい|で|お預かり))/.test(t)},
-  {key:'time',label:'入庫時刻',question:/何時が空いて|何時に(?:伺|行|来)|具体的な日時/,answer:t=>[...t.matchAll(/\d{1,2}時(?!間)/g)].length === 1 && !/(?:終了|返却|お返し|納車|届け|未定|できません|それとも|または)/.test(t)},
+  {key:'time',label:'入庫時刻',question:/何時が空いて|何時に(?:伺|行|来)|具体的な日時/,answer:t=>{const admission=inspectionAdmissionTimeText(t);return [...admission.matchAll(/\d{1,2}時(?!間)/g)].length === 1 && !/(?:それとも|または)/.test(admission)}},
   {key:'store',label:'近隣店舗名',question:/近くのお店は.*どちら/,answer:t=>Boolean(inspectionVisitStoreName(t))},
   {key:'loaner',label:'代車の用意',question:/代車.*(?:用意して|貸して|借り|できますか)/,answer:t=>/代車/.test(t)&&/(?:用意|貸|ご利用|ございます|ありません|できません|可能|無料)/.test(t)},
   {key:'documents',label:'持参品',question:/必要な物を教えて|ほかに持って行く物/,answer:t=>/(?:車検証|自賠責|納税証明|ロックナット|専用工具)/.test(t)},
@@ -5226,7 +5226,7 @@ function handleInspectionInstructionReply(text) {
 
 function handleScriptedStaffReply(text) {
   if (answerInspectionServiceDismissal(text)) return;
-  if (answerInspectionPhonePartialAppointment(text)) return;
+  if (answerInspectionPartialAppointment(text)) return;
   if (answerInspectionTimePreference(text)) return;
   if (answerInspectionFocusedFallback(text)) return;
   if (handleInspectionInstructionReply(text)) return;
@@ -7220,7 +7220,7 @@ function applyInspectionLlmSelection(text, selection) {
 
 function handleInspectionLlmReply(text) {
   if (answerInspectionServiceDismissal(text)) return;
-  if (answerInspectionPhonePartialAppointment(text)) return;
+  if (answerInspectionPartialAppointment(text)) return;
   if (answerInspectionTimePreference(text)) return;
   if (!inspectionReplyFocus(text)?.topic && handleInspectionBookingOutcome(text)) return;
   const rejected = isPickupInspectionScenario() && state.pickupAudioMemory?.rejected;
@@ -7254,28 +7254,53 @@ function handleInspectionLlmReply(text) {
   });
 }
 
-// 通常車検でも日付と時刻を別々の発話で保持する。引取分岐は既存の場所確認を使用する。
-function answerInspectionPhonePartialAppointment(text) {
-  if (scenario.id !== 'vehicle-inspection-phone-followup' || state.proposedAppointment
-    || state.inspectionBookingCancelled || state.inspectionPickupActive) return false;
+// 入庫時刻の回答と終了・返却時刻、予約できない時刻を分離する。
+function inspectionAdmissionTimeText(text) {
+  return normalizeScriptedText(text).split(/[。！？!?、,]/).filter(clause => {
+    if (!/\d{1,2}時(?!間)/.test(clause)) return true;
+    if (/(?:終了|返却|お返し|納車|届け|完了|未定)/.test(clause)) return false;
+    return /しか(?:空いて|空きが|予約でき)/.test(clause)
+      || !/(?:空いていません|空いておりません|埋ま|いっぱい|満席|できません|難しい|無理)/.test(clause);
+  }).join('。');
+}
+
+// 両車検で同じ日付・時刻の保持を使用し、引取の場所確認には割り込まない。
+function answerInspectionPartialAppointment(text) {
+  if (!isVehicleInspectionScenario() || state.proposedAppointment
+    || state.inspectionBookingCancelled || state.inspectionPickupActive || state.inspectionPickupPhase) return false;
   const q = inspectionLastQuestionClause(text);
-  if (!hasInspectionAppointmentProposalEvidence(text) || asksCurrentMileage(q)
-    || asksInspectionVehicleConcerns(q) || asksInspectionLoanerNeed(q)
-    || hasExplicitBookingContinuationConfirmation(text)) return false;
-  const dates = inspectionAppointmentDateCandidates(text);
-  const n = normalizeScriptedText(text);
-  const times = [...n.matchAll(/\d{1,2}時(?!間)/g)];
+  if (asksInspectionIdentityConfirmation(q) || asksInspectionCallTimingPermission(q)
+    || asksInspectionForCustomerQuestions(q) || asksInspectionPickupLocation(q)
+    || asksCurrentMileage(q) || asksInspectionVehicleConcerns(q) || asksInspectionLoanerNeed(q)
+    || asksInspectionReminderContactDestination(q) || hasExplicitBookingContinuationConfirmation(text)) return false;
+  let admission = inspectionAdmissionTimeText(text);
+  const partial = state.scriptedPartialReplies.inspectionPickupDate;
+  // 「では21日」の月は直前の予約候補だけから補う。所要日数は補わない。
+  if (partial && !/\d{1,2}月/.test(admission)
+    && /\d{1,2}日(?:は|に|で|の|[月火水木金土日]曜)/.test(admission)
+    && !/(?:日車検|日間|日ほど|日程度|泊)/.test(admission)) {
+    admission = admission.replace(/(\d{1,2})日/, partial.text.match(/\d{1,2}月/)[0]+'$1日');
+  }
+  if (!hasInspectionAppointmentProposalEvidence(admission)
+    && !/\d{1,2}時.*(?:来店|お越し).*(?:ください|お願い)/.test(admission)) return false;
+  const dates = inspectionAppointmentDateCandidates(admission);
+  const times = [...admission.matchAll(/\d{1,2}時(?!間)/g)];
   if (dates.length === 1 && times.length === 0) {
-    state.scriptedPartialReplies.inspectionPickupDate = {text:`${dates[0].month}月${dates[0].day}日`};
+    const candidate = state.inspectionAppointmentCandidate;
+    if (candidate && (Number(candidate.month) !== Number(dates[0].month)
+      || Number(candidate.day) !== Number(dates[0].day))) state.inspectionAppointmentCandidate = null;
+    const dateText = `${dates[0].month}月${dates[0].day}日`;
+    const repeated = partial?.text === dateText;
+    state.scriptedPartialReplies.inspectionPickupDate = {text:dateText};
     rememberFutureScriptedAchievements(text,-1);
     state.turn += 1;
-    addMessage('customer','何時が空いていますか？',{audioId:'inspection_appointment_time_missing_retry'});
+    addMessage('customer',repeated ? 'はい。' : '何時が空いていますか？',
+      {audioId:repeated ? 'inspection_thanked_customer_retry' : 'inspection_appointment_time_missing_retry'});
     renderProgress();
     return true;
   }
-  const partial = state.scriptedPartialReplies.inspectionPickupDate;
-  if (dates.length || times.length !== 1 || !partial || /(?:終了|返却|お返し|納車|届け)/.test(n)) return false;
-  const combined = `${partial.text} ${text}`;
+  if (dates.length || times.length !== 1 || !partial) return false;
+  const combined = `${partial.text} ${admission}`;
   const proposal = inspectionAppointmentProposalMatch(combined);
   if (!proposal || inspectionAppointmentBeforeAvailableFrom(combined)) return false;
   state.inspectionAppointmentCandidate = {text:combined,...proposal};
@@ -7286,16 +7311,34 @@ function answerInspectionPhonePartialAppointment(text) {
   return true;
 }
 
+function inspectionTimePeriodAvailability(text) {
+  const n = normalizeScriptedText(text);
+  const result = {morning:null,afternoon:null};
+  const periods = [...n.matchAll(/午前(?:中)?|午後/g)];
+  periods.forEach((match,index) => {
+    const key = match[0].startsWith('午前') ? 'morning' : 'afternoon';
+    const clause = n.slice(match.index, periods[index+1]?.index).split(/[。！？!?]/)[0];
+    const only = /しか(?:空いて|空きが|予約でき)/.test(clause);
+    const unavailable = !only && /(?:いっぱい|満席|埋ま|難し|空いていません|空いておりません|できません|無理)/.test(clause);
+    result[key] = !unavailable;
+  });
+  return result;
+}
+
 function answerInspectionTimePreference(text) {
   if (!isVehicleInspectionScenario() || state.proposedAppointment || state.inspectionBookingCancelled) return false;
   const n = normalizeScriptedText(text);
   const q = normalizeScriptedText(inspectionLastQuestionClause(text));
-  if (asksCurrentMileage(q) || asksInspectionVehicleConcerns(q) || asksInspectionLoanerNeed(q)
+  if (asksInspectionIdentityConfirmation(q) || asksInspectionCallTimingPermission(q)
+    || asksInspectionForCustomerQuestions(q) || asksInspectionPickupLocation(q)
+    || asksCurrentMileage(q) || asksInspectionVehicleConcerns(q) || asksInspectionLoanerNeed(q)
     || asksInspectionReminderContactDestination(q) || /\d{1,2}時(?!間)/.test(n)) return false;
-  if (!isScriptedQuestion(q) || !/(?:お好きな時間|希望.{0,6}時間|時間.{0,6}希望|時間帯|何時.{0,8}(?:希望|都合|よろし)|いつでも.{0,8}(?:お時間|時間))/.test(n)
+  if (!isScriptedQuestion(q) || !/(?:お好きな時間|希望.{0,6}時間|時間.{0,6}希望|時間帯|何時.{0,8}(?:希望|都合|よろし)|いつでも.{0,8}(?:お時間|時間)|(?:午前|午後).{0,12}(?:都合|いかが|よろし))/.test(n)
     || /(?:作業時間|所要時間|何時間|終了|返却|何日|曜日|土日|平日)/.test(q)) return false;
-  const afternoonOnly = /午後/.test(n) && (!/午前/.test(n) || /午前.{0,10}(?:いっぱい|満|難し|空いていません|できません)/.test(n));
-  if (afternoonOnly && /午後.{0,10}(?:いっぱい|満|難し|空いていません|できません)/.test(n)) return false;
+  const periods = inspectionTimePeriodAvailability(text);
+  const afternoonOnly = periods.afternoon === true && periods.morning !== true;
+  if (periods.morning === false && periods.afternoon !== true
+    || periods.afternoon === false && periods.morning !== true) return false;
   rememberFutureScriptedAchievements(text,-1);
   state.turn += 1;
   const reply = afternoonOnly ? '午後でお願いします。' : '午前中でお願いします。';
