@@ -24,7 +24,8 @@ const selection=await window.ROLEPLAY_INTENT_ASSIST.select({text:'何キロ',can
 const liveView=nodes.find(n=>n.tag==='pre' && n.textContent?.includes('現在の返答判定'));
 assert.ok(liveView);
 const displayToggle=nodes.find(n=>n.id==='decisionDisplayToggle');
-assert.equal(liveView.hidden,false);
+assert.equal(displayToggle.checked,false);
+assert.equal(liveView.hidden,true);
 displayToggle.checked=false;displayToggle.events.change();
 assert.equal(liveView.hidden,true);
 assert.equal(saved.get('roleplayDecisionDisplay'),'off');
@@ -74,3 +75,8 @@ vm.runInContext(fs.readFileSync(new URL('../lab/roleplay-bridge.js',import.meta.
 assert.equal(nodes.filter(n=>n.id==='decisionDisplayToggle').at(-1).checked,false);
 assert.equal(nodes.filter(n=>n.id==='decisionLiveView').at(-1).hidden,true);
 console.log('判定表示: ON/OFF・保存・再読込復元・LLM設定独立 OK');
+
+saved.set('roleplayDecisionDisplay','on');
+vm.runInContext(fs.readFileSync(new URL('../lab/roleplay-bridge.js',import.meta.url),'utf8'),c);
+assert.equal(nodes.filter(n=>n.id==='decisionDisplayToggle').at(-1).checked,true);
+assert.equal(nodes.filter(n=>n.id==='decisionLiveView').at(-1).hidden,false);

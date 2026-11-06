@@ -42,8 +42,8 @@
   displayToggle.setAttribute('role', 'switch');
   displayToggle.setAttribute('aria-controls', 'decisionLiveView');
   liveView.id = 'decisionLiveView';
-  displayToggle.checked = true;
-  try { displayToggle.checked = localStorage.getItem('roleplayDecisionDisplay') !== 'off'; } catch (_) {}
+  displayToggle.checked = false;
+  try { displayToggle.checked = localStorage.getItem('roleplayDecisionDisplay') === 'on'; } catch (_) {}
   const applyDisplay = () => {
     liveView.hidden = !displayToggle.checked;
     displayToggle.setAttribute('aria-checked', String(displayToggle.checked));
