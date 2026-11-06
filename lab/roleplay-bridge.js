@@ -144,6 +144,10 @@
   panel.append(extras);
   document.querySelector('.topbar').after(panel);
   window.ROLEPLAY_INTENT_ASSIST = {
+    noteDecision(value) {
+      if (trace) { trace.candidateTexts = [value.candidate]; trace.reason = value.reason; }
+      renderTrace();
+    },
     resetDecision() { trace = null; liveState = null; renderTrace(); },
     updateDecisionState(value) { liveState = value; renderTrace(); },
     beginDecision(value) {

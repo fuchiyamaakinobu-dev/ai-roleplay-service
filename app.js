@@ -688,7 +688,7 @@ function renderProgress() {
   const pendingBooking = state.inspectionAppointmentCandidate;
   const displayBooking = booking || pendingBooking;
   window.ROLEPLAY_INTENT_ASSIST?.updateDecisionState?.({
-    appointment: displayBooking ? `${booking ? '確定' : '候補・未確定'}：${displayBooking.month}月${displayBooking.day}日 ${displayBooking.hour}時${Number(displayBooking.minute || 0)}分` : '未確定',
+    appointment: displayBooking ? `${booking ? '確定' : '候補・未確定'}：${displayBooking.month}月${displayBooking.day}日 ${displayBooking.hour}時${Number(displayBooking.minute || 0)}分` : state.scriptedPartialReplies?.inspectionPickupDate?.text ? `${state.scriptedPartialReplies.inspectionPickupDate.text}を認識済み／時刻未確認` : '未確定',
     route: `${state.inspectionPickupOutcome === 'pickup' ? '引取' : state.inspectionPickupOutcome === 'visit' ? '来店' : '未確定'} ／ ${state.pickupAudioMemory?.location === 'home' ? '自宅' : state.pickupAudioMemory?.location === 'workplace' ? '職場' : '場所未確定'}`
   });
   const visible = els.progressEnabled?.checked !== false;
@@ -991,11 +991,24 @@ function inspectionUnansweredQuestions() {
 function inspectionRepeatedQuestionReply(text, options) {
   const topic=inspectionQuestionTopics.find(q=>q.question.test(normalizeScriptedText(text)));
   if (!topic) return {text,options};
-  const answered=state.transcript.some(m=>m.role==='staff'&&topic.answer(normalizeScriptedText(m.text)));
-  const asked=state.transcript.some(m=>m.role==='customer'&&topic.question.test(normalizeScriptedText(m.text)));
+  let history = state.transcript;
+  if (topic.key === 'time') {
+    let currentDate = '', start = 0;
+    history.forEach((m,index) => {
+      if (m.role !== 'staff' || !hasInspectionScheduleQuestionIntent(normalizeScriptedText(m.text))) return;
+      const dates = inspectionAppointmentDateCandidates(m.text);
+      if (dates.length !== 1) return;
+      const key = `${dates[0].month}/${dates[0].day}`;
+      if (key !== currentDate) { currentDate = key; start = index; }
+    });
+    history = history.slice(start);
+  }
+  const answered=history.some(m=>m.role==='staff'&&topic.answer(normalizeScriptedText(m.text)));
+  const asked=history.some(m=>m.role==='customer'&&topic.question.test(normalizeScriptedText(m.text)));
   if (!answered&&!asked) return {text,options};
   const id=options.audioId==='inspection_current_mileage_and_duration_customer'?'inspection_current_mileage_customer':answered?'inspection_explained_lock_and_arrival_customer':'inspection_ack_listening_ee';
   const item=audioIndex.get(id);
+  if (item) window.ROLEPLAY_INTENT_ASSIST?.noteDecision?.({candidate:text,reason:answered?'回答済みのため質問を抑止':'同じ対象への質問済み・未回答のため繰り返しを抑止'});
   return item ? {text:item.text,options:{...options,audioId:id}} : {text,options};
 }
 
@@ -5203,6 +5216,7 @@ function handleInspectionInstructionReply(text) {
 
 function handleScriptedStaffReply(text) {
   if (answerInspectionServiceDismissal(text)) return;
+  if (answerInspectionTimePreference(text)) return;
   if (answerInspectionFocusedFallback(text)) return;
   if (handleInspectionInstructionReply(text)) return;
 
@@ -7191,6 +7205,7 @@ function applyInspectionLlmSelection(text, selection) {
 
 function handleInspectionLlmReply(text) {
   if (answerInspectionServiceDismissal(text)) return;
+  if (answerInspectionTimePreference(text)) return;
   if (!inspectionReplyFocus(text)?.topic && handleInspectionBookingOutcome(text)) return;
   const rejected = isPickupInspectionScenario() && state.pickupAudioMemory?.rejected;
   if (rejected?.kind === "later_time" && !state.pickupAudioMemory.adjusted
@@ -7221,6 +7236,22 @@ function handleInspectionLlmReply(text) {
       else handleScriptedStaffReply(text);
     }
   });
+}
+
+function answerInspectionTimePreference(text) {
+  if (!isVehicleInspectionScenario() || state.proposedAppointment || state.inspectionBookingCancelled) return false;
+  const n = normalizeScriptedText(text);
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  if (!isScriptedQuestion(q) || !/(?:お好きな時間|希望.{0,6}時間|時間帯|何時.{0,8}(?:希望|都合|よろし))/.test(n)
+    || /(?:作業時間|所要時間|何時間|終了|返却|何日|曜日|土日|平日)/.test(q)) return false;
+  rememberFutureScriptedAchievements(text,-1);
+  state.turn += 1;
+  // No matching inspection recording exists yet: use the established emergency
+  // record path, never a weekday answer or browser-generated speech.
+  window.ROLEPLAY_INTENT_ASSIST?.noteDecision?.({candidate:'午前中でお願いします。',reason:'希望時間への回答。対応音声が未登録のため非常対応として記録'});
+  addMessage('customer','午前中でお願いします。',{audioId:'inspection_preferred_morning_customer'});
+  renderProgress();
+  return true;
 }
 
 function handleReply(event) {
