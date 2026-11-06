@@ -465,6 +465,10 @@ const vehicleInspectionAudioLines = [
   ["inspection_pickup_confirmed_customer", "引取受付・了承", "はい、お願いします。"]
 ];
 
+vehicleInspectionAudioLines.push(
+  ['inspection_preferred_morning_customer','希望時間・午前','午前中でお願いします。','ready'],
+  ['inspection_preferred_afternoon_customer','希望時間・午後','午後でお願いします。','ready']
+);
 window.ROLEPLAY_AUDIO_DB.items.push(...vehicleInspectionAudioLines.map(([id, label, text, status = "ready"]) => ({
   id,
   label,

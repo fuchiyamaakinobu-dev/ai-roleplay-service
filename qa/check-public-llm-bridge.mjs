@@ -64,6 +64,10 @@ for(const [status,expected] of [['daily_limit','日次上限に到達'],['provid
  assert.equal(m.responseReason,expected);assert.equal(reply.responseReason,expected);
 }
 toggle.checked=false;const off={role:'staff',text:'質問'};window.ROLEPLAY_INTENT_ASSIST.traceMessage(off);assert.equal(off.responseReason,'LLMがOFF');
+window.ROLEPLAY_INTENT_ASSIST.traceMessage({role:'customer',text:'はい。',audioId:'inspection_thanked_customer_retry',emergencyAudio:{intendedText:'午前中でお願いします。',reason:'missing_registered_audio'}});
+assert.match(liveView.textContent,/本来の返答：午前中でお願いします。/);
+assert.match(liveView.textContent,/採用した返答：はい。/);
+assert.match(liveView.textContent,/非常用の返答で代替/);
 console.log('公開画面: 履歴保存維持・リンク維持・公開API接続・相対音声パス OK');
 saved.set('roleplayDecisionDisplay','off');
 vm.runInContext(fs.readFileSync(new URL('../lab/roleplay-bridge.js',import.meta.url),'utf8'),c);

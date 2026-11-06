@@ -7,6 +7,8 @@ const options={audioId:'inspection_appointment_time_missing_retry'};
 assert.equal(s.run(`inspectionRepeatedQuestionReply('何時が空いていますか？',${JSON.stringify(options)}).text`),'ええ。');
 await s.say('今のところさほど混み合っておりませんので、ええ。お好きな時間でお取りできますが、ご都合いかがでしょうか。');
 assert.equal(s.run('state.transcript.at(-1).text'),'午前中でお願いします。');
+assert.equal(s.run('inspectionEmergencyAudio("午前中でお願いします。","inspection_preferred_morning_customer")'),null);
+s.run('audioIndex.get("inspection_preferred_morning_customer").status="needed"');
 const emergency=s.run('inspectionEmergencyAudio("午前中でお願いします。","inspection_preferred_morning_customer")');
 assert.equal(emergency.text,'はい。');
 assert.equal(emergency.emergencyAudio.intendedText,'午前中でお願いします。');

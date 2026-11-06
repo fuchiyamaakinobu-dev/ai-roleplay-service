@@ -65,7 +65,10 @@ const replies = [];
 for (const text of ["もしもし、佐藤様のお電話ですか？","いつもお世話になっております。私、トヨタモビリティ帯広本別店の原田といいます。本日は佐藤様のヤリスの車検の件でお電話させていただきました。","佐藤様、日頃はいつもご利用いただき、ありがとうございます。ヤリスの車検が9月30日満了になっております。ツー車検のご予定はお決まりでしょうか。","ありがとうございます。佐藤様の。ヤリスの車検、8月1日以降から詐欺を開始できます。もしよろしければ日数の合格にさせていただきたいんですが、よろしいですか？","佐藤様のお車、今、走行距離数は何キロでございますか？","何かヤリスのことで気になることはございますか？あと、オイル交換などはいかがですか？","他に何か気になる点、見てほしいところなどございますか？","佐藤様、今のお話ですと。ご来店いただいて。90分ほどで作業できますが、いかがですか？","はい、ぜひお待ちいただいて。ええ、整備の内容等もご説明させていただきたいと思います。もし差し支えなければなんですが。ああ、何か。ああ、用事があったりした場合の代車等ご用意いたしますか？"]) { run('addMessage("staff", '+JSON.stringify(text)+'); handleScriptedStaffReply('+JSON.stringify(text)+');'); const reply = JSON.parse(run("JSON.stringify(state.transcript.at(-1))")); replies.push(reply); }
 assert.equal(replies[1].text, "お世話になっております。");
 assert.equal(replies[2].text, "案内のはがきが来ていましたよ。");
-assert.equal(replies[8].text, "代車を用意してもらえますか？");
+// 直前に代車を希望済みなので、スタッフの用意の確認には了承する。
+assert.equal(replies[7].audioId, "inspection_waiting_followup_loaner_request");
+assert.equal(replies[8].text, "お願いします。");
+assert.equal(run("state.inspectionLoanerRequested"), true);
 for (const index of [1,2,8]) assert.ok(fs.statSync(repo + '/' + replies[index].audioSrc).size > 1000);
 assert.equal(run('state.proposedAppointment'), null);
 console.log("9月12日の実会話3応答・既存MP3・満了日誤認防止: OK");

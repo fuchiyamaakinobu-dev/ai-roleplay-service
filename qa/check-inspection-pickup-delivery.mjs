@@ -465,13 +465,13 @@ assert.equal(
 assert.equal(pickupDateOnly.state.inspectionPickupOutcome, "pickup");
 assert.equal(pickupDateOnly.state.inspectionPickupPhase, "location");
 
-// 日時と来店確認を一文で案内した場合は、その日時を了承して分岐を完了する。
+// 仕事の都合を解消する説明がない日時付き来店依頼では、引取希望を維持する。
 const datedVisit = branchContext(0);
 datedVisit.context.handleInspectionPickupBranchReply("引取をご希望の理由を教えていただけますか？");
 datedVisit.context.handleInspectionPickupBranchReply("お仕事で大変なのですね。土日の来店もできます。引取と来店のどちらがよろしいですか？");
 assert.equal(datedVisit.context.handleInspectionPickupBranchReply("9月30日10時半にご来店いただけますか？"), true);
-assert.equal(datedVisit.state.inspectionPickupOutcome, "visit");
-assert.equal(datedVisit.messages.at(-1).text, "では、その日でお願いします。");
+assert.equal(datedVisit.state.inspectionPickupOutcome, "pickup");
+assert.equal(datedVisit.messages.at(-1).text, "今回は引き取りでお願いしたいです。");
 
 assert.match(
   appSource,

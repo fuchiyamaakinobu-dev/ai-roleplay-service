@@ -95,6 +95,7 @@
       '答える対象：' + (trace?.answerTarget || '未判定'),
       '返答候補：' + (trace?.candidateTexts?.join(' ／ ') || '未選定'),
       '採用した返答：' + (trace?.reply || '未確定'),
+      ...(trace?.intendedReply ? ['本来の返答：' + trace.intendedReply, '音声：非常用の返答で代替・不足記録あり'] : []),
       '理由：' + (trace?.reason || '—'),
       '予約：' + (liveState?.appointment || '未確定'),
       '受付方法・場所：' + (liveState?.route || '未確定')
@@ -109,6 +110,7 @@
       '経路：' + (t.route || '既存ルール／応答待ち'),
       '理由：' + (t.reason || '未記録'),
       '実際の返答：' + (t.reply || '応答待ち'),
+      ...(t.intendedReply ? ['本来の返答：' + t.intendedReply] : []),
       '音声ID：' + (t.audioId || '—'),
       '音声再生：' + (t.playback || '未確認')
     ].join('\n')).join('\n\n') : 'この画面内だけに直近20発話を記録します。更新すると消えます。音声認識前の録音は保存しません。';
@@ -164,9 +166,16 @@
         message.responseSource = trace.selectedId ? (trace.selectedId === message.audioId ? 'llm' : 'adjusted') : 'rule';
         message.responseReason = message.responseSource === 'adjusted' ? reasons.adjusted : trace.reason;
         trace.reply = message.text; trace.audioId = message.audioId; trace.audioSrc = message.audioSrc;
+        trace.intendedReply = message.emergencyAudio?.intendedText || '';
+        if (!trace.candidateTexts?.length) trace.candidateTexts = [trace.intendedReply || message.text];
         if (trace.selectedId && trace.selectedId !== message.audioId) trace.route = 'LLM選択と異なる音声をアプリが採用';
         else if (trace.selectedId) trace.route = 'LLM選択をアプリが採用';
         else trace.route = '既存ルールで返答確定';
+        if (trace.intendedReply) {
+          trace.route = '非常用の返答で代替';
+          trace.reason = message.emergencyAudio.reason === 'answer_target_unresolved' ? '最後の質問への回答を選定できず記録' : '適切な登録音声がないため不足を記録';
+          message.responseReason = trace.reason;
+        }
       }
       renderTrace();
     },
