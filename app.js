@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261107-5';
+const ROLEPLAY_RELEASE = '20261108-1';
 
 let speechRecognition = null;
 let speechListening = false;
@@ -857,7 +857,13 @@ function commitMessage(role, text, options = {}) {
   if (role === 'customer' && isVehicleInspectionScenario()) {
     const staffText = state.transcript.filter(m=>m.role==='staff').at(-1)?.text || '';
     message.decision = {...(message.decision || {}),
-      answerTarget:message.decision?.answerTarget || inspectionLastQuestionClause(staffText),
+      ...(options.semanticSelection ? {
+        answerTarget:options.semanticSelection.answerTarget,
+        meaning:options.semanticSelection.topic,
+        selectedId:options.semanticSelection.id,
+        route:'LLM意味判定を採用・顧客設定と登録音声を確認'
+      } : {}),
+      answerTarget:options.semanticSelection?.answerTarget || message.decision?.answerTarget || inspectionLastQuestionClause(staffText),
       adoptedId:message.audioId || '',
       before:inspectionDecisionBefore || inspectionDecisionState(), after:inspectionDecisionState()};
   }
@@ -963,6 +969,7 @@ function inspectionNeutralReplyForContext(staff) {
 }
 
 function contextualInspectionAcknowledgement(role, text, options) {
+  if (options.semanticSelection) return {text, options};
   if (role !== "customer" || !isVehicleInspectionScenario()
     || !["はい。", "ええ。", "分かりました。", "お願いします。", "はい、お願いします。", "大丈夫ですよ。", "ありがとうございました。"].includes(text)) return {text, options};
   // Only substitute neutral replies. Never replace a date, preference, factual answer or question.
@@ -1044,7 +1051,7 @@ function addMessage(role, text, options = {}) {
   }
   if (role === 'customer' && options.audioId === 'inspection_confirmed_reminder_contact_customer') {
     const latest = state.transcript.filter(m=>m.role==='staff').at(-1)?.text || '';
-    if (!asksInspectionReminderContactDestination(inspectionLastQuestionClause(latest))) {
+    if (!options.semanticSelection && !asksInspectionReminderContactDestination(inspectionLastQuestionClause(latest))) {
       text = 'はい。'; options = {...options,audioId:'inspection_thanked_customer_retry'};
     }
   }
@@ -2761,7 +2768,7 @@ function asksCurrentMileage(text) {
   const mileageHowMuch = /(?:走行距離|距離数).{0,12}(?:どのくらい|どれくらい|どのぐらい|どれぐらい)/.test(normalized);
   const politeMileageQuestion = /何(?:キロ|km).*(?:でしょう|です)[。？?]*$/.test(normalized);
   if (!isScriptedQuestion(normalized) && !mileageHowMuch && !politeMileageQuestion) return false;
-  return /(?:何(?:キロ|km)|(?:走行距離|距離数|距離).{0,20}(?:どのくらい|どれくらい|どのぐらい|どれぐらい|教えて|伺|何|いくつ|わかります|分かります|お分かり))/.test(normalized);
+  return /(?:何(?:キロ|km)|(?:走行距離|距離数|距離).{0,20}(?:どのくらい|どれくらい|どのぐらい|どれぐらい|教えて|伺|何|いくつ|わかります|分かります|おわかり|お分かり))/.test(normalized);
 }
 
 function hasBookingContinuationConfirmation(text) {
@@ -7211,17 +7218,70 @@ function inspectionAllSpeechCandidates(text) {
   return candidates;
 }
 
-function applyInspectionLlmSelection(text, selection) {
-  const candidate = inspectionAllSpeechCandidates(text).find(c => c.id === selection?.id);
+// Semantic candidates are based on customer facts, not on recognizing the staff's
+// wording first. Keep legacy candidates for stateful booking/collection actions.
+function inspectionSemanticCandidates(text) {
+  if (!isVehicleInspectionScenario() || state.ended) return [];
+  const candidates = [];
+  const add = (id, action) => {
+    const item = audioIndex.get(id);
+    if (!candidates.some(c => c.id === id) && item?.status === 'ready' && audioPath(id))
+      candidates.push({id, action, text:item.text});
+  };
+  const durationKnown = state.inspectionDurationQuestionAsked || state.transcript.some(m =>
+    m.role === 'staff' && hasSupportedInspectionDuration(m.text));
+  add(inspectionHighMileage() ? inspectionMileageReply().audioId
+    : durationKnown ? 'inspection_current_mileage_customer' : 'inspection_current_mileage_and_duration_customer', 'inspection_mileage');
+  add(hasInspectionOilChangeRequest() ? 'inspection_additional_service_none_customer'
+    : 'inspection_asked_vehicle_concerns_customer', 'inspection_work');
+  add('inspection_vehicle_condition_no_concerns', 'inspection_extra');
+  add('inspection_confirmed_reminder_contact_customer', 'inspection_contact');
+  add('inspection_confirmed_identity_customer', 'inspection_identity');
+  add('inspection_confirmed_booking_time_customer', 'inspection_call_permission');
+  if (!state.proposedAppointment && !state.inspectionAppointmentCandidate && !state.inspectionPickupActive) {
+    add('inspection_asked_availability_customer', 'inspection_booking_intent');
+    if (!state.questionRepeats['inspection-day-preference-answer']) add('inspection_day_preference_answer', 'inspection_weekday');
+  }
+  for (const c of inspectionAllSpeechCandidates(text)) {
+    // One distance and one work-request answer, consistent with current facts.
+    if (['inspection_mileage','inspection_work'].includes(c.action)) continue;
+    add(c.id,c.action);
+  }
+  return candidates.slice(0,16);
+}
+
+function inspectionSemanticSelectionValid(text, selection, candidate) {
+  const topics = {inspection_mileage:'mileage',inspection_work:'work',inspection_contact:'contact',
+    inspection_identity:'identity',inspection_call_permission:'consent',inspection_weekday:'weekday',
+    inspection_booking_intent:'booking_intent'};
+  const topic = candidate.id === 'inspection_vehicle_condition_no_concerns' ? 'work' : topics[candidate.action];
+  if (!topic || selection.kind !== 'question' || selection.topic !== topic
+    || !selection.evidence?.trim() || !text.includes(selection.evidence)) return false;
+  const answerTarget = selection.answerTarget ?? selection.evidence;
+  if (!answerTarget.trim() || !text.includes(answerTarget)) return false;
+  // Compare quoted spans, not vocabulary. A prior question must not win over the
+  // final question, but the model may omit fillers/punctuation in that final span.
+  const target = normalizeScriptedText(inspectionLastQuestionClause(text)).replace(/[。？?！!]+$/,'');
+  const quoted = normalizeScriptedText(answerTarget).replace(/[。？?！!]+$/,'');
+  return !!quoted && (target.endsWith(quoted) || quoted.endsWith(target));
+}
+
+function applyInspectionLlmSelection(text, selection, semanticCandidates = null) {
+  const candidate = (semanticCandidates || inspectionAllSpeechCandidates(text)).find(c => c.id === selection?.id);
   if (!candidate) return false;
-  if (candidate.action === 'inspection_mileage' && !asksCurrentMileage(inspectionLastQuestionClause(text))
+  if (semanticCandidates && !inspectionSemanticCandidates(text).some(c => c.id === candidate.id)) return false;
+  const semantic = semanticCandidates && inspectionSemanticSelectionValid(text,selection,candidate);
+  if (semanticCandidates && !semantic && !inspectionAllSpeechCandidates(text).some(c => c.id === candidate.id)) return false;
+  if (semanticCandidates && !semantic && ['inspection_mileage','inspection_work','inspection_contact',
+    'inspection_identity','inspection_call_permission','inspection_weekday','inspection_booking_intent'].includes(candidate.action)) return false;
+  if (!semantic && candidate.action === 'inspection_mileage' && !asksCurrentMileage(inspectionLastQuestionClause(text))
     && !(selection.kind === 'question' && selection.topic === 'mileage'
       && selection.evidence?.trim() && text.includes(selection.evidence))) return false;
   const focus = inspectionReplyFocus(text);
-  if (focus?.compound && ((!selection?.answerTarget && !focus.topic)
+  if (!semantic && focus?.compound && ((!selection?.answerTarget && !focus.topic)
     || selection?.answerTarget && !normalizeScriptedText(selection.answerTarget).includes(normalizeScriptedText(focus.target)))) return false;
   const originalCandidates = inspectionLlmCandidates(text);
-  if (!focus?.topic && originalCandidates.length && !originalCandidates.some(c=>c.id===candidate.id)
+  if (!semantic && !focus?.topic && originalCandidates.length && !originalCandidates.some(c=>c.id===candidate.id)
     && (!selection.answerTarget?.trim() || !text.includes(selection.answerTarget)
       || !selection.evidence?.trim() || !text.includes(selection.evidence)
       || selection.kind !== 'question')) return false;
@@ -7236,7 +7296,7 @@ function applyInspectionLlmSelection(text, selection) {
   if (candidate.action === "inspection_pickup_confirmation") return answerInspectionPickupArrangementConfirmation(text);
   if (candidate.action === "inspection_pickup_choice") return answerInspectionPickupChoice(text);
   if (candidate.action === "inspection_wrong_name") return answerInspectionWrongName(text);
-  if (candidate.action === "inspection_extra") return applyPickupExtra(text, candidate);
+  if (candidate.action === "inspection_extra" && !(semantic && candidate.id === 'inspection_vehicle_condition_no_concerns')) return applyPickupExtra(text, candidate);
   // Score only the original speech. Model choices are never evidence of achievement.
   rememberFutureScriptedAchievements(text, -1);
   const commitState = (message) => {
@@ -7271,25 +7331,27 @@ function applyInspectionLlmSelection(text, selection) {
     }
   };
   state.turn += 1;
-  addMessage("customer", candidate.text, { audioId: candidate.id, onReplyAccepted:commitState });
+  addMessage("customer", candidate.text, { audioId: candidate.id, onReplyAccepted:commitState,
+    ...(semantic ? {semanticSelection:{id:candidate.id,topic:selection.topic,answerTarget:selection.answerTarget ?? selection.evidence}} : {}) });
   renderProgress();
   return true;
 }
 
 function handleInspectionLlmReply(text) {
-  if (answerInspectionServiceDismissal(text)) return;
-  if (answerInspectionPartialAppointment(text)) return;
-  if (answerInspectionTimePreference(text)) return;
-  if (!inspectionReplyFocus(text)?.topic && handleInspectionBookingOutcome(text)) return;
   const rejected = isPickupInspectionScenario() && state.pickupAudioMemory?.rejected;
   if (rejected?.kind === "later_time" && !state.pickupAudioMemory.adjusted
     && !inspectionAppointmentDateCandidates(text).length && /\d{1,2}時(?!間)/.test(normalizeScriptedText(text))) {
     text = `${rejected.month}月${rejected.day}日 ${text}`;
   }
   const resolver = window.ROLEPLAY_INTENT_ASSIST;
-  const candidates = inspectionAllSpeechCandidates(text);
+  const candidates = inspectionSemanticCandidates(text);
   resolver?.noteCandidates?.(candidates);
-  const fallback = () => { if (!handlePickupAudioMemory(text)) return handleScriptedStaffReply(text); };
+  const fallback = () => {
+    if (answerInspectionServiceDismissal(text) || answerInspectionPartialAppointment(text)
+      || answerInspectionTimePreference(text)) return;
+    if (!inspectionReplyFocus(text)?.topic && handleInspectionBookingOutcome(text)) return;
+    if (!handlePickupAudioMemory(text)) return handleScriptedStaffReply(text);
+  };
   if (!resolver?.enabled() || !resolver.select) return fallback();
   const transcript = state.transcript;
   const activeScenario = scenario;
@@ -7304,19 +7366,16 @@ function handleInspectionLlmReply(text) {
   return Promise.resolve().then(() => resolver.select(request)).catch(() => null).then(selection => {
     if (state.transcript !== transcript || scenario !== activeScenario || state.ended || !state.started) return;
     setCustomerReplyPending(false);
-    if (handlePickupAudioMemory(text)) return;
-    if (!applyInspectionLlmSelection(text, selection)) {
+    if (!applyInspectionLlmSelection(text, selection, candidates)) {
       const target = inspectionLastQuestionClause(text);
-      const canUseAnalysis = selection?.kind === 'question' && selection.evidence?.trim()
+      const canUseAnalysis = selection?.id === 'rule' && !selection.guard
+        && selection.kind === 'question' && selection.evidence?.trim()
         && text.includes(selection.evidence) && selection.answerTarget?.trim()
         && text.includes(selection.answerTarget)
         && normalizeScriptedText(selection.answerTarget) === normalizeScriptedText(target);
       inspectionSemanticContext = canUseAnalysis ? {...selection,text} : null;
       try {
-        if (inspectionReplyFocus(text)?.topic) return handleScriptedStaffReply(text);
-        const extras = pickupExtraCandidates(target);
-        if (extras.length === 1) applyPickupExtra(text, extras[0]);
-        else handleScriptedStaffReply(text);
+        return fallback();
       } finally { inspectionSemanticContext = null; }
     }
   });
