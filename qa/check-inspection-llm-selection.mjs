@@ -11,7 +11,7 @@ function session(id, select) {
  c.window.ROLEPLAY_INTENT_ASSIST={enabled:()=>true,select}; c.id=id;
  vm.runInContext(`scenario=scenarios.find(s=>s.id===id);state.started=true;state.scriptStep=4;
  stopSpeechInput=()=>{};stopCustomerPlayback=()=>{};clearStaffInput=()=>{};renderProgress=()=>{};
- addMessage=(role,text,options={})=>state.transcript.push({role,text,audioId:options.audioId});`,c);
+ addMessage=(role,text,options={})=>{const message={role,text,audioId:options.audioId,emergencyAudio:options.emergencyAudio};state.transcript.push(message);options.onReplyAccepted?.(message);options.onCommitted?.(message);};`,c);
  return {run:s=>vm.runInContext(s,c),say:text=>{c.input=text;return vm.runInContext('els.staffInput.value=input;handleReply({preventDefault(){}})',c)}};
 }
 export const fixtures=[];

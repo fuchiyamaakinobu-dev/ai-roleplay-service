@@ -46,6 +46,13 @@ function cleanBase(payload) {
   };
 }
 
+function cleanDecisionState(value = {}) {
+  return {step:Math.max(0,Math.min(100,Number(value.step)||0)), mileage:value.mileage === true,
+    durationQuestion:value.durationQuestion === true, contact:value.contact === true,
+    pickupPhase:cleanText(value.pickupPhase,40), pickupOutcome:cleanText(value.pickupOutcome,40),
+    loanerRequested:value.loanerRequested === true};
+}
+
 async function recordStart(payload) {
   try {
     await addDoc(collection(db, "roleplayActivity"), {
@@ -78,11 +85,22 @@ async function saveResult(payload) {
         text: maskPhoneNumbers(message.text),
         responseSource: ["llm","adjusted","rule","analyzed"].includes(message.responseSource) ? message.responseSource : "unknown",
         responseReason: cleanText(message.responseReason,80),
+        release: cleanText(message.release,40),
+        ...(message.decision ? {decision:{
+          answerTarget:maskPhoneNumbers(message.decision.answerTarget),
+          candidates:(message.decision.candidates || []).slice(0,16).map(c=>({id:cleanText(c.id,120),text:maskPhoneNumbers(c.text)})),
+          selectedId:cleanText(message.decision.selectedId,120), adoptedId:cleanText(message.decision.adoptedId,120),
+          meaning:cleanText(message.decision.meaning,120), evidence:maskPhoneNumbers(message.decision.evidence),
+          conditions:(message.decision.conditions || []).slice(0,3).map(maskPhoneNumbers),
+          route:cleanText(message.decision.route,160), reason:cleanText(message.decision.reason,160),
+          before:cleanDecisionState(message.decision.before), after:cleanDecisionState(message.decision.after)
+        }} : {}),
         ...(message.emergencyAudio ? {emergencyAudio:{
           intendedText:maskPhoneNumbers(message.emergencyAudio.intendedText),
           intendedAudioId:cleanText(message.emergencyAudio.intendedAudioId,120),
           staffText:maskPhoneNumbers(message.emergencyAudio.staffText),
-          reason:'missing_registered_audio'
+          answerTarget:maskPhoneNumbers(message.emergencyAudio.answerTarget),
+          reason:message.emergencyAudio.reason === 'answer_target_unresolved' ? 'answer_target_unresolved' : 'missing_registered_audio'
         }} : {})
       }))
     });

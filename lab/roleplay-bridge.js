@@ -201,6 +201,10 @@
   panel.append(extras);
   document.querySelector('.topbar').after(panel);
   window.ROLEPLAY_INTENT_ASSIST = {
+    noteCandidates(candidates) {
+      if (trace) { trace.candidates = candidates.map(c=>({id:c.id,text:c.text})); trace.candidateTexts = candidates.map(c=>c.text); }
+      renderTrace();
+    },
     noteDecision(value) {
       if (trace) { trace.candidateTexts = [value.candidate]; trace.candidates = [{text:value.candidate}]; trace.reason = value.reason; }
       renderTrace();
@@ -231,6 +235,11 @@
           trace.reason = message.emergencyAudio.reason === 'answer_target_unresolved' ? '最後の質問への回答を選定できず記録' : '適切な登録音声がないため不足を記録';
           message.responseReason = trace.reason;
         }
+        message.decision = {answerTarget:trace.answerTarget || '',
+          candidates:(trace.candidates || []).slice(0,16).map(c=>({id:c.id || '',text:c.text || ''})),
+          selectedId:trace.selectedId || '', adoptedId:message.audioId || '',
+          meaning:trace.meaning || '', evidence:trace.evidence || '', conditions:trace.conditions || [],
+          route:trace.route || '', reason:trace.reason || ''};
       }
       renderTrace();
     },
@@ -272,7 +281,9 @@
         status.textContent = data.llm?.status === 'cooldown'
           ? '15秒間隔の利用制限のため、今回は既存ルールで応答します。'
           : `LLM選択を採用できませんでした（${data.llm?.status || '応答なし'}${choice?.id === 'rule' ? '・既存処理を選択' : ''}）。今回は既存ルールで応答します。`;
-        return null;
+        // Preserve valid analysis on rule/unsupported candidates for the app's
+        // checked fallback; selecting no audio is not the same as no analysis.
+        return data.llm?.status === 'ok' && choice?.id === 'rule' ? choice : null;
       } catch (error) {
         setReason(currentTrace,['TimeoutError','AbortError'].includes(error?.name)?'timeout':'network_error');
         if (currentTrace) { currentTrace.route = '通信失敗 → 既存ルール'; renderTrace(); }
