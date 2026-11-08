@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI接客ロープレ</title>
-  <link rel="stylesheet" href="./styles.css?v=20261108-2">
+  <link rel="stylesheet" href="./styles.css?v=20261109-1">
+  <link rel="stylesheet" href="./industrial-theme.css?v=20261109-1">
+  <script defer src="./theme-toggle.js?v=20261109-1"></script>
 </head>
 <body>
   <main class="app-shell">
@@ -13,7 +15,7 @@
         <p class="eyebrow">店長向け かんたん操作</p>
         <h1>AI接客ロープレ</h1>
       </div>
-      <div class="status-pill" id="connectionStatus">ローカル判定モード</div>
+      <div class="topbar-controls"><button class="ghost-button" id="themeToggle" type="button" aria-pressed="false">未来的なデザインに切替</button><div class="status-pill" id="connectionStatus">ローカル判定モード</div></div>
     </header>
 
     <section class="layout">
@@ -30,6 +32,15 @@
           <div><span>2</span>ロープレ開始</div>
           <div><span>3</span>結果を見る</div>
         </div>
+
+        <label class="employee-code-field" for="employeeCode">
+          <span>社員コード（6桁）</span>
+          <input id="employeeCode" type="text" inputmode="numeric" autocomplete="off"
+            pattern="[0-9]{6}" maxlength="6" placeholder="例：123456" aria-describedby="employeeCodeNote" required>
+          <small id="employeeCodeNote">採点履歴の集計に使用します。6桁の数字を入力してください。</small>
+        </label>
+
+        <button class="primary-action" id="startButton" type="button">ロープレ開始</button>
 
         <label class="audio-toggle">
           <input id="audioEnabled" type="checkbox" checked>
@@ -88,14 +99,7 @@
           <span><strong>判定単語帳を見る</strong><small>似た言葉・言い換え・不足例を確認</small></span>
         </a>
 
-        <label class="employee-code-field" for="employeeCode">
-          <span>社員コード（6桁）</span>
-          <input id="employeeCode" type="text" inputmode="numeric" autocomplete="off"
-            pattern="[0-9]{6}" maxlength="6" placeholder="例：123456" aria-describedby="employeeCodeNote" required>
-          <small id="employeeCodeNote">採点履歴の集計に使用します。6桁の数字を入力してください。</small>
-        </label>
 
-        <button class="primary-action" id="startButton" type="button">ロープレ開始</button>
       </aside>
 
       <section class="workbench">
@@ -213,11 +217,11 @@
     </footer>
   </main>
 
-  <script src="./audio-db.js?v=20261108-2"></script>
+  <script src="./audio-db.js?v=20261109-1"></script>
   <script data-llm-public src="./llm-public-config.js?v=20261015-1"></script>
-  <script data-llm-public src="./lab/roleplay-bridge.js?v=20261108-2"></script>
+  <script data-llm-public src="./lab/roleplay-bridge.js?v=20261109-1"></script>
   <script src="./scenario.js?v=20260924-1"></script>
-  <script type="module" src="./results-store.js?v=20261108-2"></script>
-  <script src="./cloud-scenario.js?v=20261108-2"></script>
+  <script type="module" src="./results-store.js?v=20261109-1"></script>
+  <script src="./cloud-scenario.js?v=20261109-1"></script>
 </body>
 </html>
