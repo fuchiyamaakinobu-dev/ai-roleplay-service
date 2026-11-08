@@ -112,6 +112,28 @@ function detailsCell(item) {
     badge.className='response-source'+(source?' source-'+source:'');
     badge.textContent=(source?labels[source]:'判定記録なし')+(message.responseReason?'：'+String(message.responseReason).slice(0,80):'');
     line.prepend(badge);transcript.append(line);
+    if (message.role === 'customer') {
+      const decision = message.decision;
+      const audit = document.createElement('details');
+      audit.className = 'history-decision';
+      addText(audit,'summary','返答の判定・未採用候補を確認');
+      if (!decision) {
+        addText(audit,'p','この発話には候補の保存記録がありません。');
+      } else {
+        addText(audit,'p','答える対象：'+(decision.answerTarget || '未記録'));
+        addText(audit,'p','判定：'+(decision.meaning || '未記録')+'／'+(decision.reason || decision.route || '未記録'));
+        const candidates = [...(decision.candidates || [])];
+        const adoptedId = decision.adoptedId || message.audioId;
+        if (!candidates.some(c=>c.id ? c.id===adoptedId : c.text===message.text)) candidates.push({id:adoptedId,text:message.text});
+        for (const candidate of candidates) {
+          const adopted = candidate.id ? candidate.id===adoptedId : candidate.text===message.text;
+          const selected = candidate.id && candidate.id===decision.selectedId;
+          addText(audit,'p',(adopted?'採用':selected?'LLM選択・未採用':'未採用')+'：'+candidate.text,
+            'history-decision-candidate '+(adopted?'adopted':'unused'));
+        }
+      }
+      transcript.append(audit);
+    }
     if (message.emergencyAudio) {
       const note=document.createElement('p');
       note.className='audio-emergency-note';

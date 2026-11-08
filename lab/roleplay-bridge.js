@@ -41,6 +41,9 @@
   flowView.setAttribute('role', 'status');
   flowView.setAttribute('aria-live', 'polite');
   flowView.setAttribute('aria-label', '発話から返答までの判定フロー');
+  const historyView = document.createElement('section');
+  historyView.id = 'decisionHistoryView';
+  const historyCards = new Map();
   const textDetails = document.createElement('details');
   textDetails.id = 'decisionTextDetails';
   const textSummary = document.createElement('summary');
@@ -51,13 +54,14 @@
   displayToggle.type = 'checkbox';
   displayToggle.id = 'decisionDisplayToggle';
   displayToggle.setAttribute('role', 'switch');
-  displayToggle.setAttribute('aria-controls', 'decisionFlowView decisionTextDetails');
+  displayToggle.setAttribute('aria-controls', 'decisionFlowView decisionTextDetails decisionHistoryView');
   liveView.id = 'decisionLiveView';
   displayToggle.checked = false;
   try { displayToggle.checked = localStorage.getItem('roleplayDecisionDisplay') === 'on'; } catch (_) {}
   const applyDisplay = () => {
     liveView.hidden = !displayToggle.checked;
     flowView.hidden = !displayToggle.checked;
+    historyView.hidden = !displayToggle.checked;
     textDetails.hidden = !displayToggle.checked;
     displayToggle.setAttribute('aria-checked', String(displayToggle.checked));
   };
@@ -67,7 +71,7 @@
   });
   applyDisplay();
   displayLabel.append(displayToggle, ' 判定状態を表示（ON／OFF）');
-  panel.append(displayLabel, flowView, textDetails);
+  panel.append(displayLabel, flowView, historyView, textDetails);
   let liveState = null;
   const refreshUsage = async (initial = false) => {
     try {
@@ -107,43 +111,51 @@
     if (text !== undefined) element.textContent = text;
     return element;
   };
-  const renderFlow = () => {
+  const renderFlow = (entry = trace, destination = flowView, snapshot = liveState) => {
     const heading = flowElement('div','decision-flow-heading');
-    heading.append(flowElement('strong','','現在の返答判定'),flowElement('span','decision-flow-route',trace?.route || '発話待ち'));
+    heading.append(flowElement('strong','',destination === flowView ? '現在の返答判定' : 'この発話の返答判定'),flowElement('span','decision-flow-route',entry?.route || '発話待ち'));
     const grid = flowElement('div','decision-flow-grid');
     const input = flowElement('section','decision-flow-card decision-flow-input');
-    input.append(flowElement('h3','','認識した発話'),flowElement('p','decision-flow-speech',trace?.text || 'スタッフの発話を待っています。'));
-    if (trace?.answerTarget) input.append(flowElement('p','decision-flow-target','答える対象：'+trace.answerTarget));
+    input.append(flowElement('h3','','認識した発話'),flowElement('p','decision-flow-speech',entry?.text || 'スタッフの発話を待っています。'));
+    if (entry?.answerTarget) input.append(flowElement('p','decision-flow-target','答える対象：'+entry.answerTarget));
     const candidates = flowElement('section','decision-flow-candidates');
     candidates.append(flowElement('h3','','返答候補'));
-    const choices = (trace?.candidates || (trace?.candidateTexts || []).map(text=>({text}))).map(c=>({...c}));
-    if (trace?.reply && !choices.some(c=>c.id ? c.id===trace.audioId : c.text===trace.reply)) {
-      choices.push({id:trace.audioId,text:trace.reply,added:true});
+    const choices = (entry?.candidates || (entry?.candidateTexts || []).map(text=>({text}))).map(c=>({...c}));
+    if (entry?.reply && !choices.some(c=>c.id ? c.id===entry.audioId : c.text===entry.reply)) {
+      choices.push({id:entry.audioId,text:entry.reply,added:true});
     }
-    if (!choices.length) candidates.append(flowElement('p','decision-flow-empty',trace ? '候補を確認しています。' : '発話後に候補を表示します。'));
+    if (!choices.length) candidates.append(flowElement('p','decision-flow-empty',entry ? '候補を確認しています。' : '発話後に候補を表示します。'));
     for (const c of choices) {
-      const adopted = Boolean(trace?.reply && (c.id ? c.id===trace.audioId : c.text===trace.reply));
-      const selected = Boolean(c.id && c.id===trace?.selectedId);
-      const rejected = Boolean(c.id && c.id===trace?.rejectedId);
-      const state = adopted ? 'adopted' : rejected ? 'rejected' : trace?.reply ? 'unused' : 'pending';
+      const adopted = Boolean(entry?.reply && (c.id ? c.id===entry.audioId : c.text===entry.reply));
+      const selected = Boolean(c.id && c.id===entry?.selectedId);
+      const rejected = Boolean(c.id && c.id===entry?.rejectedId);
+      const state = adopted ? 'adopted' : rejected ? 'rejected' : entry?.reply ? 'unused' : 'pending';
       const row = flowElement('div','decision-flow-option '+state);
       row.append(flowElement('p','',c.text),flowElement('span','decision-flow-badge',
-        adopted ? (trace.intendedReply ? '非常代替' : '採用') : rejected ? '不適合' : selected ? (trace.reply ? 'LLM選択・未採用' : 'LLM選択') : trace?.reply ? '未採用' : '判定中'));
-      if(c.added) row.append(flowElement('small','',trace.intendedReply ? '音声不足・判断不足による代替' : '既存ルールで採用した返答'));
+        adopted ? (entry.intendedReply ? '非常代替' : '採用') : rejected ? '不適合' : selected ? (entry.reply ? 'LLM選択・未採用' : 'LLM選択') : entry?.reply ? '未採用' : '判定中'));
+      if(c.added) row.append(flowElement('small','',entry.intendedReply ? '音声不足・判断不足による代替' : '既存ルールで採用した返答'));
       candidates.append(row);
     }
-    const output = flowElement('section','decision-flow-card decision-flow-output'+(trace?.reply?' adopted':''));
-    output.append(flowElement('h3','','実際の返答'),flowElement('p','decision-flow-speech',trace?.reply || '返答待ち'));
-    if(trace?.intendedReply) output.append(flowElement('p','decision-flow-warning','本来の返答：'+trace.intendedReply));
-    if(trace?.playback) output.append(flowElement('p','decision-flow-target','音声再生：'+trace.playback));
+    const output = flowElement('section','decision-flow-card decision-flow-output'+(entry?.reply?' adopted':''));
+    output.append(flowElement('h3','','実際の返答'),flowElement('p','decision-flow-speech',entry?.reply || '返答待ち'));
+    if(entry?.intendedReply) output.append(flowElement('p','decision-flow-warning','本来の返答：'+entry.intendedReply));
+    if(entry?.playback) output.append(flowElement('p','decision-flow-target','音声再生：'+entry.playback));
     const arrow = () => {const n=flowElement('span','decision-flow-arrow','→');n.setAttribute('aria-hidden','true');return n;};
     grid.append(input,arrow(),candidates,arrow(),output);
     const footer=flowElement('div','decision-flow-footer');
-    footer.append(flowElement('p','','理由：'+(trace?.reason || '—')),flowElement('p','','予約：'+(liveState?.appointment || '未確定')),flowElement('p','','受付方法・場所：'+(liveState?.route || '未確定')));
-    flowView.replaceChildren(heading,grid,footer);
+    footer.append(flowElement('p','','理由：'+(entry?.reason || '—')),flowElement('p','','予約：'+(snapshot?.appointment || '未確定')),flowElement('p','','受付方法・場所：'+(snapshot?.route || '未確定')));
+    destination.replaceChildren(heading,grid,footer);
   };
   const renderTrace = () => {
     renderFlow();
+    for (const [index, entry] of traces.entries()) {
+      if (entry === trace || historyCards.has(entry)) continue;
+      const details = flowElement('details','decision-history-entry');
+      details.append(flowElement('summary','',`${index + 1}. ${entry.text} → ${entry.reply || '返答未確定'}`));
+      const view = flowElement('div','decision-flow');
+      renderFlow(entry,view,entry.snapshot);
+      details.append(view); historyView.append(details); historyCards.set(entry,details);
+    }
     liveView.textContent = [
       '現在の返答判定',
       '処理：' + (trace?.route || '発話待ち'),
@@ -168,9 +180,9 @@
       ...(t.intendedReply ? ['本来の返答：' + t.intendedReply] : []),
       '音声ID：' + (t.audioId || '—'),
       '音声再生：' + (t.playback || '未確認')
-    ].join('\n')).join('\n\n') : 'この画面内だけに直近20発話を記録します。更新すると消えます。音声認識前の録音は保存しません。';
+    ].join('\n')).join('\n\n') : 'このロープレの全発話を記録します。更新すると消えます。音声認識前の録音は保存しません。';
   };
-  traceClear.addEventListener('click', () => { traces.length = 0; trace = null; renderTrace(); });
+  traceClear.addEventListener('click', () => { traces.length = 0; trace = null; historyCards.clear(); historyView.replaceChildren(); renderTrace(); });
   renderTrace();
   const extras = document.createElement('details');
   const summary = document.createElement('summary');
@@ -206,11 +218,15 @@
       renderTrace();
     },
     noteDecision(value) {
-      if (trace) { trace.candidateTexts = [value.candidate]; trace.candidates = [{text:value.candidate}]; trace.reason = value.reason; }
+      if (trace) {
+        trace.candidates ||= [];
+        if (!trace.candidates.some(c=>c.text === value.candidate)) trace.candidates.push({text:value.candidate});
+        trace.candidateTexts = trace.candidates.map(c=>c.text); trace.reason = value.reason;
+      }
       renderTrace();
     },
-    resetDecision() { trace = null; liveState = null; renderTrace(); },
-    updateDecisionState(value) { liveState = value; renderTrace(); },
+    resetDecision() { trace = null; liveState = null; traces.length = 0; historyCards.clear(); historyView.replaceChildren(); renderTrace(); },
+    updateDecisionState(value) { liveState = value; if (trace) trace.snapshot = {...value}; renderTrace(); },
     beginDecision(value) {
       if (trace) { trace.answerTarget = value.answerTarget; trace.route = '候補を選定中'; }
       renderTrace();
@@ -220,7 +236,7 @@
         trace = { text: message.text, staffMessage: message };
         setReason(trace,!toggle.checked?'off':toggle.disabled?'not_configured':'not_requested');
         traces.push(trace);
-        if (traces.length > 20) traces.shift();
+
       } else if (message.role === 'customer' && trace) {
         message.responseSource = trace.selectedId ? (trace.selectedId === message.audioId ? 'llm' : 'adjusted') : 'rule';
         message.responseReason = message.responseSource === 'adjusted' ? reasons.adjusted : trace.reason;

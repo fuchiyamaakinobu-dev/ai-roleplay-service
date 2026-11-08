@@ -95,3 +95,24 @@ saved.set('roleplayDecisionDisplay','on');
 vm.runInContext(fs.readFileSync(new URL('../lab/roleplay-bridge.js',import.meta.url),'utf8'),c);
 assert.equal(nodes.filter(n=>n.id==='decisionDisplayToggle').at(-1).checked,true);
 assert.equal(nodes.filter(n=>n.id==='decisionLiveView').at(-1).hidden,false);
+const audit=window.ROLEPLAY_INTENT_ASSIST;
+audit.resetDecision();
+for(let i=0;i<25;i++){
+ audit.traceMessage({role:'staff',text:'履歴確認'+i});
+ audit.noteCandidates([{id:'a',text:'採用回答'+i},{id:'b',text:'未採用回答'+i}]);
+ audit.noteDecision({candidate:'最終補足'+i,reason:'確認'});
+ const message={role:'customer',text:'採用回答'+i,audioId:'a'};audit.traceMessage(message);
+ assert.equal(message.decision.candidates.length,3);
+ audit.updateDecisionState({appointment:'予約'+i,route:'場所'+i});
+}
+const archive=nodes.filter(n=>n.id==='decisionHistoryView').at(-1);
+assert.equal(archive.children.length,24);
+assert.match(flatten(archive),/履歴確認0/);
+assert.match(flatten(archive),/未採用回答0 未採用/);
+assert.match(flatten(archive),/予約0/);
+assert.doesNotMatch(flatten(archive.children[0]),/予約24/);
+const currentToggle=nodes.filter(n=>n.id==='decisionDisplayToggle').at(-1);
+currentToggle.checked=false;currentToggle.events.change();assert.equal(archive.hidden,true);
+currentToggle.checked=true;currentToggle.events.change();assert.equal(archive.children.length,24);
+audit.resetDecision();assert.equal(archive.children.length,0);
+console.log('全発話履歴: 25発話・未採用保持・候補上書き防止・当時状態・表示切替・リセット OK');

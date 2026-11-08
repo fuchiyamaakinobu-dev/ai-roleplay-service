@@ -1432,6 +1432,10 @@ textarea:focus {
 .decision-flow-option{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:16px;border:1px solid #718396;border-radius:14px;background:#20334b;color:#d0dce6;line-height:1.55}
 .decision-flow-option p{font-size:16px;font-weight:600}
 .decision-flow-option small{grid-column:1/-1;color:#c1d2df}
+.decision-flow-option.unused,.decision-flow-option.rejected{background:#303b49;border-color:#6d7885;color:#c2c9d1;box-shadow:none}
+.decision-history-entry{margin:12px 0;border:1px solid #aab7c6;border-radius:10px;padding:12px}
+.decision-history-entry>summary{cursor:pointer;font-weight:600;overflow-wrap:anywhere}
+#decisionHistoryView[hidden]{display:none}
 .decision-flow .adopted{border-color:#00e7ef;background:#073e4e;color:#fff;box-shadow:0 0 12px #00e7ef30}
 .decision-flow-badge{font-size:12px;font-weight:700;padding:4px 8px;border-radius:8px;border:1px solid #9eb2c5;white-space:normal;max-width:110px;text-align:center}
 .adopted .decision-flow-badge{background:#00e7ef;border-color:#00e7ef;color:#052039}

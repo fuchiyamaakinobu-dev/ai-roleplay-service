@@ -53,7 +53,7 @@ unrecognized.run(`state.employeeCode='000000';state.resultSaved=false;var savedP
  scoreRoleplay=()=>({score:0,good:[],improve:[],judgements:[]});finishRoleplay();`);
 const payload=unrecognized.run('savedPayload');
 assert.equal(payload.transcript.at(-1).emergencyAudio.reason,'answer_target_unresolved');
-assert.equal(payload.transcript.at(-1).release,'20261107-5');
+assert.equal(payload.transcript.at(-1).release,unrecognized.run('ROLEPLAY_RELEASE'));
 payload.transcript.at(-1).emergencyAudio.staffText='08012345678への確認ですか？';
 payload.transcript.at(-1).decision.evidence='08012345678への確認ですか？';
 let stored;
@@ -66,7 +66,7 @@ await c.window.ROLEPLAY_RESULTS.saveResult(payload);
 assert.ok(stored);
 assert.equal(stored.transcript.at(-1).emergencyAudio.reason,'answer_target_unresolved');
 assert.match(stored.transcript.at(-1).emergencyAudio.answerTarget,/晴れる/);
-assert.equal(stored.transcript.at(-1).release,'20261107-5');
+assert.equal(stored.transcript.at(-1).release,unrecognized.run('ROLEPLAY_RELEASE'));
 assert.equal(stored.transcript.at(-1).decision.before.step,7);
 assert.equal(stored.transcript.at(-1).decision.after.step,7);
 assert.ok(!JSON.stringify(stored).includes('08012345678'));
