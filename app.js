@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261109-1';
+const ROLEPLAY_RELEASE = '20261111-1';
 
 let speechRecognition = null;
 let speechListening = false;
@@ -7043,7 +7043,42 @@ function asksInspectionPickupLocation(text) {
     && !/(?:電話|携帯|連絡先|番号|返却|納車|お返し|届け)/.test(q);
 }
 
+// A loaner offered as part of a visit invitation does not settle an unresolved
+// collection request. Keep this exception out of standalone loaner guidance.
+function inspectionVisitWithLoanerContext(text) {
+  if (!isPickupInspectionScenario() || state.ended || !state.inspectionPickupActive
+    || !['proposal','location','confirmation'].includes(state.inspectionPickupPhase)) return false;
+  const n = normalizeScriptedText(text);
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  if (!/代車.{0,18}(?:用意|手配|準備)/.test(n)
+    || !/(?:いかが|よろし|可能|来ていただ|お越しいただ)/.test(q)) return false;
+  if (asksCurrentMileage(q) || asksInspectionVehicleConcerns(q)
+    || asksInspectionReminderContactDestination(q) || asksInspectionPickupLocation(q)
+    || /(?:代車.{0,10}(?:必要|不要|使い|利用)|何時|いつ|何日|返却|返し|納車)/.test(q)) return false;
+  return /ドライブがてら/.test(n)
+    || /(?:来店|お越し|来ていただ|持って来).{0,25}(?:いかが|可能|いただ|できます)/.test(n)
+    || /(?:用意|手配|準備).{0,30}(?:ので|から|ますし).{0,20}(?:来店|お越し|来ていただ|持って来)/.test(n);
+}
+
+function answerInspectionVisitWithLoaner(text) {
+  if (!inspectionVisitWithLoanerContext(text)) return false;
+  const item = audioIndex.get('inspection_pickup_still_requested');
+  if (!item || !audioPath(item.id)) return false;
+  rememberFutureScriptedAchievements(text, -1);
+  state.turn += 1;
+  addMessage('customer',item.text,{audioId:item.id});
+  // Do not invent visit agreement, a loaner request or a confirmed appointment.
+  // Later reason-appropriate proposals still use the existing visit branch.
+  renderProgress();
+  return true;
+}
+
 function inspectionSpeechAnalysisCandidates(text) {
+  if (inspectionVisitWithLoanerContext(text)) {
+    const item = audioIndex.get('inspection_pickup_still_requested');
+    return item?.status === 'ready' && audioPath(item.id)
+      ? [{id:item.id,action:'inspection_pickup_choice',text:item.text}] : [];
+  }
   if (!isVehicleInspectionScenario() || state.ended || isInspectionServiceDismissal(text)) return [];
   const q = normalizeScriptedText(inspectionLastQuestionClause(text));
   const n = normalizeScriptedText(text);
@@ -7075,6 +7110,7 @@ function inspectionSpeechAnalysisCandidates(text) {
 }
 
 function applyInspectionSpeechAnalysis(text, selection = null) {
+  if (inspectionVisitWithLoanerContext(text)) return answerInspectionVisitWithLoaner(text);
   const candidate = inspectionSpeechAnalysisCandidates(text)[0];
   if (!candidate) return false;
   const topics = {inspection_return_confirmation:'return_confirmation',inspection_loaner_offer:'loaner_offer',inspection_pending_pickup:'booking_procedure'};
@@ -7222,6 +7258,7 @@ function inspectionAllSpeechCandidates(text) {
 // wording first. Keep legacy candidates for stateful booking/collection actions.
 function inspectionSemanticCandidates(text) {
   if (!isVehicleInspectionScenario() || state.ended) return [];
+  if (inspectionVisitWithLoanerContext(text)) return inspectionSpeechAnalysisCandidates(text);
   const candidates = [];
   const add = (id, action) => {
     const item = audioIndex.get(id);
@@ -7294,7 +7331,8 @@ function applyInspectionLlmSelection(text, selection, semanticCandidates = null)
     return true;
   }
   if (candidate.action === "inspection_pickup_confirmation") return answerInspectionPickupArrangementConfirmation(text);
-  if (candidate.action === "inspection_pickup_choice") return answerInspectionPickupChoice(text);
+  if (candidate.action === "inspection_pickup_choice") return inspectionVisitWithLoanerContext(text)
+    ? answerInspectionVisitWithLoaner(text) : answerInspectionPickupChoice(text);
   if (candidate.action === "inspection_wrong_name") return answerInspectionWrongName(text);
   if (candidate.action === "inspection_extra" && !(semantic && candidate.id === 'inspection_vehicle_condition_no_concerns')) return applyPickupExtra(text, candidate);
   // Score only the original speech. Model choices are never evidence of achievement.
@@ -7358,7 +7396,7 @@ function handleInspectionLlmReply(text) {
   const request = { text, live: true, candidates,
     context: { phase: candidates.some(c => c.action === "inspection_wrong_name")
       ? `inspection:identity:${String(scenario.customerName).slice(0, 25)}` : `inspection:${state.inspectionPickupPhase || state.scriptStep}`,
-      situation: JSON.stringify({admission:((a) => a ? {month:a.month,day:a.day,hour:a.hour,minute:a.minute,period:a.period} : null)(state.proposedAppointment || state.inspectionAppointmentCandidate),pickupPending:Boolean(state.inspectionPickupActive),pickupOutcome:state.inspectionPickupOutcome || null,delivery:state.pickupAudioMemory?.delivery || null,loanerRequested:Boolean(state.inspectionLoanerRequested)}),
+      situation: JSON.stringify({...(inspectionVisitWithLoanerContext(text) ? {proposalContext:'代車提供は来店提案の条件。引取希望は未解決。最後の問いは来店か引取かの選択（waiting）。代車だけへの了承にしない。'} : {}),admission:((a) => a ? {month:a.month,day:a.day,hour:a.hour,minute:a.minute,period:a.period} : null)(state.proposedAppointment || state.inspectionAppointmentCandidate),pickupPending:Boolean(state.inspectionPickupActive),pickupOutcome:state.inspectionPickupOutcome || null,delivery:state.pickupAudioMemory?.delivery || null,loanerRequested:Boolean(state.inspectionLoanerRequested)}),
       additionalAnswered: hasInspectionOilChangeRequest(), timeExplained: state.inspectionDurationQuestionAsked === true },
     history: transcript.slice(0, -1).filter(m => ["staff", "customer"].includes(m.role))
       .slice(-4).map(m => ({ role: m.role, text: m.text.slice(0, 250) })) };
