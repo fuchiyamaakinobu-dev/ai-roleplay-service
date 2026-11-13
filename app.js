@@ -1002,10 +1002,19 @@ const inspectionQuestionTopics = [
   {key:'documents',label:'持参品',question:/必要な物を教えて|ほかに持って行く物/,answer:t=>/(?:車検証|自賠責|納税証明|ロックナット|専用工具)/.test(t)},
   {key:'expiry',label:'車検期限',question:/車検はいつまで|いつまでに受け/,answer:t=>/(?:満了|期限|車検切れ)/.test(t)&&/\d{1,2}月\d{1,2}日/.test(t)}
 ];
+function inspectionStoreQuestionHistory() {
+  // The caller's opening store name does not answer which nearby store is offered.
+  let start = -1;
+  state.transcript.forEach((m,index) => {
+    if (start < 0 && m.role === 'staff' && /(?:近く|近隣|最寄り).{0,20}(?:店舗|店)/.test(normalizeScriptedText(m.text))
+      && !inspectionVisitStoreName(m.text)) start = index;
+  });
+  return state.transcript.slice(Math.max(0,start));
+}
 function inspectionUnansweredQuestions() {
   if (!isVehicleInspectionScenario()) return [];
   return inspectionQuestionTopics.filter(topic => {
-    const history = topic.key === 'time' ? inspectionTimeQuestionHistory() : state.transcript;
+    const history = topic.key === 'time' ? inspectionTimeQuestionHistory() : topic.key === 'store' ? inspectionStoreQuestionHistory() : state.transcript;
     return history.some(m=>m.role==='customer'&&topic.question.test(normalizeScriptedText(m.text)))
       && !history.some(m=>m.role==='staff'&&topic.answer(normalizeScriptedText(m.text)));
   });
@@ -1031,7 +1040,7 @@ function inspectionTimeQuestionHistory() {
 function inspectionRepeatedQuestionReply(text, options) {
   const topic=inspectionQuestionTopics.find(q=>q.question.test(normalizeScriptedText(text)));
   if (!topic) return {text,options};
-  const history = topic.key === 'time' ? inspectionTimeQuestionHistory() : state.transcript;
+  const history = topic.key === 'time' ? inspectionTimeQuestionHistory() : topic.key === 'store' ? inspectionStoreQuestionHistory() : state.transcript;
   const answered=history.some(m=>m.role==='staff'&&topic.answer(normalizeScriptedText(m.text)));
   const asked=history.some(m=>m.role==='customer'&&topic.question.test(normalizeScriptedText(m.text)));
   if (!answered&&!asked) return {text,options};
@@ -1553,6 +1562,13 @@ function looksLikeCompleteJapaneseSentence(text) {
 // 最後に実際に尋ねられた疑問節を優先する。採点には元の発話全体を残す。
 function inspectionLastQuestionClause(text) {
   const source = String(text || "").trim().replace(/[。！!]+$/, '');
+  // Keep the subject of a single question across commas (damage lists, stores,
+  // contact and receiving time). A later sentence/question still takes priority.
+  const finalSentence = source.split(/[。！？!?]/).filter(t => t.trim()).at(-1)?.trim() || source;
+  if (isScriptedQuestion(source) && (asksInspectionGlassDamage(finalSentence)
+    || /(?:近く|近隣|最寄り).{0,20}(?:店舗|店).*(?:いかが|よろし)/.test(finalSentence)
+    || /(?:連絡先|お電話).*(?:こちら|今お話し).*(?:よろし)/.test(finalSentence)
+    || /お受け取りいただけますか/.test(finalSentence))) return finalSentence + (/[？?]$/.test(source) ? source.slice(-1) : '');
   // 疑問符・読点が省かれた音声認識でも、質問の話題が続けば最後を選ぶ。
   // 採点・候補日時の記録には、この切り出しではなく元の発話全体を使用する。
   const lastTopicClause = (clause) => {
@@ -1850,7 +1866,7 @@ function hasInspectionOilChangeRequest() {
 function asksInspectionAdditionalServiceFollowUp(text) {
   const normalized = normalizeScriptedText(text);
   if (!isScriptedQuestion(normalized)) return false;
-  const asksAboutOtherWork = /(?:その他|そのほか|ほかに|他に|追加)/.test(normalized);
+  const asksAboutOtherWork = /(?:その他|そのほか|ほかに|他に|追加|車検以外|ご希望の作業)/.test(normalized);
   // 「追加整備」だけでなく、音声会話で自然に挟まれる
   // 「追加する整備」「ほかに整備」なども同じ再確認として扱う。
   // オイル交換を受け付けた直後は「その他、気になるところはございませんか」も
@@ -2793,6 +2809,7 @@ function hasExplicitBookingContinuationConfirmation(text) {
   if (isScriptedQuestion(normalized) && /(?:引き続き|このまま)/.test(normalized)
     && /(?:車検|予約|手続き)/.test(normalized) && /説明/.test(normalized)
     && /(?:お電話|お話).{0,12}(?:よろしい|よろしかった|大丈夫)/.test(normalized)) return true;
+  if (isScriptedQuestion(normalized) && /(?:このまま|引き続き).{0,16}(?:予約|手続き).{0,20}(?:進め|続け).{0,12}(?:よろし|大丈夫)/.test(normalized)) return true;
   return hasBookingContinuationConfirmation(normalized)
     && /(?:予約|手続き|このまま.{0,30}(?:車検|説明)|車検.{0,20}説明)/.test(normalized)
     && /(?:10分|十分|もう少し|少し|お時間)/.test(normalized);
@@ -3017,7 +3034,9 @@ function inspectionReplyFocus(text) {
   if (!isScriptedQuestion(n) && !asksCurrentMileage(target) && !/(?:教えて|お聞かせ).*(?:ください|いただけ)/.test(n)) return null;
   let topic = null;
   if (asksInspectionIdentityConfirmation(target)) topic = 'identity';
-  else if (asksInspectionCallTimingPermission(target)) topic = 'call_permission';
+  else if (asksInspectionCallTimingPermission(target) || !state.inspectionPickupActive && hasExplicitBookingContinuationConfirmation(target)) topic = 'call_permission';
+  else if (!state.proposedAppointment && !state.inspectionPickupActive && /(?:車検|入庫).{0,15}お任せいただけ/.test(n)) topic = 'booking_intent';
+  else if (!state.proposedAppointment && state.inspectionPickupActive && /(?:引取|引き取り).{0,12}(?:ご希望日|希望日).*(?:ありますか|ございますか)/.test(n)) topic = 'weekday';
   else if (!state.proposedAppointment && !state.inspectionAppointmentCandidate
     && !state.inspectionBookingCancelled && !state.inspectionPickupActive
     && !inspectionAppointmentDateCandidates(target).length && !/\d{1,2}時/.test(n)
@@ -3037,6 +3056,7 @@ function inspectionFocusedCandidates(text) {
   const focus = inspectionReplyFocus(text);
   if (!focus?.topic) return null;
   let id, action;
+  if (focus.topic === 'booking_intent') { id = 'inspection_asked_availability_customer'; action = 'inspection_booking_intent'; }
   if (focus.topic === 'identity') { id = 'inspection_confirmed_identity_customer'; action = 'inspection_identity'; }
   if (focus.topic === 'call_permission') { id = 'inspection_confirmed_booking_time_customer'; action = 'inspection_call_permission'; }
   if (focus.topic === 'weekday') { id = 'inspection_day_preference_answer'; action = 'inspection_weekday'; }
@@ -3308,7 +3328,7 @@ function answerInspectionWrongName(text) {
 }
 
 function repeatedInspectionCoreStepAfterAppointment(text) {
-  if (!state.proposedAppointment) return null;
+  if (!state.proposedAppointment || isScriptedQuestion(normalizeScriptedText(text))) return null;
   const appointmentStepIndex = scenario.steps.findIndex((candidate) => candidate.key === "proposed_appointment");
   if (appointmentStepIndex < 0) return null;
   const coreKeys = new Set([
@@ -4328,6 +4348,52 @@ function markPickupRouteBaseStepsNotApplicable() {
   state.currentState = scenario.steps[state.scriptStep]?.state || state.currentState;
 }
 
+function inspectionAddressConfirmation(text) {
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  return isPickupInspectionScenario() && (state.inspectionPickupActive || state.inspectionPickupOutcome === 'pickup')
+    && /(?:登録|ご住所|住所)/.test(q) && /住所.{0,12}変更.{0,10}(?:ありませんか|ないですか|ございませんか)/.test(q);
+}
+
+function answerInspectionAddressConfirmation(text) {
+  if (!inspectionAddressConfirmation(text)) return false;
+  state.turn += 1;
+  addMessage('customer','大丈夫ですよ。',{audioId:'inspection_confirmed_booking_time_customer',
+    semanticSelection:{id:'inspection_confirmed_booking_time_customer',topic:'consent',answerTarget:inspectionLastQuestionClause(text)}});
+  renderProgress();
+  return true;
+}
+
+function inspectionNearbyStoreCandidate(text) {
+  if (!isPickupInspectionScenario() || !state.inspectionPickupActive
+    || !['distance','driving'].includes(state.inspectionPickupReason)) return null;
+  const q = inspectionLastQuestionClause(text);
+  const n = normalizeScriptedText(q);
+  if (!isScriptedQuestion(n) || !/(?:いかが|よろし)/.test(n)) return null;
+  const previous = state.transcript.filter(m => m.role === 'customer').at(-1);
+  if (previous?.audioId === 'inspection_nearby_store_question_customer' && inspectionVisitStoreName(text))
+    return state.variantSeed % 3 === 0 ? 'inspection_pickup_still_requested' : 'inspection_pickup_visit_agreement';
+  if (/(?:近く|近隣|最寄り).{0,20}(?:店舗|店)/.test(n) && !inspectionVisitStoreName(q))
+    return 'inspection_nearby_store_question_customer';
+  return null;
+}
+
+function answerInspectionNearbyStore(text) {
+  const id = inspectionNearbyStoreCandidate(text);
+  if (!id) return false;
+  rememberFutureScriptedAchievements(text,-1);
+  const evidence = inspectionPickupProposalEvidence(text,state.inspectionPickupReason);
+  markInspectionPickupMetric('pickup_circumstance_acknowledged',evidence.acknowledged,text);
+  markInspectionPickupMetric('pickup_alternative_proposed',true,text);
+  state.turn += 1;
+  addMessage('customer',audioIndex.get(id).text,{audioId:id,onReplyAccepted: message => {
+    if (message.audioId !== id || message.emergencyAudio) return;
+    if (id === 'inspection_pickup_still_requested') {state.inspectionPickupOutcome='pickup';state.inspectionPickupPhase='location';}
+    if (id === 'inspection_pickup_visit_agreement') {state.inspectionPickupOutcome='visit';state.inspectionPickupPhase='resolved';state.inspectionPickupActive=false;}
+  }});
+  renderProgress();
+  return true;
+}
+
 function inspectionPickupVisitResponse(reason, text = "") {
   if (/(?:近く|近い|近隣|最寄り).{0,20}(?:店舗|店)/.test(normalizeScriptedText(text))
     && !inspectionVisitStoreName(text)) {
@@ -5282,6 +5348,8 @@ function handleInspectionInstructionReply(text) {
 }
 
 function handleScriptedStaffReply(text) {
+  if (answerInspectionAddressConfirmation(text)) return;
+  if (answerInspectionNearbyStore(text)) return;
   if (answerInspectionServiceDismissal(text)) return;
   if (answerInspectionPartialAppointment(text)) return;
   if (answerInspectionTimePreference(text)) return;
@@ -7102,12 +7170,12 @@ function inspectionSpeechAnalysisCandidates(text) {
   // Only a final return confirmation, never a new admission proposal or location question.
   const returnQuestion = /^(?:いかがですか|いかがでしょうか|よろしいですか|よろしいでしょうか)[？?。]*$/.test(q)
     ? n.split(/[。！？!?]/).filter(Boolean).at(-1) || q : q;
-  if (/(?:引き渡し|お渡し|お返し|返却|納車|お届け)/.test(returnQuestion)
+  if (/(?:引き渡し|お渡し|お返し|返却|納車|お届け|お受け取り)/.test(returnQuestion)
     && /(?:翌日|作業後|終わ|完了|返却|納車)/.test(n)
     && /(?:時|日|作業後|終わ)/.test(n)
-    && !inspectionAppointmentDateCandidates(text).length) {
+    && (!inspectionAppointmentDateCandidates(text).length || /お受け取り/.test(returnQuestion))) {
     action = 'inspection_return_confirmation';
-    id = state.pickupAudioMemory?.delivery === 'home'
+    id = /お受け取り/.test(returnQuestion) ? 'inspection_confirmed_booking_time_customer' : state.pickupAudioMemory?.delivery === 'home'
       ? 'inspection_delivery_home_request' : 'inspection_explained_lock_and_arrival_customer';
   } else if (/代車/.test(n) && (/(?:代車|そちら|乗っていただ)/.test(q) || /^(?:いかがですか|よろしいでしょうか)[？?。]*$/.test(q)) && /(?:用意|手配|準備|乗っていただ)/.test(n)
     && !/(?:不要|できない|できません|難し|ありません|ない)/.test(q)) {
@@ -7271,6 +7339,9 @@ function inspectionAllSpeechCandidates(text) {
 // wording first. Keep legacy candidates for stateful booking/collection actions.
 function inspectionSemanticCandidates(text) {
   if (!isVehicleInspectionScenario() || state.ended) return [];
+  if (inspectionAddressConfirmation(text)) return [{id:'inspection_confirmed_booking_time_customer',action:'inspection_ack_consent',text:'大丈夫ですよ。'}];
+  const nearby = inspectionNearbyStoreCandidate(text);
+  if (nearby) return [{id:nearby,action:'inspection_pickup_choice',text:audioIndex.get(nearby).text}];
   if (inspectionVisitWithLoanerContext(text)) return inspectionSpeechAnalysisCandidates(text);
   if (asksInspectionGlassDamage(inspectionLastQuestionClause(text))) return inspectionFocusedCandidates(text) || [];
   const candidates = [];
@@ -7345,6 +7416,7 @@ function applyInspectionLlmSelection(text, selection, semanticCandidates = null)
     return true;
   }
   if (candidate.action === "inspection_pickup_confirmation") return answerInspectionPickupArrangementConfirmation(text);
+  if (candidate.action === "inspection_pickup_choice" && inspectionNearbyStoreCandidate(text)) return answerInspectionNearbyStore(text);
   if (candidate.action === "inspection_pickup_choice") return inspectionVisitWithLoanerContext(text)
     ? answerInspectionVisitWithLoaner(text) : answerInspectionPickupChoice(text);
   if (candidate.action === "inspection_wrong_name") return answerInspectionWrongName(text);
@@ -7399,6 +7471,7 @@ function handleInspectionLlmReply(text) {
   const candidates = inspectionSemanticCandidates(text);
   resolver?.noteCandidates?.(candidates);
   const fallback = () => {
+    if (answerInspectionNearbyStore(text) || answerInspectionAddressConfirmation(text)) return;
     if (answerInspectionServiceDismissal(text) || answerInspectionPartialAppointment(text)
       || answerInspectionTimePreference(text)) return;
     if (!inspectionReplyFocus(text)?.topic && handleInspectionBookingOutcome(text)) return;

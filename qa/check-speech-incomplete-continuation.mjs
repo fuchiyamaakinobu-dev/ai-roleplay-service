@@ -70,6 +70,8 @@ const questionContext = {
   looksLikeCompleteJapaneseSentence: () => true
 };
 vm.createContext(questionContext);
+vm.runInContext(source.slice(source.indexOf('function isScriptedQuestion('),source.indexOf('function inspectionPartialPhaseResponse('))
+  + source.slice(source.indexOf('function asksInspectionGlassDamage('),source.indexOf('function inspectionReplyFocus(')),questionContext);
 vm.runInContext(
   `${source.slice(questionClauseStart, questionClauseEnd)}\nthis.inspectionLastQuestionClause = inspectionLastQuestionClause; this.isInspectionIncompleteOrNoiseUtterance = isInspectionIncompleteOrNoiseUtterance;`,
   questionContext
