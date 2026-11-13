@@ -134,7 +134,11 @@ scoringContext.inspectionStorageScoringEvidence = () => ({storage:false, nonWait
 // This fixture isolates not-applicable weighting; question/insurance evidence has dedicated tests.
 scoringContext.inspectionUnansweredQuestions = () => [];
 scoringContext.inspectionVoluntaryInsuranceGuidance = () => false;
+// Include the new required check while retaining the isolated weighting assertion.
+scoringContext.state.transcript = [{role:'staff',text:'フロントガラスにヒビはありませんか？'}];
+scoringContext.normalizeScriptedText = text => String(text).replace(/\s+/g,'');
 vm.createContext(scoringContext);
+vm.runInContext(appSource.slice(appSource.indexOf('function asksInspectionGlassDamage('), appSource.indexOf('function inspectionReplyFocus(')), scoringContext);
 vm.runInContext(appSource.slice(scoringStart, scoringEnd), scoringContext);
 const result = scoringContext.scoreScriptedRoleplay();
 assert.equal(result.score, 100, "対象外の代車6点を除いた満点換算になりません");

@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261111-1';
+const ROLEPLAY_RELEASE = '20261113-1';
 
 let speechRecognition = null;
 let speechListening = false;
@@ -2997,6 +2997,17 @@ function asksOpenInspectionDatePreference(text) {
     || (asksWhenPlanWorks && asksForAnswer) || asksWhenConvenient || requestsPreferredDay;
 }
 
+// A damage check needs a named part, subsequent damage wording and a question.
+// Evaluate each clause separately so unrelated questions cannot grant credit.
+function asksInspectionGlassDamage(text) {
+  return String(text || '').split(/[。！？?\n]/).some(clause => {
+    const n = normalizeScriptedText(clause);
+    return /(?:フロントガラス|ガラス|ヘッドライト|レンズ|ランプ|ライト|灯火類).{0,90}(?:割れ|われ|ヒビ|ひび|亀裂|穴|損傷|カケ|欠け|かけ)/.test(n)
+      && /(?:ありませんか|ございませんか|いませんか|いますか|ありますか|ですか|でしょうか|ないですか|ないでしょうか|ないか.{0,12}(?:教えて|お聞かせ))/.test(n)
+      && !/(?:確認しなく|確認不要|聞かなく)/.test(n);
+  });
+}
+
 // One answer target for candidate selection and the rule fallback. Earlier clauses
 // remain in the original text for scoring and as conditions, not competing questions.
 function inspectionReplyFocus(text) {
@@ -3013,7 +3024,7 @@ function inspectionReplyFocus(text) {
     && (asksOpenInspectionDatePreference(target) || asksInspectionDayPreference(target))) topic = 'weekday';
   else if (asksCurrentMileage(target)) topic = 'mileage';
   else if (asksInspectionReminderContactDestination(target)) topic = 'contact';
-  else if (asksInspectionVehicleConcerns(target) || asksInspectionAdditionalServiceFollowUp(target) || asksInspectionOilChangeOffer(target)) topic = 'work';
+  else if (asksInspectionGlassDamage(target) || asksInspectionVehicleConcerns(target) || asksInspectionAdditionalServiceFollowUp(target) || asksInspectionOilChangeOffer(target)) topic = 'work';
   // A validated model analysis may survive id=rule. Never replace a known local
   // target/topic or accept an earlier clause as the model's answer target.
   if (!topic && inspectionSemanticContext?.text === text
@@ -3037,10 +3048,11 @@ function inspectionFocusedCandidates(text) {
   }
   if (focus.topic === 'contact') { id = 'inspection_confirmed_reminder_contact_customer'; action = 'inspection_contact'; }
   if (focus.topic === 'work') {
+    const damage = asksInspectionGlassDamage(focus.target);
     const concernsOnly = asksInspectionVehicleConcerns(focus.target) && !/(?:オイル|交換|追加|作業)/.test(focus.target);
-    id = concernsOnly ? 'inspection_vehicle_condition_no_concerns'
+    id = damage ? 'inspection_confirmed_booking_time_customer' : concernsOnly ? 'inspection_vehicle_condition_no_concerns'
       : hasInspectionOilChangeRequest() ? 'inspection_additional_service_none_customer' : 'inspection_asked_vehicle_concerns_customer';
-    action = concernsOnly ? 'inspection_extra' : 'inspection_work';
+    action = !damage && concernsOnly ? 'inspection_extra' : 'inspection_work';
   }
   const item = audioIndex.get(id);
   return item?.status === 'ready' && audioPath(id) ? [{id, action, text:item.text}] : [];
@@ -3052,7 +3064,8 @@ function answerInspectionFocusedFallback(text) {
   const candidates = inspectionFocusedCandidates(text);
   if (!candidates?.length) return false;
   return applyInspectionLlmSelection(text, {id:candidates[0].id, kind:'question',
-    topic:focus.topic, answerTarget:focus.target, evidence:focus.target});
+    topic:focus.topic, answerTarget:focus.target, evidence:focus.target},
+    asksInspectionGlassDamage(focus.target) ? candidates : null);
 }
 
 function guardInspectionFinalQuestionReply(text, options = {}) {
@@ -7259,6 +7272,7 @@ function inspectionAllSpeechCandidates(text) {
 function inspectionSemanticCandidates(text) {
   if (!isVehicleInspectionScenario() || state.ended) return [];
   if (inspectionVisitWithLoanerContext(text)) return inspectionSpeechAnalysisCandidates(text);
+  if (asksInspectionGlassDamage(inspectionLastQuestionClause(text))) return inspectionFocusedCandidates(text) || [];
   const candidates = [];
   const add = (id, action) => {
     const item = audioIndex.get(id);
@@ -8072,6 +8086,7 @@ function scoreScriptedRoleplay() {
   const unansweredQuestions = inspectionUnansweredQuestions();
   const insuranceGuidance = inspectionVoluntaryInsuranceGuidance();
   const insuranceBonus = insuranceGuidance ? 2 : 0;
+  const damageChecked = state.transcript.some(m => m.role === "staff" && asksInspectionGlassDamage(m.text));
   const clarificationPenalty = Math.min(20, Math.max(retryCount, unansweredQuestions.length) * 2);
   const earnedPoints = applicableScoring.reduce(
     (sum, metric) => sum + (achieved[metric.key] ? metric.points : 0),
@@ -8089,7 +8104,7 @@ function scoreScriptedRoleplay() {
   const minimumAppointmentPenalty = minimumAppointmentMissing ? 20 : 0;
   const score = Math.max(
     0,
-    Math.min(100, baseScore + insuranceBonus - clarificationPenalty - minimumAppointmentPenalty - (completionMissing ? 5 : 0))
+    Math.min(100, baseScore + insuranceBonus - clarificationPenalty - minimumAppointmentPenalty - (completionMissing ? 5 : 0) - (damageChecked ? 0 : 5))
   );
   const good = applicableScoring
     .filter((metric) => achieved[metric.key])
@@ -8149,13 +8164,14 @@ function scoreScriptedRoleplay() {
     return `${label}: ${status}${attempts.length > 1 ? `（${attempts.length}回発話）` : ""}`;
   });
 
+  judgements.push(`ガラス・灯火類の損傷確認: ${damageChecked ? '○' : '要改善（5点減点）'}`);
   if (storageEvidence.nonWaiting) judgements.push(`予定終了日時: ${storageEvidence.completion ? '○' : '要改善（5点減点）'}`);
   if (storageEvidence.pickup) judgements.push('10分・15分前来店案内: 対象外（引取納車）');
 
   return {
     score,
     good: [...good.slice(0, 4), ...(insuranceGuidance ? ['任意保険の証券持参と契約・補償内容の確認をご案内できています（2点加点・上限100点）'] : [])],
-    improve: [...improve.slice(0, 4), ...(!insuranceGuidance ? ['追加アドバイス（減点なし）：自動車保険（任意保険）の保険証券もお持ちいただき、当日に契約内容・補償内容を確認することをご案内しましょう。例：「自動車保険の保険証券もお持ちください。当日、補償内容を確認させていただきます。」'] : [])],
+    improve: [...improve.slice(0, 4), ...(!damageChecked ? ['ガラス・灯火類の損傷確認がありません（5点減点）。日時や作業時間を決める前に「フロントガラスやヘッドライト等に割れやヒビはありませんか？」と確認してください。'] : []), ...(!insuranceGuidance ? ['追加アドバイス（減点なし）：自動車保険（任意保険）の保険証券もお持ちいただき、当日に契約内容・補償内容を確認することをご案内しましょう。例：「自動車保険の保険証券もお持ちください。当日、補償内容を確認させていただきます。」'] : [])],
     recommendedTalkTitle: "推奨トーク",
     recommendedTalk: scenario.recommendedTalk,
     judgements,

@@ -25,6 +25,7 @@ console.log('預かり代車確認・不要回答・引取時の工具のみ判�
 
 // Verify actual score differences, not only text detection.
 s.run('scenario.scoring=[{key:"explained_loaner",points:6,label:"代車",action:"確認する"},{key:"explained_lock_and_arrival",points:94,label:"工具",action:"案内する"}];state.transcript=[];state.analyses=[{explained_loaner:true,explained_lock_and_arrival:true}];state.inspectionPickupOutcome=null;state.inspectionWaitingMethod=null;');
+put('staff','フロントガラスにヒビはありませんか？');
 put('staff','一日お預かりでよろしいですか？');put('customer','はい。');
 assert.equal(s.run('scoreScriptedRoleplay().score'),89,'代車6点と終了日時5点が未達');
 assert.match(s.run('scoreScriptedRoleplay().improve.join(" ")'),/代車確認項目は未達/);
