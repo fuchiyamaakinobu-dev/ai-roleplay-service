@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261113-1';
+const ROLEPLAY_RELEASE = '20261113-2';
 
 let speechRecognition = null;
 let speechListening = false;
