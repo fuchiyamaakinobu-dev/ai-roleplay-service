@@ -5,7 +5,7 @@ for(const mode of ['off','hold','error','wrong']){
  const s=create('over60000',mode);
  await s.say('そうですか。6万キロでしたら一日車検というのをお勧めしているんですがいかがですか？');assert.match(s.run('state.transcript.at(-1).text'),/どれくらい時間/);count++;
  for(const t of ['8月の22日か23日どちらも営業していますが、いかがですか？','8月の22日23日、どちらがよろしいですか？','8月の22日と23日。Gどちらがよろしいですか？']){
-  await s.say(t);assert.equal(s.run('state.transcript.at(-1).emergencyAudio.reason'),'missing_registered_audio');assert.equal(s.run('state.inspectionAppointmentCandidate'),null);assert.equal(s.run('state.proposedAppointment'),null);count++;
+  await s.say(t);assert.equal(s.run('state.transcript.at(-1).audioId'),'inspection_preferred_earlier_date_customer');assert.equal(s.run('state.scriptedPartialReplies.inspectionPickupDate.text'),'8月22日');assert.equal(s.run('state.inspectionAppointmentCandidate'),null);assert.equal(s.run('state.proposedAppointment'),null);count++;
  }
  await s.say('佐藤様。8月の22日の朝9時半ではいかがですか？');assert.equal(s.run('state.transcript.at(-1).audioId'),'inspection_appointment_single_time_customer');assert.equal(s.run('state.inspectionAppointmentCandidate.minute'),30);assert.equal(s.run('state.inspectionAppointmentCandidate.period'),'午前');count++;
  const low=create('low',mode);await low.say('オイル交換もさせていただきますねそれでも1時間半位で車検可能だったのですが9月の17日午前10時半とかでいかがでしょうか');assert.equal(low.run('state.transcript.at(-1).audioId'),'inspection_appointment_single_time_customer');assert.equal(low.run('state.inspectionAppointmentCandidate.day'),'17');count++;

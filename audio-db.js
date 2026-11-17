@@ -504,3 +504,5 @@ window.ROLEPLAY_AUDIO_DB.items.push({
   text:'不適切な発言があった為、ロープレを終了します',
   file:'roleplay_terminated_inappropriate_speech.mp3',status:'ready'
 });
+
+window.ROLEPLAY_AUDIO_DB.items.push({id:"inspection_preferred_earlier_date_customer",label:"複数日付から早い日を選択",text:"では、早い方の日でお願いします。",file:"inspection_preferred_earlier_date_customer.mp3",status:"ready"});

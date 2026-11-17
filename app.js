@@ -7542,7 +7542,7 @@ function inspectionAdmissionTimeText(text) {
 
 // 両車検で同じ日付・時刻の保持を使用し、引取の場所確認には割り込まない。
 function inspectionMultipleDateChoice(text) {
-  if (!isVehicleInspectionScenario()) return false;
+  if (!isVehicleInspectionScenario() || state.ended || state.proposedAppointment) return false;
   const n = normalizeScriptedText(text);
   const q = normalizeScriptedText(inspectionLastQuestionClause(text));
   return /(?:どちら|いかが)/.test(q) && /\d{1,2}月\d{1,2}日(?:か|と|、|\s)*\d{1,2}日/.test(n)
@@ -7552,8 +7552,17 @@ function inspectionMultipleDateChoice(text) {
 function answerInspectionMultipleDateChoice(text) {
   if (!inspectionMultipleDateChoice(text)) return false;
   state.turn += 1;
-  // No state change until a matching recording exists and the date choice is heard.
-  addMessage('customer','では、早い方の日でお願いします。',{audioId:'inspection_preferred_earlier_date_customer'});
+  const match = normalizeScriptedText(text).match(/(\d{1,2})月(\d{1,2})日(?:か|と|、|\s)*(\d{1,2})日/);
+  const dateText = `${Number(match[1])}月${Math.min(Number(match[2]),Number(match[3]))}日`;
+  const id = 'inspection_preferred_earlier_date_customer';
+  addMessage('customer','では、早い方の日でお願いします。',{audioId:id,onReplyAccepted: message => {
+    // Keep only the date after the registered reply is accepted; never invent a time.
+    if (message.audioId !== id || message.emergencyAudio) return;
+    state.scriptedPartialReplies.inspectionPickupDate = {text:dateText};
+    if (state.inspectionAppointmentCandidate &&
+      `${Number(state.inspectionAppointmentCandidate.month)}月${Number(state.inspectionAppointmentCandidate.day)}日` !== dateText)
+      state.inspectionAppointmentCandidate = null;
+  }});
   renderProgress();
   return true;
 }
