@@ -994,8 +994,13 @@ function contextualInspectionAcknowledgement(role, text, options) {
   return {text:candidate.text,options:{...options,audioId:candidate.id}};
 }
 
+function inspectionDurationAnswerEvidence(text) {
+  const t = normalizeScriptedText(text).replace(/\d{1,2}月(?:の)?\d{1,2}日/g,'');
+  return /(?:[0-9一二三]+時間|[0-9]+分|[0-9一二三]+泊[0-9一二三]+日|[0-9一二三]+日(?:ほど|くらい|で|お預かり))/.test(t)
+    || /朝.{0,16}預か.{0,24}夕方.{0,12}(?:渡し|返し|返却|納車)/.test(t);
+}
 const inspectionQuestionTopics = [
-  {key:'duration',label:'作業時間',question:/(?:どれくらい|どのくらい|どれぐらい).*(?:時間|かか)|何時間/,answer:t=>/(?:[0-9一二三]+時間|[0-9]+分|[0-9一二三]+泊[0-9一二三]+日|[0-9一二三]+日(?:ほど|くらい|で|お預かり))/.test(t)},
+  {key:'duration',label:'作業時間',question:/(?:どれくらい|どのくらい|どれぐらい).*(?:時間|かか)|何時間/,answer:t=>inspectionDurationAnswerEvidence(t)},
   {key:'time',label:'入庫時刻',question:/何時が空いて|何時に(?:伺|行|来)|具体的な日時/,answer:t=>{const admission=inspectionAdmissionTimeText(t);return [...admission.matchAll(/\d{1,2}時(?!間)/g)].length === 1 && !/(?:それとも|または)/.test(admission)}},
   {key:'store',label:'近隣店舗名',question:/近くのお店は.*どちら/,answer:t=>Boolean(inspectionVisitStoreName(t))},
   {key:'loaner',label:'代車の用意',question:/代車.*(?:用意して|貸して|借り|できますか)/,answer:t=>/代車/.test(t)&&/(?:用意|貸|ご利用|ございます|ありません|できません|可能|無料)/.test(t)},
@@ -1588,6 +1593,10 @@ function inspectionLastQuestionClause(text) {
       }
     }
     const topics = [...clause.matchAll(/(?:ご都合|走行距離|距離数|気になる|見てほしい|代車|お時間|お電話(?=.{0,12}(?:よろしい|よろしかった|大丈夫))|\d{1,2}月の?\d{1,2}日.{0,12}?\d{1,2}時(?!間))/g)];
+    if (topics.length === 1 && /\d{1,2}月/.test(topics[0][0])) {
+      const dated = clause.slice(topics[0].index);
+      if (isScriptedQuestion(dated)) return dated;
+    }
     if (topics.length < 2) return clause;
     const lastTopic = topics[topics.length - 1];
     const lastClause = clause.slice(lastTopic.index);
@@ -2540,6 +2549,7 @@ function normalizeScriptedText(text) {
     .replace(/(\d{1,2}月)の?一日(?!間)/g, (match, month) => `${month}1日`)
     .replace(/(\d{1,2}月)の(?=\d{1,2}日)/g, "$1")
     .replace(/(?:台車|代償)/g, "代車")
+    .replace(/朝(?=\d{1,2}時)/g, "午前")
     .replace(/\s+/g, "");
 
   // 日付で使われる固有の読みを先に数値へ変換する。
@@ -2691,7 +2701,7 @@ function asksInspectionWaitingMethodConfirmation(text) {
 function asksInspectionLoanerNeed(text) {
   const normalized = normalizeScriptedText(text);
   const hasLoanerContext = /(?:代車|代わりのお車|代わりの車|代替車)/.test(normalized);
-  const asksNeedOrUse = /(?:必要|使い|お使い|利用|乗って|用意|準備|手配|外出|あった方|あったほう|あれば|ある方|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
+  const asksNeedOrUse = /(?:必要|使い|お使い|利用|乗って|用意|準備|手配|外出|お出かけ|出かけ|あった方|あったほう|あれば|ある方|いかがいたしましょう|いかがでしょう|どうされます|どうします)/.test(normalized);
   const isChoiceQuestion = /(?:でしょうか|ますか|ですか|[?？])/.test(normalized)
     || /(?:いかがいたしましょう|どうされます|どうします)/.test(normalized);
   return hasLoanerContext && asksNeedOrUse && isChoiceQuestion;
@@ -3034,7 +3044,7 @@ function inspectionReplyFocus(text) {
   if (!isScriptedQuestion(n) && !asksCurrentMileage(target) && !/(?:教えて|お聞かせ).*(?:ください|いただけ)/.test(n)) return null;
   let topic = null;
   if (asksInspectionIdentityConfirmation(target)) topic = 'identity';
-  else if (asksInspectionCallTimingPermission(target) || !state.inspectionPickupActive && hasExplicitBookingContinuationConfirmation(target)) topic = 'call_permission';
+  else if (asksInspectionCallTimingPermission(target) || /いつ頃.{0,15}相談.{0,16}(?:いいですか|よろしい)/.test(n) || !state.inspectionPickupActive && hasExplicitBookingContinuationConfirmation(target)) topic = 'call_permission';
   else if (!state.proposedAppointment && !state.inspectionPickupActive && /(?:車検|入庫).{0,15}お任せいただけ/.test(n)) topic = 'booking_intent';
   else if (!state.proposedAppointment && state.inspectionPickupActive && /(?:引取|引き取り).{0,12}(?:ご希望日|希望日).*(?:ありますか|ございますか)/.test(n)) topic = 'weekday';
   else if (!state.proposedAppointment && !state.inspectionAppointmentCandidate
@@ -5146,6 +5156,7 @@ function handleInspectionPickupPreparation(text, decisionText) {
     // 先に提示された日時は候補として保持し、受付方法が決まるまで確定しない。
     if (hasCompleteInspectionAppointmentProposal(text)) {
       state.inspectionAppointmentCandidate = { text, ...inspectionAppointmentProposalMatch(text) };
+      return reply("では、その時間でお願いします。", "inspection_appointment_single_time_customer");
     }
     return reply("はい。", "inspection_thanked_customer_retry");
   }
@@ -7006,12 +7017,14 @@ function inspectionStoreWaitingCandidate(text) {
     || ['over60000','120000'].includes(state.inspectionMileageVariant)
     || state.inspectionLoanerRequested || ['loaner','family'].includes(state.inspectionWaitingMethod)) return null;
   const memory = state.pickupAudioMemory;
-  if (isPickupInspectionScenario() && (state.inspectionPickupOutcome !== 'visit'
+  if (isPickupInspectionScenario() && (state.inspectionPickupOutcome !== 'visit' && !state.proposedAppointment && !state.inspectionAppointmentCandidate
     || memory?.settings?.waiting && memory.settings.waiting !== 'store' || memory?.family)) return null;
   if (state.inspectionPickupOutcome === 'pickup'
     || state.inspectionPickupActive && state.inspectionPickupPhase !== 'resolved') return null;
   const q = inspectionLastQuestionClause(text);
-  if ((!asksInspectionWaitingMethodConfirmation(q) && !hasCompleteInspectionWaitingProposal(text))
+  const explicitWaitingOffer = /お待ちいただ(?:く|いて).{0,35}いかが/.test(normalizeScriptedText(q))
+    && !/(?:待てません|待つことはできません|お待ちいただけません)/.test(q);
+  if ((!asksInspectionWaitingMethodConfirmation(q) && !hasCompleteInspectionWaitingProposal(text) && !explicitWaitingOffer)
     || /(?:それとも|どちら|どっち|代車|引取)/.test(q)) return null;
   // Use the latest duration explanation, including the current compound utterance.
   const duration = [...state.transcript.filter(m=>m.role==='staff').map(m=>m.text),text]
@@ -7177,7 +7190,7 @@ function inspectionSpeechAnalysisCandidates(text) {
     action = 'inspection_return_confirmation';
     id = /お受け取り/.test(returnQuestion) ? 'inspection_confirmed_booking_time_customer' : state.pickupAudioMemory?.delivery === 'home'
       ? 'inspection_delivery_home_request' : 'inspection_explained_lock_and_arrival_customer';
-  } else if (/代車/.test(n) && (/(?:代車|そちら|乗っていただ)/.test(q) || /^(?:いかがですか|よろしいでしょうか)[？?。]*$/.test(q)) && /(?:用意|手配|準備|乗っていただ)/.test(n)
+  } else if (state.inspectionWaitingMethod !== 'store' && /代車/.test(n) && (/(?:代車|そちら|乗っていただ)/.test(q) || /^(?:いかがですか|よろしいでしょうか)[？?。]*$/.test(q)) && /(?:用意|手配|準備|乗っていただ)/.test(n)
     && !/(?:不要|できない|できません|難し|ありません|ない)/.test(q)) {
     action = 'inspection_loaner_offer';
     id = 'inspection_recapped_appointment_customer';
@@ -7338,6 +7351,7 @@ function inspectionAllSpeechCandidates(text) {
 // Semantic candidates are based on customer facts, not on recognizing the staff's
 // wording first. Keep legacy candidates for stateful booking/collection actions.
 function inspectionSemanticCandidates(text) {
+  if (inspectionMultipleDateChoice(text)) return [];
   if (!isVehicleInspectionScenario() || state.ended) return [];
   if (inspectionAddressConfirmation(text)) return [{id:'inspection_confirmed_booking_time_customer',action:'inspection_ack_consent',text:'大丈夫ですよ。'}];
   const nearby = inspectionNearbyStoreCandidate(text);
@@ -7361,7 +7375,8 @@ function inspectionSemanticCandidates(text) {
   add('inspection_confirmed_identity_customer', 'inspection_identity');
   add('inspection_confirmed_booking_time_customer', 'inspection_call_permission');
   if (!state.proposedAppointment && !state.inspectionAppointmentCandidate && !state.inspectionPickupActive) {
-    add('inspection_asked_availability_customer', 'inspection_booking_intent');
+    if (!state.transcript.some(m=>m.role==='customer' && m.audioId==='inspection_asked_availability_customer'))
+      add('inspection_asked_availability_customer', 'inspection_booking_intent');
     if (!state.questionRepeats['inspection-day-preference-answer']) add('inspection_day_preference_answer', 'inspection_weekday');
   }
   for (const c of inspectionAllSpeechCandidates(text)) {
@@ -7377,9 +7392,14 @@ function inspectionSemanticSelectionValid(text, selection, candidate) {
     inspection_identity:'identity',inspection_call_permission:'consent',inspection_weekday:'weekday',
     inspection_booking_intent:'booking_intent'};
   const topic = candidate.id === 'inspection_vehicle_condition_no_concerns' ? 'work' : topics[candidate.action];
-  if (!topic || selection.kind !== 'question' || selection.topic !== topic
+  if (hasCompleteInspectionAppointmentProposal(inspectionLastQuestionClause(text)) && !inspectionReplyFocus(text)?.topic) return false;
+  if (!topic || !(selection.kind === 'question' || candidate.action === 'inspection_booking_intent' && selection.kind === 'request') || selection.topic !== topic
     || !selection.evidence?.trim() || !text.includes(selection.evidence)) return false;
   const answerTarget = selection.answerTarget ?? selection.evidence;
+  if (candidate.action === 'inspection_booking_intent'
+    && (/(?:ワンデー|[1一]日車検)/.test(answerTarget)
+      || /いつ頃.{0,15}相談/.test(answerTarget)
+      || inspectionAppointmentDateCandidates(answerTarget).length)) return false;
   if (!answerTarget.trim() || !text.includes(answerTarget)) return false;
   // Compare quoted spans, not vocabulary. A prior question must not win over the
   // final question, but the model may omit fillers/punctuation in that final span.
@@ -7389,6 +7409,7 @@ function inspectionSemanticSelectionValid(text, selection, candidate) {
 }
 
 function applyInspectionLlmSelection(text, selection, semanticCandidates = null) {
+  if (inspectionMultipleDateChoice(text)) return false;
   const candidate = (semanticCandidates || inspectionAllSpeechCandidates(text)).find(c => c.id === selection?.id);
   if (!candidate) return false;
   if (semanticCandidates && !inspectionSemanticCandidates(text).some(c => c.id === candidate.id)) return false;
@@ -7471,6 +7492,9 @@ function handleInspectionLlmReply(text) {
   const candidates = inspectionSemanticCandidates(text);
   resolver?.noteCandidates?.(candidates);
   const fallback = () => {
+    if (answerInspectionMultipleDateChoice(text)) return;
+    const waiting = inspectionStoreWaitingCandidate(text);
+    if (waiting) return applyPickupExtra(text,waiting);
     if (answerInspectionNearbyStore(text) || answerInspectionAddressConfirmation(text)) return;
     if (answerInspectionServiceDismissal(text) || answerInspectionPartialAppointment(text)
       || answerInspectionTimePreference(text)) return;
@@ -7517,6 +7541,23 @@ function inspectionAdmissionTimeText(text) {
 }
 
 // 両車検で同じ日付・時刻の保持を使用し、引取の場所確認には割り込まない。
+function inspectionMultipleDateChoice(text) {
+  if (!isVehicleInspectionScenario()) return false;
+  const n = normalizeScriptedText(text);
+  const q = normalizeScriptedText(inspectionLastQuestionClause(text));
+  return /(?:どちら|いかが)/.test(q) && /\d{1,2}月\d{1,2}日(?:か|と|、|\s)*\d{1,2}日/.test(n)
+    && !/(?:満了|期限|作業可能|以降|終了|返却|納車)/.test(n)
+    && !asksCurrentMileage(q) && !asksInspectionVehicleConcerns(q) && !asksInspectionLoanerNeed(q);
+}
+function answerInspectionMultipleDateChoice(text) {
+  if (!inspectionMultipleDateChoice(text)) return false;
+  state.turn += 1;
+  // No state change until a matching recording exists and the date choice is heard.
+  addMessage('customer','では、早い方の日でお願いします。',{audioId:'inspection_preferred_earlier_date_customer'});
+  renderProgress();
+  return true;
+}
+
 function answerInspectionPartialAppointment(text) {
   if (!isVehicleInspectionScenario() || state.proposedAppointment
     || state.inspectionBookingCancelled || state.inspectionPickupActive || state.inspectionPickupPhase) return false;
