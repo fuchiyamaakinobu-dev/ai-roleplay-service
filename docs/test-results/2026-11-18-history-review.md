@@ -1,6 +1,6 @@
 # 2026年11月18日 ロープレ修正・検証記録
 
-状態：ローカル修正完了、未公開。作業ブランチ fix/nov18-history-review。修正版番号 20261118-2。変更前コミット 9dab8f4。
+状態：修正・検証完了、Cloudflare公開済み・GitHub Pages mainへ反映済み。作業ブランチ fix/nov18-history-review。修正版番号 20261118-2。変更前コミット 9dab8f4。
 
 ## 修正内容
 
