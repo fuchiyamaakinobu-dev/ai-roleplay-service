@@ -116,3 +116,22 @@ currentToggle.checked=false;currentToggle.events.change();assert.equal(archive.h
 currentToggle.checked=true;currentToggle.events.change();assert.equal(archive.children.length,24);
 audit.resetDecision();assert.equal(archive.children.length,0);
 console.log('全発話履歴: 25発話・未採用保持・候補上書き防止・当時状態・表示切替・リセット OK');
+
+let selectionRequests=0;
+const previousFetch=c.fetch;
+c.fetch=async (...args)=>{if(args[0].endsWith('/select'))selectionRequests++;return previousFetch(...args);};
+simulated={llm:{status:'provider_limit',retryAfterSeconds:60}};
+audit.traceMessage({role:'staff',text:'制限テスト'});
+await audit.select({text:'制限テスト',candidates:[]});
+const requestsBefore=selectionRequests;
+audit.traceMessage({role:'staff',text:'待機中の発話'});
+assert.equal(await audit.select({text:'待機中の発話',candidates:[]}),null);
+assert.equal(selectionRequests,requestsBefore,'Retry-After中に再送しない');
+assert.equal(audit.enabled(),true,'利用者のLLM設定を変更しない');
+c.Date={now:()=>Date.now()+61000};
+simulated={llm:{status:'ok',judgement:{id:'rule',kind:'explanation',topic:'other',evidence:'再開',answerTarget:'再開',conditions:[]}}};
+const resumed={role:'staff',text:'再開'};audit.traceMessage(resumed);
+await audit.select({text:'再開',candidates:[]});
+assert.equal(selectionRequests,requestsBefore+1,'待機期限後は再試行できる');
+assert.match(resumed.responseReason,/選択候補なし/);
+console.log('Groq利用制限: 指定待機時間中の再送抑止・ルール復帰 OK');

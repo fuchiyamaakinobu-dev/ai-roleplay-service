@@ -73,6 +73,7 @@
   displayLabel.append(displayToggle, ' 判定状態を表示（ON／OFF）');
   panel.append(displayLabel, flowView, historyView, textDetails);
   let liveState = null;
+  let providerBlockedUntil = 0;
   const refreshUsage = async (initial = false) => {
     try {
       const response = await fetch(api('/api/status'));
@@ -268,15 +269,36 @@
       const currentTrace = trace;
       if (currentTrace) { currentTrace.candidates = request.candidates.map(c=>({id:c.id,text:c.text})); currentTrace.candidateTexts = request.candidates.map(c => c.text); currentTrace.route = 'LLM判定中'; renderTrace(); }
       if (request.text.length > 2000) { setReason(currentTrace,'input_limit'); return null; }
+      if (Date.now() < providerBlockedUntil) {
+        setReason(currentTrace, 'provider_limit');
+        status.textContent = 'Groqの利用制限中です。再試行時刻まで既存ルールで応答します。';
+        if (currentTrace) { currentTrace.route = '利用制限中 → 既存ルール'; renderTrace(); }
+        return null;
+      }
       status.textContent = '会話の流れから返答を選んでいます…';
       try {
         const response = await fetch(api('/api/select'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(request), signal: AbortSignal.timeout(7000) });
         if (!response.ok) {setReason(currentTrace,'service_error');return null;}
         const data = await response.json();
+        if (data.llm?.status === 'provider_limit' && Number.isFinite(data.llm.retryAfterSeconds)) {
+          providerBlockedUntil = Date.now() + Math.max(1, Math.min(86400, data.llm.retryAfterSeconds)) * 1000;
+        }
         if (!toggle.checked) {setReason(currentTrace,'off');return null;}
         const choice = data.llm?.judgement;
         setReason(currentTrace,data.llm?.status !== 'ok' ? data.llm?.status : choice?.rejectedId ? 'topic_mismatch' : choice?.id==='rule' ? 'rule' : request.candidates.some(c=>c.id===choice?.id)?'selected':'candidate_missing');
+        if (currentTrace && choice?.id === 'rule' && !request.candidates.length && !choice.rejectedId) {
+          currentTrace.reason = '既存ルール対象（選択候補なし・発話分析済み）';
+          if (currentTrace.staffMessage) currentTrace.staffMessage.responseReason = currentTrace.reason;
+        }
+        if (currentTrace && data.llm?.status === 'invalid_output') {
+          const details = {truncated:'出力途中で終了',incomplete:'応答未完了',json_syntax:'JSON構文',invalid_focus:'原文引用の不一致',validation:'必須項目・候補・原文根拠の不一致'};
+          const detail = details[data.llm.detail];
+          if (detail) {
+            currentTrace.reason += '（' + detail + '）';
+            if (currentTrace.staffMessage) currentTrace.staffMessage.responseReason = currentTrace.reason;
+          }
+        }
         if (currentTrace) {
           if (currentTrace.staffMessage && data.llm?.status === 'ok' && choice) currentTrace.staffMessage.responseSource = 'analyzed';
           currentTrace.meaning = choice ? (labels[choice.kind] || choice.kind) + ' ／ ' + (labels[choice.topic] || choice.topic) : '判定取得なし';
@@ -294,7 +316,9 @@
           status.textContent = `LLM選択：「${candidate.text}」（${(data.elapsedMs / 1000).toFixed(2)}秒）`;
           return { ...choice, id: candidate.id };
         }
-        status.textContent = data.llm?.status === 'cooldown'
+        status.textContent = data.llm?.status === 'ok' && choice?.id === 'rule' && !request.candidates.length
+          ? '発話を分析しました。この工程は既存ルールで応答します。'
+          : data.llm?.status === 'cooldown'
           ? '15秒間隔の利用制限のため、今回は既存ルールで応答します。'
           : `LLM選択を採用できませんでした（${data.llm?.status || '応答なし'}${choice?.id === 'rule' ? '・既存処理を選択' : ''}）。今回は既存ルールで応答します。`;
         // Preserve valid analysis on rule/unsupported candidates for the app's

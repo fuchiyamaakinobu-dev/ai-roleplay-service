@@ -26,7 +26,9 @@ assert.equal((await (await handle(request(),env,judge)).json()).llm.status,'dail
 data.set('budget',{day:'2000-01-01',used:50,last:0,blockedUntil:0});
 assert.equal((await (await handle(request(),env,judge)).json()).llm.status,'ok');
 await budget.fetch(new Request('https://budget/block',{method:'POST'}));
-assert.equal((await (await handle(request(),env,judge)).json()).llm.status,'provider_limit');
+const blocked = (await (await handle(request(),env,judge)).json()).llm;
+assert.equal(blocked.status,'provider_limit');
+assert.ok(blocked.retryAfterSeconds > 0 && blocked.retryAfterSeconds <= 60);
 assert.equal((await (await handle(request(),{...env,LLM_ENABLED:'false'},judge)).json()).llm.status,'not_configured');
 assert.ok(!JSON.stringify([...data.values()]).includes('何キロ'));
 assert.ok(!JSON.stringify([...data.values()]).includes('test-secret'));

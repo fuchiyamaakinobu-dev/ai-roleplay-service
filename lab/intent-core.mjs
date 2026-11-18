@@ -58,12 +58,16 @@ export async function judgeWithGroq(text, { apiKey, fetchImpl = fetch, timeoutMs
       return {status:'provider_limit',retryAfterSeconds:Number.isFinite(seconds) ? Math.max(1,Math.ceil(seconds)) : 60};
     }
     const body = await response.json();
-    if (body.choices?.[0]?.finish_reason !== 'stop') return { status: 'invalid_output' };
+    if (body.choices?.[0]?.finish_reason !== 'stop') return { status: 'invalid_output', detail: body.choices?.[0]?.finish_reason === 'length' ? 'truncated' : 'incomplete' };
     try {
-      const decoded = JSON.parse(body.choices[0].message.content);
+      // Accept only a whole JSON document, optionally wrapped in one Markdown fence.
+      // Never extract a seemingly valid object from unrelated model prose.
+      const content = String(body.choices[0].message.content || '').trim();
+      const fenced = content.match(/^```(?:json)?\s*\n([\s\S]*?)\n```$/i);
+      const decoded = JSON.parse(fenced ? fenced[1] : content);
       const judgement = selection ? validateSelection(decoded, selection) : validateJudgement(decoded, text);
       return { status: 'ok', judgement };
-    } catch { return { status: 'invalid_output' }; }
+    } catch (error) { return { status: 'invalid_output', detail: error instanceof SyntaxError ? 'json_syntax' : error.message === 'invalid_focus' ? 'invalid_focus' : 'validation' }; }
   } catch {
     return { status: controller.signal.aborted ? 'timeout' : 'network_error' };
   } finally { clearTimeout(timer); }

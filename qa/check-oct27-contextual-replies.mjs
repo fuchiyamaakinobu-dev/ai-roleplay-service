@@ -25,6 +25,11 @@ console.log('本番addMessage経由: 本人確認・疑問形・所要時間・�
 
 run('state.transcript=[];state.proposedAppointment=null;state.inspectionPickupActive=false;state.inspectionPickupPhase=null;state.inspectionPickupOutcome=null;');
 c.text='工場で直接整備結果をご説明しますので、ご来店いただければと思うのですがいかがですか？';
-for(let i=0;i<3;i++){run('state.transcript.push({role:"staff",text});handleInspectionBookingOutcome(text)');assert.equal(run('state.transcript.at(-1).audioId'),i<2?'inspection_pickup_request_customer':'inspection_pickup_visit_agreement');}
-assert.equal(run('state.inspectionPickupOutcome'),'visit');
-console.log('来店促進: 初期引取希望 → 3回目の促進で来店了承・状態更新 OK');
+for(let i=0;i<4;i++){
+  run('state.transcript.push({role:"staff",text});handleInspectionBookingOutcome(text)');
+  assert.equal(run('state.transcript.at(-1).audioId'),i===0?'inspection_pickup_request_customer':'inspection_pickup_reason_distance');
+  assert.notEqual(run('state.inspectionPickupOutcome'),'visit');
+  if(i>0)assert.equal(run('state.inspectionPickupPhase'),'proposal');
+}
+assert.equal(run('state.inspectionPickupReason'),'distance');
+console.log('来店促進: 引取理由を保持し、同じ説明の反復では来店へ変更しない OK');

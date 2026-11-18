@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261118-1';
+const ROLEPLAY_RELEASE = '20261118-2';
 
 let speechRecognition = null;
 let speechListening = false;
@@ -2196,6 +2196,19 @@ function rememberCompletedCheckpoints(analysis) {
   }
 }
 
+function branchingWaitingCandidate() {
+  if (scenario.id !== "service-12month-visit-promotion" || state.ended
+    || !["ALTERNATIVE_PROPOSAL", "APPOINTMENT_CONFIRMATION"].includes(state.currentState)) return null;
+  const text = state.transcript.filter(m => m.role === "staff").at(-1)?.text || "";
+  const focus = normalizeScriptedText(inspectionLastQuestionClause(text));
+  if (!/(?:お待ち|待って|店内で待)/.test(focus)
+    || !/(?:ますか|でしょうか|ですか|よろしかった|いかが)/.test(focus)
+    || /(?:代車|引取|取りに|それとも|どちら|待てない|待てません|待つことはできません|お待ちいただけません)/.test(focus)) return null;
+  const item = audioIndex.get(scenario.audio.acceptedPickup);
+  return item?.status === "ready" && audioPath(item.id)
+    ? {id: item.id, text: item.text, action: "waiting_confirmation"} : null;
+}
+
 function nextCustomerMessage(analysis, conversationIntent = null) {
   rememberCompletedCheckpoints(analysis);
   // LLM evidence is for reply routing only. Never add it to scoring analyses/checkpoints.
@@ -2231,6 +2244,9 @@ function nextCustomerMessage(analysis, conversationIntent = null) {
       "オイル交換もお願いします。"
     );
   }
+
+  const waiting = branchingWaitingCandidate();
+  if (waiting) return customerTurnFromAudio(waiting.id);
 
   if (state.currentState === "INSPECTION_REQUEST_RECEIVED") {
     if (state.serviceTimeExplained) return pickupRequestTurn();
@@ -4329,6 +4345,8 @@ function inspectionPickupProposalEvidence(text, reason) {
   const acknowledged = inspectionPickupAcknowledgesReason(normalized, reason);
   const alternative = Boolean(
     reasonDefinition?.alternatives.some((word) => normalized.includes(word))
+    || reason === "competitor" && /整備(?:の)?(?:内容|結果)/.test(normalized)
+      && /(?:直接|詳しく)/.test(normalized) && /(?:説明|お伝え)/.test(normalized)
     || ["distance", "driving"].includes(reason)
       && /(?:近く|近い|近隣).{0,20}(?:店舗|店)/.test(normalized)
   );
@@ -4683,7 +4701,10 @@ function handleInspectionPickupBranchReply(text) {
     if (asksVisit) {
       // 引取を希望し続ける理由に合わない再提案だけでは、来店へ変更しない。
       // どの理由でも、単なる来店可否の再確認では引取希望を変更しない。
-      const unresolvedPickupReason = !inspectionPickupProposalEvidence(text, state.inspectionPickupReason).proposal;
+      const proposalEvidence = inspectionPickupProposalEvidence(text, state.inspectionPickupReason);
+      const unresolvedPickupReason = !proposalEvidence.proposal
+        || state.inspectionPickupReason === "competitor" && state.inspectionPickupOutcome === "pickup"
+          && !proposalEvidence.choicePreserved;
       if (unresolvedPickupReason) {
         const retryKey = "inspection-pickup-unfit-visit";
         if (!state.questionRepeats?.[retryKey]) {
@@ -5225,16 +5246,10 @@ function handleInspectionBookingOutcome(text) {
   }
   const benefitInvitation = /(?:来店|お越し|お店|工場)/.test(n) && /(?:工場|整備結果|直接.*説明)/.test(n) && /(?:説明|お伝え)/.test(n) && isScriptedQuestion(n);
   if (isPickupInspectionScenario() && benefitInvitation && !state.inspectionBookingCancelled && !state.proposedAppointment) {
-    const count = state.transcript.filter(m => m.role === 'staff' && /(?:来店|お越し|お店|工場)/.test(m.text) && /(?:いかが|いただけ|できますか)/.test(m.text)).length;
-    if (count >= 3) {
-      state.inspectionPickupActive = false;
-      state.inspectionPickupPhase = 'resolved';
-      state.inspectionPickupOutcome = 'visit';
-      confirmInspectionPickupAppointmentCandidate();
-      state.turn += 1;
-      addMessage('customer', 'それなら、お店に持って行きます。', {audioId:'inspection_pickup_visit_agreement'});
-      renderProgress();
-    } else startInspectionPickupRequest('来店促進に対して引取希望を伝えました。', true);
+    // Preserve the customer's stated reason; repetition is not consent.
+    if (state.inspectionPickupActive) return handleInspectionPickupBranchReply(text);
+    if (state.inspectionPickupPhase || state.inspectionPickupOutcome) return false;
+    startInspectionPickupRequest('来店促進に対して引取希望を伝えました。', true);
     return true;
   }
 
@@ -6964,6 +6979,8 @@ function hasConfirmedInspectionAppointmentRecap(text) {
 }
 
 function llmReplyCandidates(analysis) {
+  const waiting = branchingWaitingCandidate();
+  if (waiting) return [waiting];
   if (scenario.id !== "service-12month-visit-promotion" || state.pickupRequested
     || !["INSPECTION_REQUEST_RECEIVED", "SERVICE_TIME_QUESTION", "ADDITIONAL_SERVICE_REQUEST", "ADDITIONAL_SERVICE_RECONFIRMATION"].includes(state.currentState)) return [];
   const candidates = [];
@@ -6984,7 +7001,9 @@ function applyLlmReplySelection(analysis, selection) {
   const candidate = llmReplyCandidates(analysis).find(c => c.id === selection?.id);
   if (!candidate) return null;
   rememberCompletedCheckpoints(analysis);
-  if (candidate.action === "additional_request") {
+  if (candidate.action === "waiting_confirmation") {
+    return customerTurnFromAudio(candidate.id);
+  } else if (candidate.action === "additional_request") {
     if (state.serviceTimeExplained) state.serviceTimeNeedsReconfirmation = true;
     state.additionalServiceAnswered = true;
     state.additionalServiceResumeState = state.currentState;
@@ -7794,9 +7813,9 @@ function scoreRoleplay() {
 
   const reason = state.pickupReason || state.currentObjection;
   const applicableMetrics = scenario.scoring.filter((metric) => {
-    if (metric.key === "proposed_weekend") return !reason || reason === "work";
+    if (metric.key === "proposed_weekend") return reason === "work";
     if (metric.key === "proposed_other_store") {
-      return !reason || ["distance", "drivingConfidence"].includes(reason);
+      return ["distance", "drivingConfidence"].includes(reason);
     }
     return true;
   });
@@ -8296,7 +8315,7 @@ function scoreScriptedRoleplay() {
     good: [...good.slice(0, 4), ...(insuranceGuidance ? ['任意保険の証券持参と契約・補償内容の確認をご案内できています（2点加点・上限100点）'] : [])],
     improve: [...improve.slice(0, 4), ...(!damageChecked ? ['ガラス・灯火類の損傷確認がありません（5点減点）。日時や作業時間を決める前に「フロントガラスやヘッドライト等に割れやヒビはありませんか？」と確認してください。'] : []), ...(!insuranceGuidance ? ['追加アドバイス（減点なし）：自動車保険（任意保険）の保険証券もお持ちいただき、当日に契約内容・補償内容を確認することをご案内しましょう。例：「自動車保険の保険証券もお持ちください。当日、補償内容を確認させていただきます。」'] : [])],
     recommendedTalkTitle: "推奨トーク",
-    recommendedTalk: scenario.recommendedTalk,
+    recommendedTalk: scenario.recommendedTalk + " 車の気になる症状、フロントガラス・灯火類の割れやヒビを確認してから日程をご案内します。来店時刻は『作業開始10時、受付のため9時45分にご来店ください』のように具体的に伝えます。" + (scenario.id === "vehicle-inspection-pickup-delivery" ? " 他店比較には『他店では引取に対応しているとお聞きなのですね。ご来店なら整備士から直接ご説明できますが、引取も含め、どちらをご希望でしょうか』と確認し、引取希望が続く場合は場所と日時の相談へ進みます。" : ""),
     judgements,
     summary: recapDateMismatch
       ? "日付の案内が曖昧です。会話は完了しましたが、確定日時と最終確認が一致しないため予約復唱を未達として減点しました。"
@@ -8325,7 +8344,7 @@ function buildImprovementTalk(missingMetricKeys, reason = "work", options = {}) 
     competitor: "他店の引取サービスも比較されているのですね。",
     misunderstanding: "以前のご案内と違って聞こえたのですね。",
     family: "ご家族と相談されたいのですね。"
-  }[reason] || "ご来店が難しいのですね。承知しました。";
+  }[reason] || "ご来店が難しいのですね。差し支えなければ、ご事情を教えていただけますか。";
   const talks = {
     acknowledged_request: "ご連絡ありがとうございます。12カ月点検のご依頼ですね。",
     asked_additional_service:
