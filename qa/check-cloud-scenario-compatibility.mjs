@@ -17,8 +17,14 @@ const localScenario = {
   recommendedTalks: {
     distance: "近い店舗または家族との来店をご案内します。"
   },
+  progress: [
+    { state: "APPOINTMENT_CONFIRMATION", label: "日時確認" },
+    { state: "VISIT_GUIDANCE", label: "15分前来店・ロックナット" }
+  ],
   scoring: [
-    { key: "asked_reason", label: "引取事情を受け止めた", action: "引取希望の事情を受け止める", points: 13 }
+    { key: "asked_reason", label: "引取事情を受け止めた", action: "引取希望の事情を受け止める", points: 13 },
+    { key: "explained_visit_early_arrival", label: "15分前の来店案内", points: 4, requiresVisitBooking: true },
+    { key: "explained_visit_lock_nut", label: "用具持参の案内", points: 4, requiresVisitBooking: true }
   ],
   audio: {
     initial: "initial",
@@ -44,8 +50,10 @@ const publishedScenario = {
   recommendedTalks: {
     distance: "お出かけの予定に合わせる方法をご案内します。"
   },
+  progress: [{ state: "APPOINTMENT_CONFIRMATION", label: "入庫日時確認" }],
   scoring: [
-    { key: "asked_reason", label: "引取希望の理由を確認した", action: "引取希望の理由を確認する", points: 13 }
+    { key: "asked_reason", label: "引取希望の理由を確認した", action: "引取希望の理由を確認する", points: 13 },
+    { key: "explained_visit_early_arrival", label: "旧文", points: 10 }
   ],
   audio: {
     initial: "initial",
@@ -176,10 +184,14 @@ assert.equal(normalized.objections.distance.expected, localScenario.objections.d
 assert.equal(normalized.recommendedTalks.distance, localScenario.recommendedTalks.distance);
 assert.equal(normalized.scoring[0].label, "引取事情を受け止めた");
 assert.equal(normalized.scoring[0].action, "引取希望の事情を受け止める");
+assert.deepEqual(JSON.parse(JSON.stringify(normalized.scoring.slice(1))), localScenario.scoring.slice(1));
+assert.equal(normalized.progress.length, 2);
+assert.equal(normalized.progress[0].label, "入庫日時確認");
+assert.equal(normalized.progress[1].state, "VISIT_GUIDANCE");
 assert.equal(appendedScripts.length, 1, "互換補正後にapp.jsが起動していません");
 assert.equal(
   appendedScripts[0].src,
-  "./app.js?v=20261118-2",
+  "./app.js?v=20261119-1",
   "公開更新後もブラウザーキャッシュから古いapp.jsを読み込む可能性があります"
 );
 
