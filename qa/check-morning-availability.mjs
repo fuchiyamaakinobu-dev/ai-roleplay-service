@@ -9,7 +9,7 @@ const serviceTimeHelperStart = source.indexOf("function confirmsUnchangedService
 const serviceTimeHelperEnd = source.indexOf("function isServiceTimeRequirementSatisfied(", serviceTimeHelperStart);
 const start = source.indexOf("function nextQuestionVariant(");
 const analysisEnd = source.indexOf("function collectEvidence(", start);
-const timeSelectionStart = source.indexOf("function selectAppointmentTimeOption(");
+const timeSelectionStart = source.indexOf("function confirmServiceVisit(");
 const timeSelectionEnd = source.indexOf("function selectObjection(", timeSelectionStart);
 const followUpStart = source.indexOf("function appointmentFollowUpTurn(");
 const followUpEnd = source.indexOf("function selectContextualCustomerResponse(", followUpStart);
@@ -36,6 +36,7 @@ const context = {
     questionRepeats: {}
   },
   scenario: {
+    id: "service-12month-visit-promotion",
     audio: {
       appointmentMorningNeedTime: "appointmentMorningNeedTime",
       followUps: []
@@ -56,6 +57,9 @@ const context = {
   },
   confidenceFor() {
     return 1;
+  },
+  mergedProgressAchievements() {
+    return {};
   },
   pickVariant() {
     return "earlier";

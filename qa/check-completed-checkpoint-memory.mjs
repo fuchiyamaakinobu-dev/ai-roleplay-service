@@ -18,6 +18,7 @@ assert.notEqual(end, -1, "確認済み項目とお客様返答関数を読み込
 const context = {
   state: {
     currentState: "VISIT_PROPOSAL",
+    transcript: [],
     serviceTimeExplained: true,
     appointmentDateConfirmed: false,
     appointmentTimeConfirmed: false,
@@ -31,6 +32,7 @@ const context = {
     ended: false
   },
   scenario: {
+    id: "service-12month-visit-promotion",
     scoring: [{ key: "asked_additional_service" }],
     objections: {
       distance: {
@@ -62,6 +64,9 @@ const context = {
   },
   pickRandomIndex() {
     return 0;
+  },
+  mergedProgressAchievements() {
+    return {};
   },
   selectContextualCustomerResponse(analysis) {
     return analysis.proposed_time
@@ -248,7 +253,8 @@ assert.equal(context.state.serviceTimeExplained, true);
 assert.equal(context.state.serviceTimeNeedsReconfirmation, false);
 assert.equal(context.state.appointmentDateConfirmed, true);
 assert.equal(context.state.appointmentTimeConfirmed, true);
-assert.equal(context.state.ended, true);
+assert.equal(context.state.currentState, "VISIT_GUIDANCE");
+assert.equal(context.state.ended, false);
 assert.equal(context.appointmentFollowUpCount, 0);
 assert.doesNotMatch(closing.text, /いつなら空いていますか/);
 

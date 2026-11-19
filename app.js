@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261118-2';
+const ROLEPLAY_RELEASE = '20261119-1';
 
 let speechRecognition = null;
 let speechListening = false;
@@ -465,6 +465,11 @@ function serviceProgressStatus(item, merged) {
       break;
     case "APPOINTMENT_CONFIRMATION":
       achieved = state.appointmentDateConfirmed && state.appointmentTimeConfirmed;
+      break;
+    case "VISIT_GUIDANCE":
+      achieved = state.currentState === "VISIT_GUIDANCE"
+        && Boolean(merged.explained_visit_early_arrival && merged.explained_visit_lock_nut);
+      notApplicable = state.ended && state.currentState !== "VISIT_GUIDANCE";
       break;
     default:
       break;
@@ -1928,6 +1933,24 @@ function asksInspectionCallTimingPermission(text) {
   return (hasCurrentCallContext || hasBareTimePermission || hasContinuedCallPermission) && asksPermission;
 }
 
+function serviceVisitGuidance(normalized) {
+  const sentences = normalized.split(/[。！？!?]/);
+  const fifteenMinutesEarly = /(?<![\d一二三四五六七八九十百千])(?:15|十五)分(?:ほど|くらい|程度)?(?:前|早(?:く|め))/.source;
+  const arrival = /(?:ご?来店|お越し|ご?入庫|来て)/.source;
+  const arrivalRequest = new RegExp(
+    `${fifteenMinutesEarly}(?:までに|を目安に|には?|の|で)?[、,]?(?:(?:当店|店舗|お店|受付)(?:に|へ))?${arrival}(?:を)?(?:ください|下さい|いただ|頂|もら|お願い)`
+    + `|${arrival}(?:は|時間は)[^、,]{0,20}?${fifteenMinutesEarly}(?:で|に)?(?:お願い|です|になります)`
+  );
+  const bringRequest = /(?:(?:お持ち|おもち)(?:いただ|頂|くださ|下さい)|持って(?:きて|来て|お越し)(?:いただ|頂|くださ|下さい|もら|ほしい)|(?:持参|持ち込み)(?:を|して|のうえ|するよう)?(?:いただ|頂|くださ|下さい|お願い)|(?:積んで|車内に入れて)(?:おいて)?(?:いただ|頂|くださ|下さい))/;
+  const waived = /(?:なくて(?:も)?(?:結構|大丈夫|構いません|かまいません|問題ありません)|必要(?:は|が)?(?:ありません|ございません|ない)|不要|いりません|いただ(?:かなくて|けません)|持ってこないで|早く来なくて)/;
+  return {
+    explained_visit_early_arrival: sentences.some((sentence) =>
+      arrivalRequest.test(sentence) && !waived.test(sentence)),
+    explained_visit_lock_nut: sentences.some((sentence) =>
+      bringRequest.test(sentence) && !waived.test(sentence) && hasLockNutToolExpression(sentence))
+  };
+}
+
 function analyzeStaff(text) {
   // 音声認識が主要語をひらがなで返した場合も、表示文を変更せず判定だけをそろえる。
   const normalized = normalizeScriptedText(text);
@@ -2040,6 +2063,7 @@ function analyzeStaff(text) {
       && includesAny(normalized, ["いつ", "何日", "何時", "曜日", "時間帯", "午前", "午後", "ご都合"])
       && includesAny(normalized, ["予約", "来店", "入庫", "ご都合", "曜日", "時間帯", "連絡"]));
 
+  const visitGuidance = serviceVisitGuidance(normalized);
   const result = {
     acknowledged_request: includesAny(normalized, lexicon.thanks) || includesAny(normalized, ["承知", "かしこまり", "そうなのですね"]),
     asked_service_request: askedServiceRequest,
@@ -2065,10 +2089,13 @@ function analyzeStaff(text) {
     has_concrete_schedule: hasConcreteSchedule,
     mentioned_previous_pickup: includesAny(normalized, ["以前", "前回", "前に", "取りに来ると", "取りに伺うと"]),
     proposed_alternative: hasActionableProposal,
-    pressured_customer: hasVisitPressure(normalized),
+    pressured_customer: hasVisitPressure(normalized)
+      && !(state.currentState === "VISIT_GUIDANCE" && visitGuidance.explained_visit_early_arrival),
     refused_pickup: hasPickupRefusal(normalized),
     left_choice: leftChoice,
     next_action_confirmed: nextActionConfirmed,
+    ...visitGuidance,
+    closed_visit: /(?:ありがとうございました|失礼(?:いた|致)?します)(?=$|[。！？!?、,])/.test(normalized),
     ambiguous,
     evidence: collectEvidence(normalized)
   };
@@ -2200,6 +2227,7 @@ function branchingWaitingCandidate() {
   if (scenario.id !== "service-12month-visit-promotion" || state.ended
     || !["ALTERNATIVE_PROPOSAL", "APPOINTMENT_CONFIRMATION"].includes(state.currentState)) return null;
   const text = state.transcript.filter(m => m.role === "staff").at(-1)?.text || "";
+  if (!text) return null;
   const focus = normalizeScriptedText(inspectionLastQuestionClause(text));
   if (!/(?:お待ち|待って|店内で待)/.test(focus)
     || !/(?:ますか|でしょうか|ですか|よろしかった|いかが)/.test(focus)
@@ -2228,6 +2256,18 @@ function nextCustomerMessage(analysis, conversationIntent = null) {
         audioId: scenario.audio.needsMoreContext
       }
     ]);
+  }
+
+  if (state.currentState === "VISIT_GUIDANCE") {
+    const achievements = mergedProgressAchievements();
+    if (analysis.closed_visit || (achievements.explained_visit_early_arrival && achievements.explained_visit_lock_nut)) {
+      state.ended = true;
+      return customerTurnFromAudio(scenario.audio.closings[1] || "closing02");
+    }
+    if (analysis.explained_visit_early_arrival || analysis.explained_visit_lock_nut) {
+      return customerTurnFromAudio(scenario.audio.acceptedPickup);
+    }
+    return customerTurnFromAudio(scenario.audio.continueGeneric);
   }
 
   if (
@@ -2316,8 +2356,7 @@ function nextCustomerMessage(analysis, conversationIntent = null) {
     state.resolutionType = state.resolutionType || "continuedWithMissingConfirmation";
     state.currentState = "ALTERNATIVE_PROPOSAL";
     if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
-      state.ended = true;
-      return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
+      return confirmServiceVisit(customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。"), analysis.closed_visit);
     }
     return appointmentFollowUpTurn(analysis);
   }
@@ -2326,8 +2365,7 @@ function nextCustomerMessage(analysis, conversationIntent = null) {
     const selectedTime = selectAppointmentTimeOption(analysis);
     if (selectedTime) return selectedTime;
     if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
-      state.ended = true;
-      return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
+      return confirmServiceVisit(customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。"), analysis.closed_visit);
     }
     state.currentState = "APPOINTMENT_CONFIRMATION";
     return appointmentFollowUpTurn(analysis);
@@ -2337,8 +2375,7 @@ function nextCustomerMessage(analysis, conversationIntent = null) {
     const selectedTime = selectAppointmentTimeOption(analysis);
     if (selectedTime) return selectedTime;
     if (state.appointmentDateConfirmed && state.appointmentTimeConfirmed) {
-      state.ended = true;
-      return customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。");
+      return confirmServiceVisit(customerTurnFromAudio(scenario.audio.closings[0], "では、その日にお願いします。"), analysis.closed_visit);
     }
     return appointmentFollowUpTurn(analysis);
   }
@@ -2347,6 +2384,18 @@ function nextCustomerMessage(analysis, conversationIntent = null) {
     "ありがとうございます。続けてお願いします。",
     scenario.audio?.continueGeneric || "continueGeneric"
   );
+}
+
+function confirmServiceVisit(reply, staffClosed) {
+  if (scenario.id === "service-12month-visit-promotion") {
+    state.currentState = "VISIT_GUIDANCE";
+    const achievements = mergedProgressAchievements();
+    state.ended = staffClosed === true
+      || Boolean(achievements.explained_visit_early_arrival && achievements.explained_visit_lock_nut);
+  } else {
+    state.ended = true;
+  }
+  return reply;
 }
 
 function unresolvedDistanceOrDrivingTurn() {
@@ -2373,11 +2422,10 @@ function selectAppointmentTimeOption(analysis) {
     const selectedTime = timeOptions[0];
     state.appointmentTimeConfirmed = true;
     state.appointmentTime = `${selectedTime}時`;
-    state.ended = true;
-    return customerTurn(
+    return confirmServiceVisit(customerTurn(
       "では、その時間でお願いします。",
       scenario.audio?.appointmentSingleTime || "appointmentSingleTime"
-    );
+    ), analysis.closed_visit);
   }
 
   if (!analysis.has_multiple_schedule_times || timeOptions.length < 2) return null;
@@ -2390,17 +2438,16 @@ function selectAppointmentTimeOption(analysis) {
 
   state.appointmentTimeConfirmed = true;
   state.appointmentTime = `${selectedTime}時`;
-  state.ended = true;
   if (choice === "later") {
-    return customerTurn(
+    return confirmServiceVisit(customerTurn(
       "では、遅い時間でお願いします。",
       scenario.audio?.appointmentLaterTime || "appointmentLaterTime"
-    );
+    ), analysis.closed_visit);
   }
-  return customerTurn(
+  return confirmServiceVisit(customerTurn(
     "では、早いほうでお願いします。",
     scenario.audio?.appointmentEarlierTime || "appointmentEarlierTime"
-  );
+  ), analysis.closed_visit);
 }
 
 function selectObjection(analysis) {
@@ -7813,6 +7860,7 @@ function scoreRoleplay() {
 
   const reason = state.pickupReason || state.currentObjection;
   const applicableMetrics = scenario.scoring.filter((metric) => {
+    if (metric.requiresVisitBooking) return state.currentState === "VISIT_GUIDANCE" && !merged.accepted_pickup;
     if (metric.key === "proposed_weekend") return reason === "work";
     if (metric.key === "proposed_other_store") {
       return ["distance", "drivingConfidence"].includes(reason);
@@ -7884,11 +7932,13 @@ function scoreRoleplay() {
     recommendedTalk: buildImprovementTalk(missingMetricKeys, reason, {
       serviceTimeNeedsReconfirmation: state.serviceTimeNeedsReconfirmation
     }),
-    judgements: state.analyses.map((analysis, index) => {
-      const strength = analysis.pickup_acceptance_strength;
-      const confidence = Math.round(analysis.confidence * 100);
-      return `${index + 1}回目: 引取確定度 ${strength} / 信頼度 ${confidence}%`;
-    })
+    judgements: applicableMetrics.filter((metric) => metric.requiresVisitBooking)
+      .map((metric) => `${metric.label}：${metricAchieved(metric) ? "確認済み" : "未確認"}`)
+      .concat(state.analyses.map((analysis, index) => {
+        const strength = analysis.pickup_acceptance_strength;
+        const confidence = Math.round(analysis.confidence * 100);
+        return `${index + 1}回目: 引取確定度 ${strength} / 信頼度 ${confidence}%`;
+      }))
   };
 }
 
@@ -8361,7 +8411,11 @@ function buildImprovementTalk(missingMetricKeys, reason = "work", options = {}) 
     left_choice:
       "ご来店が難しい場合も含め、ご負担の少ない方法を一緒に確認させてください。",
     next_action_confirmed:
-      "ご都合のよい曜日や時間帯を教えていただけますか。"
+      "ご都合のよい曜日や時間帯を教えていただけますか。",
+    explained_visit_early_arrival:
+      "当日は受付のため、ご予約時刻の15分前にお越しください。",
+    explained_visit_lock_nut:
+      "ロックナットを使用されている場合は、取り外し用のキーかアダプターをお持ちください。"
   };
   return missingMetricKeys
     .map((key) => talks[key])

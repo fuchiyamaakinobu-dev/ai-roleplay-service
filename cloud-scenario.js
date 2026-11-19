@@ -75,6 +75,15 @@
       publishedCircumstanceMetric.label = localCircumstanceMetric.label;
       publishedCircumstanceMetric.action = localCircumstanceMetric.action;
     }
+    // 公開データに新しい工程・採点項目がなくても、標準シナリオの来店前案内を適用する。
+    const visitGuidance = localScenario.progress?.find((item) => item.state === "VISIT_GUIDANCE");
+    if (visitGuidance && !scenario.progress.some((item) => item.state === visitGuidance.state)) {
+      scenario.progress = [...scenario.progress, visitGuidance];
+    }
+    const visitMetrics = localScenario.scoring.filter((metric) => metric.requiresVisitBooking);
+    scenario.scoring = scenario.scoring
+      .filter((metric) => !visitMetrics.some((localMetric) => localMetric.key === metric.key))
+      .concat(visitMetrics);
     return scenario;
   }
 
@@ -119,7 +128,7 @@
 
   function startApp() {
     const script = document.createElement("script");
-    script.src = "./app.js?v=20261118-2";
+    script.src = "./app.js?v=20261119-1";
     document.body.appendChild(script);
   }
 

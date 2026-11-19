@@ -118,7 +118,8 @@ window.ROLEPLAY_SCENARIO = {
     { state: "PICKUP_REQUEST", label: "引取依頼" },
     { state: "VISIT_PROPOSAL", label: "来店提案" },
     { state: "ALTERNATIVE_PROPOSAL", label: "代替案" },
-    { state: "APPOINTMENT_CONFIRMATION", label: "日時確認" }
+    { state: "APPOINTMENT_CONFIRMATION", label: "日時確認" },
+    { state: "VISIT_GUIDANCE", label: "15分前来店・ロックナット" }
   ],
   scoring: [
     { key: "acknowledged_request", label: "依頼を受け止めた", action: "依頼を受け止める", points: 8 },
@@ -129,7 +130,9 @@ window.ROLEPLAY_SCENARIO = {
     { key: "proposed_weekend", label: "土日などを提案した", action: "土日などを提案する", points: 13 },
     { key: "proposed_other_store", label: "他店舗などを提案した", action: "他店舗などを提案する", points: 8 },
     { key: "left_choice", label: "選択肢を残した", action: "選択肢を残す", points: 8 },
-    { key: "next_action_confirmed", label: "次の約束につなげた", action: "次の約束につなげる", points: 14 }
+    { key: "next_action_confirmed", label: "次の約束につなげた", action: "次の約束につなげる", points: 14 },
+    { key: "explained_visit_early_arrival", label: "15分前の来店案内", action: "予約時刻の15分前に来店するよう案内する", points: 4, requiresVisitBooking: true },
+    { key: "explained_visit_lock_nut", label: "ロックナット用具の持参案内", action: "ロックナット用のキーまたはアダプターの持参を案内する", points: 4, requiresVisitBooking: true }
   ],
   recommendedTalk:
     "12カ月点検のほかに、オイル交換などのご用命や、その他お車で気になる点はございませんか。お仕事で平日のご来店が難しいのですね。点検だけですと1時間程度です。土日に営業している週もありますので、ご都合はいかがでしょうか。ご来店いただければ、点検内容をお車を見ながら詳しくご説明できます。",
