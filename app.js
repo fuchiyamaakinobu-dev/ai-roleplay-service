@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261119-1';
+const ROLEPLAY_RELEASE = '20261119-2';
 
 let speechRecognition = null;
 let speechListening = false;
@@ -211,7 +211,9 @@ function hasVisitPressure(normalized) {
 }
 
 function hasPickupRefusal(normalized) {
-  return /(?:引取|引き取り|引取り|車を取り|取りに行|取りに伺).{0,16}(?:できません|できない|出来ません|出来ない|けません|けない|えません|えない|対応できません|難しい|無理|していません|行っていません)/.test(normalized);
+  // 来店が難しい事情を尋ねる文を、引取への拒否と結び付けない。
+  return normalized.split(/[。！？!?]/).some(sentence =>
+    /(?:引取|引き取り|引取り|車を取り|取りに行|取りに伺)(?:(?!(?:来店|お越し|持ち込)).){0,16}(?:できません|できない|出来ません|出来ない|けません|けない|えません|えない|対応できません|難しい|無理|していません|行っていません)/.test(sentence));
 }
 
 function acknowledgesPickupCircumstances(normalized) {
@@ -237,7 +239,7 @@ function hasAffirmativeServiceTime(normalized) {
 function hasAffirmativeVisitBenefit(normalized) {
   const positiveWords = [
     "できます", "出来ます", "いたします", "します", "させていただ",
-    "可能です", "安心いただ", "安心して", "詳しく"
+    "可能です", "安心いただ", "安心して", "詳しく", "できて", "できる"
   ];
   return lexicon.visitBenefit.some((word) => {
     let searchFrom = 0;
@@ -245,7 +247,8 @@ function hasAffirmativeVisitBenefit(normalized) {
       const index = normalized.indexOf(word, searchFrom);
       if (index < 0) return false;
       const context = normalized.slice(Math.max(0, index - 12), index + word.length + 28);
-      if (!hasNegativeOptionExpression(context) && includesAny(context, positiveWords)) return true;
+      const uncertain = /(?:分かりません|わかりません|未定|とは限りません|保証できません)/.test(context);
+      if (!hasNegativeOptionExpression(context) && !uncertain && includesAny(context, positiveWords)) return true;
       searchFrom = index + word.length;
     }
     return false;
@@ -3000,7 +3003,7 @@ function isInspectionDeadlineDateCandidate(normalized, date) {
 function inspectionAdmissionScheduleText(text) {
   const normalized = normalizeScriptedText(text);
   // 返却予定は入庫予約と別の日時。明示された返却部分だけを除外する。
-  return normalized.replace(/(?:翌日|作業後|返却(?:日時|日)?は|納車(?:日時|日)?は)[^。！？!?]*(?:お引き渡し|引き渡し|お返し|返却|納車|お届け)[^。！？!?]*/g, "");
+  return normalized.replace(/(?:翌日|作業後|返却(?:日時|日)?は|納車(?:日時|日)?は)[^。！？!?]*(?:お引き渡し|引き渡し|お渡し|お返し|返却|納車|お届け)[^。！？!?]*/g, "");
 }
 
 function inspectionAppointmentDateCandidates(text) {
@@ -5215,8 +5218,9 @@ function handleInspectionPickupPreparation(text, decisionText) {
     markScriptedStepPassed(scenario.steps.find(item => item.key === "asked_availability"), text);
     return reply("お願いしたいんですけど、いつできますか？", "inspection_asked_availability_customer");
   }
-  if (hasInspectionAvailabilityRequest(decisionText)
-    || hasInspectionBookingInvitation(text) && /(?:考え|いかが)/.test(decisionText)) {
+  if (!hasCompleteInspectionAppointmentProposal(text)
+    && (hasInspectionAvailabilityRequest(decisionText)
+      || hasInspectionBookingInvitation(text) && /(?:考え|いかが)/.test(decisionText))) {
     return reply("お願いしたいんですけど、いつできますか？", "inspection_asked_availability_customer");
   }
   if (hasCompleteInspectionAppointmentProposal(text) || hasSupportedInspectionDuration(text)
@@ -8196,9 +8200,11 @@ function inspectionStorageScoringEvidence() {
     && !/(?:未定|翌日|明日|変更|または|それとも|わかりません|分かりません)/.test(t)
     && staff.slice(0,index).some(previous => inspectionAppointmentProposalMatch(previous)
       && /(?:来店|預かり|引取|引き取り|伺)/.test(previous)));
-  const completion = timedStorageEnd || sameDayCompletion || staff.some(t=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|届けられ|お?引き渡し|納車)/.test(t)
-    && /(?:当日|本日|今日|翌日|明日|あした|あさって|明後日|\d{1,2}月\d{1,2}日|\d{1,2}日(?:の|に|は))/.test(t)
-    && t.split(/[。！？!?]/).some(part=>/(?:終了|終わ|完了|仕上が|お返し|返却|お届け|届けられ|お?引き渡し|納車)/.test(part) && /\d{1,2}時(?!間)/.test(part))
+  const completion = timedStorageEnd || sameDayCompletion || staff.some((t,index)=>/(?:終了|終わ|完了|仕上が|お渡し|お返し|返却|お届け|届けられ|お?引き渡し|納車)/.test(t)
+    && (/(?:当日|本日|今日|翌日|明日|あした|あさって|明後日|\d{1,2}月\d{1,2}日|\d{1,2}日(?:の|に|は))/.test(t)
+      || /その日/.test(t) && staff.slice(0,index).some(previous =>
+        inspectionAppointmentProposalMatch(previous) && /(?:来店|入庫|作業|預かり|引取|引き取り|伺)/.test(previous)))
+    && t.split(/[。！？!?]/).some(part=>/(?:終了|終わ|完了|仕上が|お渡し|お返し|返却|お届け|届けられ|お?引き渡し|納車)/.test(part) && /\d{1,2}時(?!間)/.test(part))
     && !/(?:未定|わかりません|分かりません|決まっていません)/.test(t));
   return {storage,nonWaiting,loaner,completion,pickup};
 }
