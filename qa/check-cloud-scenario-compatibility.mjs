@@ -191,7 +191,7 @@ assert.equal(normalized.progress[1].state, "VISIT_GUIDANCE");
 assert.equal(appendedScripts.length, 1, "互換補正後にapp.jsが起動していません");
 assert.equal(
   appendedScripts[0].src,
-  "./app.js?v=20261119-2",
+  "./app.js?v=20261121-1",
   "公開更新後もブラウザーキャッシュから古いapp.jsを読み込む可能性があります"
 );
 
