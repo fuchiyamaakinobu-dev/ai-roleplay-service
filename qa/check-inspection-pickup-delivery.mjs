@@ -291,6 +291,8 @@ function branchContext(variantSeed) {
   };
   vm.createContext(context);
   vm.runInContext(appSource.slice(branchStart, branchEnd), context);
+  vm.runInContext(appSource.slice(appSource.indexOf("function asksInspectionDayPreference("),
+    appSource.indexOf("function scriptedRetryForMissingDetails(")), context);
   return { context, state, messages };
 }
 

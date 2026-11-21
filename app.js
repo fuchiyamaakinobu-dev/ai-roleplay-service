@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261119-2';
+const ROLEPLAY_RELEASE = '20261121-1';
 
 let speechRecognition = null;
 let speechListening = false;
@@ -2472,6 +2472,17 @@ function selectObjection(analysis) {
 }
 
 function appointmentFollowUpTurn(analysis = {}) {
+  if (state.currentObjection === "work" && !analysis.has_schedule_date && !analysis.has_schedule_time) {
+    const staff = state.transcript.filter((message) => message.role === "staff").at(-1);
+    const question = normalizeScriptedText(inspectionLastQuestionClause(staff?.text || ""));
+    if (/平日(?:でも|も|は).{0,12}(?:大丈夫|可能|よろし|いかが)/.test(question)
+      && isScriptedQuestion(question)) {
+      const constraint = state.transcript.filter((message) => message.role === "customer"
+        && ["objectionWork02", "objectionWork03"].includes(message.audioId)).at(-1);
+      if (constraint) return customerTurnFromAudio(constraint.audioId);
+    }
+  }
+
   if (
     state.appointmentDateConfirmed
     && analysis.offered_morning_time_band
@@ -2685,6 +2696,9 @@ function normalizeScriptedText(text) {
     // 音声認識が「くがつ、26日」のように月と日の間へ読点を入れても、
     // 予約日としては「9月26日」と同じ値にそろえる。
     .replace(/(\d{1,2}月)[、,](?=\d{1,2}日)/g, "$1");
+
+  // 日付を受けて「迎える」と続いた場合だけ、実施履歴の音声認識違いを補正する。
+  normalized = normalized.replace(/(\d{1,2}月\d{1,2}日(?:に|が|で)?)(?:満龍日|マリオ日)(?=を?迎)/g, "$1満了日");
 
   // ひらがなの月を数値化した後で、「8月ついたち」のような日付読みを変換する。
   specialDayReadings.forEach(([reading, value]) => {
@@ -2993,11 +3007,11 @@ function inspectionAppointmentBeforeAvailableFrom(text) {
 function isInspectionDeadlineDateCandidate(normalized, date) {
   const precedingText = normalized.slice(Math.max(0, date.index - 18), date.index);
   const followingText = normalized.slice(date.end, date.end + 14);
-  const hasDeadlineLabel = /(?:満了日?|車検期限|有効期限)[^月日]{0,8}$/.test(precedingText);
+  const hasDeadlineLabel = /(?:満了日?|車検期限|有効期限)[^月日。！？!?]{0,8}$/.test(precedingText);
   const hasVehicleDeadlineWording = /車検[^予約日程]{0,10}$/.test(precedingText)
     && /^(?:まで|となり|となって)/.test(followingText);
   return hasDeadlineLabel || hasVehicleDeadlineWording
-    || /^[、,。.]*(?:が|で)?満了/.test(followingText);
+    || /^[、,。.]*(?:に|が|で)?(?:車検)?(?:満了|有効期限)/.test(followingText);
 }
 
 function inspectionAdmissionScheduleText(text) {
@@ -4357,6 +4371,7 @@ function inspectionPickupReasonFromQuestion(text) {
 
 function inspectionPickupReasonQuestion(text) {
   const normalized = normalizeScriptedText(text);
+  if (asksInspectionDayPreference(text) && !/(?:なぜ|どうして|理由|事情|状況)/.test(normalized)) return false;
   if (asksInspectionDirectVisitInvitation(text) && !/(?:なぜ|どうして|理由|事情|状況)/.test(normalized)) return false;
   if (/(?:家族|ご主人).{0,30}(?:一緒|同伴).{0,30}(?:来|越|難し|いかが|可能)/.test(normalized)
     && !/(?:なぜ|どうして|理由|事情|状況)/.test(normalized)) return false;
@@ -4922,6 +4937,16 @@ function handleInspectionPickupPriorityReply(text, decisionText, questionsOnly =
     addMessage("customer", "自宅に取りに来てもらえますか？", {
       audioId: "inspection_pickup_location_customer"
     });
+    renderProgress();
+    return true;
+  }
+  // 曜日の相談では仕事の事情を繰り返さず、希望する曜日だけを答える。
+  if (state.inspectionPickupActive && state.inspectionPickupReason === "work"
+    && asksInspectionDayPreference(decisionText)
+    && !asksInspectionDirectVisitInvitation(text)) {
+    rememberFutureScriptedAchievements(text, -1);
+    state.turn += 1;
+    addMessage("customer", "土日がいいです。", { audioId: "inspection_day_preference_answer" });
     renderProgress();
     return true;
   }
@@ -7092,10 +7117,13 @@ function inspectionStoreWaitingCandidate(text) {
   if (state.inspectionPickupOutcome === 'pickup'
     || state.inspectionPickupActive && state.inspectionPickupPhase !== 'resolved') return null;
   const q = inspectionLastQuestionClause(text);
-  const explicitWaitingOffer = /お待ちいただ(?:く|いて).{0,35}いかが/.test(normalizeScriptedText(q))
+  const explicitWaitingOffer = /お待ちいただ(?:く|いて).{0,35}(?:いかが|よろしい(?:ですか|でしょうか))/.test(normalizeScriptedText(q))
     && !/(?:待てません|待つことはできません|お待ちいただけません)/.test(q);
   if ((!asksInspectionWaitingMethodConfirmation(q) && !hasCompleteInspectionWaitingProposal(text) && !explicitWaitingOffer)
     || /(?:それとも|どちら|どっち|代車|引取)/.test(q)) return null;
+  if (isPickupInspectionScenario() && hasCompleteInspectionAppointmentProposal(text)
+    && (inspectionAppointmentBeforeAvailableFrom(text)
+      || !state.proposedAppointment && memory?.settings?.schedule && memory.settings.schedule !== "accept" && !memory.adjusted)) return null;
   // Use the latest duration explanation, including the current compound utterance.
   const duration = [...state.transcript.filter(m=>m.role==='staff').map(m=>m.text),text]
     .filter(t=>/(?:分|時間|泊|日車検)/.test(normalizeScriptedText(t))).at(-1);
@@ -7163,7 +7191,19 @@ function applyPickupExtra(text, candidate) {
     if (id === "inspection_cannot_wait_pickup_request" && !state.inspectionPickupActive) {
       state.inspectionPickupActive = true; state.inspectionPickupPhase = "reason";
     }
-    if (id === "inspection_duration_accepted_wait_in_store") state.inspectionWaitingMethod = "store";
+    if (id === "inspection_duration_accepted_wait_in_store") {
+      state.inspectionWaitingMethod = "store";
+      // 来店に合意済みなら、待ち方と一緒に提示された入庫日時も引き継ぐ。
+      if (state.inspectionPickupOutcome === "visit") {
+        const proposal = inspectionPickupAppointmentReproposal(text)
+          || (!state.proposedAppointment && hasCompleteInspectionAppointmentProposal(text)
+            ? { text, ...inspectionAppointmentProposalMatch(text) } : null);
+        if (proposal && !inspectionAppointmentBeforeAvailableFrom(proposal.text)) {
+          state.inspectionAppointmentCandidate = proposal;
+          confirmInspectionPickupAppointmentCandidate();
+        }
+      }
+    }
     if (id === "inspection_no_loaner_family_pickup") {
       memory.family = true; state.inspectionWaitingMethod = "family";
       state.inspectionLoanerRequested = false; state.inspectionLoanerConfirmed = false;
@@ -7553,6 +7593,18 @@ function applyInspectionLlmSelection(text, selection, semanticCandidates = null)
 }
 
 function handleInspectionLlmReply(text) {
+  // 来店・代車を一緒に提案されたときは、来店手段の相談を先に済ませる。
+  // 来店時に必要な代車だけを尋ねる後続の質問とは区別する。
+  const question = inspectionLastQuestionClause(text);
+  if (isPickupInspectionScenario() && !state.inspectionPickupPhase && !state.inspectionPickupActive
+    && !state.proposedAppointment && !state.inspectionBookingCancelled
+    && inspectionDirectArrivalConfirmation(text) && asksInspectionLoanerNeed(question)
+    && /(?:来店|お越し|来て)いただ(?:いて|き).{0,45}代車.{0,18}(?:用意|手配|準備)/.test(normalizeScriptedText(text))
+    && /(?:乗って|お帰り|帰って)/.test(normalizeScriptedText(question))) {
+    rememberFutureScriptedAchievements(text, -1);
+    startInspectionPickupRequest("来店と代車の提案に対し、受付方法を相談するため引取希望を伝えました。");
+    return;
+  }
   const rejected = isPickupInspectionScenario() && state.pickupAudioMemory?.rejected;
   if (rejected?.kind === "later_time" && !state.pickupAudioMemory.adjusted
     && !inspectionAppointmentDateCandidates(text).length && /\d{1,2}時(?!間)/.test(normalizeScriptedText(text))) {
