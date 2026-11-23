@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261121-1';
+const ROLEPLAY_RELEASE = '20261123-1';
 
 let speechRecognition = null;
 let speechListening = false;
@@ -2698,7 +2698,7 @@ function normalizeScriptedText(text) {
     .replace(/(\d{1,2}月)[、,](?=\d{1,2}日)/g, "$1");
 
   // 日付を受けて「迎える」と続いた場合だけ、実施履歴の音声認識違いを補正する。
-  normalized = normalized.replace(/(\d{1,2}月\d{1,2}日(?:に|が|で)?)(?:満龍日|マリオ日)(?=を?迎)/g, "$1満了日");
+  normalized = normalized.replace(/(\d{1,2}月\d{1,2}日(?:に|が|で)?)(?:満龍日|マリオ日|満曜日)(?=を?迎)/g, "$1満了日");
 
   // ひらがなの月を数値化した後で、「8月ついたち」のような日付読みを変換する。
   specialDayReadings.forEach(([reading, value]) => {
@@ -3016,8 +3016,11 @@ function isInspectionDeadlineDateCandidate(normalized, date) {
 
 function inspectionAdmissionScheduleText(text) {
   const normalized = normalizeScriptedText(text);
-  // 返却予定は入庫予約と別の日時。明示された返却部分だけを除外する。
-  return normalized.replace(/(?:翌日|作業後|返却(?:日時|日)?は|納車(?:日時|日)?は)[^。！？!?]*(?:お引き渡し|引き渡し|お渡し|お返し|返却|納車|お届け)[^。！？!?]*/g, "");
+  // 翌日と明示されず、返却の日付を直接伝えた場合も、入庫日には含めない。
+  const datedReturn = /(?:\d{1,2}月)?\d{1,2}日(?:の)?(?:午前中?|午後|朝|夕方|夜)?(?:\d{1,2}時(?:半|\d{1,2}分)?)?(?:頃|ごろ|ぐらい|くらい)?(?:までに|に|は|が|で)?[、,]?(?:お?車(?:を|の)?)?(?:お引き渡し|お渡し|お返し|返却|お届け)/g;
+  return normalized
+    .replace(/(?:翌日|作業後|返却(?:日時|日)?は|納車(?:日時|日)?は)[^。！？!?]*(?:お引き渡し|引き渡し|お渡し|お返し|返却|納車|お届け)[^。！？!?]*/g, "")
+    .replace(datedReturn, "");
 }
 
 function inspectionAppointmentDateCandidates(text) {
@@ -3109,7 +3112,7 @@ function asksOpenInspectionDatePreference(text) {
 function asksInspectionGlassDamage(text) {
   return String(text || '').split(/[。！？?\n]/).some(clause => {
     const n = normalizeScriptedText(clause);
-    return /(?:フロントガラス|ガラス|ヘッドライト|レンズ|ランプ|ライト|灯火類).{0,90}(?:割れ|われ|ヒビ|ひび|亀裂|穴|損傷|カケ|欠け|かけ)/.test(n)
+    return /(?:フロントガラス|ガラス|ヘッドライト|レンズ|ランプ|ライト|灯火類).{0,90}(?:割れ|われ|ヒビ|ひび|亀裂|穴|損傷|カケ|欠け|かけ|飛び石(?!対策|防止|保護))/.test(n)
       && /(?:ありませんか|ございませんか|いませんか|いますか|ありますか|ですか|でしょうか|ないですか|ないでしょうか|ないか.{0,12}(?:教えて|お聞かせ))/.test(n)
       && !/(?:確認しなく|確認不要|聞かなく)/.test(n);
   });
@@ -7654,7 +7657,7 @@ function handleInspectionLlmReply(text) {
 
 // 入庫時刻の回答と終了・返却時刻、予約できない時刻を分離する。
 function inspectionAdmissionTimeText(text) {
-  return normalizeScriptedText(text).split(/[。！？!?、,]/).filter(clause => {
+  return inspectionAdmissionScheduleText(text).split(/[。！？!?、,]/).filter(clause => {
     if (!/\d{1,2}時(?!間)/.test(clause)) return true;
     if (/(?:終了|返却|お返し|納車|届け|完了|未定)/.test(clause)) return false;
     return /しか(?:空いて|空きが|予約でき)/.test(clause)
@@ -7705,10 +7708,13 @@ function answerInspectionPartialAppointment(text) {
     && !/(?:日車検|日間|日ほど|日程度|泊)/.test(admission)) {
     admission = admission.replace(/(\d{1,2})日/, partial.text.match(/\d{1,2}月/)[0]+'$1日');
   }
-  if (!hasInspectionAppointmentProposalEvidence(admission)
-    && !/\d{1,2}時.*(?:来店|お越し).*(?:ください|お願い)/.test(admission)) return false;
   const dates = inspectionAppointmentDateCandidates(admission);
   const times = [...admission.matchAll(/\d{1,2}時(?!間)/g)];
+  const statesAvailableTime = partial && /^(?:午前|午後)?\d{1,2}時(?:半|\d{1,2}分)?(?:から|は|なら)?(?:空いて(?:おり|い)?ます|空き(?:が)?あります)[。.!！]*$/.test(admission);
+  if (!hasInspectionAppointmentProposalEvidence(admission)
+    && !(dates.length === 1 && hasInspectionAppointmentProposalEvidence(text))
+    && !statesAvailableTime
+    && !/\d{1,2}時.*(?:来店|お越し).*(?:ください|お願い)/.test(admission)) return false;
   if (dates.length === 1 && times.length === 0) {
     const candidate = state.inspectionAppointmentCandidate;
     if (candidate && (Number(candidate.month) !== Number(dates[0].month)
@@ -7717,6 +7723,10 @@ function answerInspectionPartialAppointment(text) {
     const repeated = partial?.text === dateText;
     state.scriptedPartialReplies.inspectionPickupDate = {text:dateText};
     rememberFutureScriptedAchievements(text,-1);
+    if (isPickupInspectionScenario() && (partial || candidate) && inspectionDirectArrivalConfirmation(q)) {
+      startInspectionPickupRequest("来店可否の確認に対し、引取希望を伝えました。");
+      return true;
+    }
     state.turn += 1;
     addMessage('customer',repeated ? 'はい。' : '何時が空いていますか？',
       {audioId:repeated ? 'inspection_thanked_customer_retry' : 'inspection_appointment_time_missing_retry'});
