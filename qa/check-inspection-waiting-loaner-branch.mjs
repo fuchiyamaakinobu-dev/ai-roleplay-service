@@ -124,7 +124,7 @@ const scoringContext = {
   state: {
     analyses: [
       { scripted: true, stepKey: "explained_duration_and_wait", explained_duration_and_wait: true, blocked: false },
-      { scripted: true, stepKey: "explained_loaner", explained_loaner: false, blocked: false, notApplicable: true },
+      { scripted: true, stepKey: "explained_loaner", explained_loaner: false, blocked: false, notApplicable: true, evidence: ["店内待ち提案済み"] },
       { scripted: true, stepKey: "confirmed_booking_time", confirmed_booking_time: true, blocked: false }
     ]
   }

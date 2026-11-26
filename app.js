@@ -5,7 +5,7 @@ const audioIndex = new Map(audioDb.items.map((item) => [item.id, item]));
 let inspectionAcknowledgementSelection = null;
 let inspectionSemanticContext = null;
 let inspectionDecisionBefore = null;
-const ROLEPLAY_RELEASE = '20261123-1';
+const ROLEPLAY_RELEASE = '20261126-1';
 
 let speechRecognition = null;
 let speechListening = false;
@@ -2970,7 +2970,9 @@ function hasInspectionAvailabilityRequest(text) {
     && /(?:でしょうか|ですか|ますか|[?？])/.test(normalized);
   const asksWhen = /いつ(?:ごろ|頃|が|なら|に)?(?:が|は)?(?:よろしい|良い|いい)/.test(normalized)
     && isScriptedQuestion(normalized);
-  return hasAvailabilityContext && (requestsCustomerChoice || asksWhenConvenient) || asksWhen;
+  const asksForPreferredSlot = /都合(?:の|が)?(?:よろしい|よい|良い|いい)(?:お?日(?:にち|時|程)?|曜日|時(?:間(?:帯)?)?|とき)(?:とか|など)?(?:は|が)?(?:あります|ありません|ございます|ございません)(?:でしょう)?か/.test(normalized);
+  return hasAvailabilityContext && (requestsCustomerChoice || asksWhenConvenient)
+    || asksWhen || asksForPreferredSlot;
 }
 
 function hasDirectInspectionBookingInvitation(text) {
@@ -4462,7 +4464,7 @@ function markPickupRouteBaseStepsNotApplicable() {
   ["explained_loaner", "confirmed_waiting", "explained_lock_and_arrival"].forEach((key) => {
     if (inspectionHighMileage() && key !== "explained_lock_and_arrival") return;
     const step = scenario.steps.find((candidate) => candidate.key === key);
-    markScriptedStepNotApplicable(step, "引取納車を受付したため対象外");
+    markScriptedStepNotApplicable(step, "引取納車");
   });
   while (
     state.scriptStep < scenario.steps.length
@@ -6867,7 +6869,7 @@ function handleScriptedStaffReply(text) {
       state.inspectionWaitingMethod = state.inspectionWaitingMethod || "loaner";
       state.inspectionLoanerRequested = true;
     } else if (hasInspectionWaitingChoiceOffer(combinedText)) {
-      markScriptedStepNotApplicable(waitingBranchLoanerStep, "スタッフが店内待ちを提案");
+      markScriptedStepNotApplicable(waitingBranchLoanerStep, "店内待ち提案済み");
       responseStep = waitingBranchLoanerStep;
       state.scriptStep += 1;
     }
@@ -8334,20 +8336,21 @@ function inspectionVoluntaryInsuranceGuidance() {
 
 function scoreScriptedRoleplay() {
   const storageEvidence = inspectionStorageScoringEvidence();
-  const notApplicableKeys = new Set(
+  const notApplicableReasons = new Map(
     state.analyses
       .filter((analysis) => analysis.scripted && analysis.notApplicable === true)
-      .map((analysis) => analysis.stepKey)
+      .map((analysis) => [analysis.stepKey, analysis.evidence?.[0]])
   );
   if (typeof isPickupInspectionScenario === "function" && isPickupInspectionScenario()
     && !state.inspectionPickupActive && !state.inspectionPickupReason && !state.inspectionPickupOutcome
     && !(state.transcript || []).some(item => item.role === "customer"
       && /(?:取りに来て|引き取りでお願い|引取を希望)/.test(item.text))) {
-    scenario.scoring.filter(metric => metric.key.startsWith("pickup_")).forEach(metric => notApplicableKeys.add(metric.key));
+    scenario.scoring.filter(metric => metric.key.startsWith("pickup_"))
+      .forEach(metric => notApplicableReasons.set(metric.key, "引取相談なし"));
   }
-  if (storageEvidence.storage) notApplicableKeys.delete('explained_loaner');
-  if (storageEvidence.pickup) notApplicableKeys.delete('explained_lock_and_arrival');
-  const applicableScoring = scenario.scoring.filter((metric) => !notApplicableKeys.has(metric.key));
+  if (storageEvidence.storage) notApplicableReasons.delete('explained_loaner');
+  if (storageEvidence.pickup) notApplicableReasons.delete('explained_lock_and_arrival');
+  const applicableScoring = scenario.scoring.filter((metric) => !notApplicableReasons.has(metric.key));
   const optionalAfterAppointmentKeys = new Set(
     (scenario.steps || [])
       .filter((step) => step.optionalAfterAppointment)
@@ -8462,10 +8465,11 @@ function scoreScriptedRoleplay() {
     const attempts = state.analyses.filter((analysis) =>
       analysis.stepKey === metric.key && analysis.notApplicable !== true
     );
+    const reason = notApplicableReasons.get(metric.key);
     const status = metric.key === "proposed_appointment" && minimumAppointmentMissing
       ? "要改善（最低条件未達・20点減点）"
-      : notApplicableKeys.has(metric.key)
-      ? "対象外（店内待ち提案済み）"
+      : notApplicableReasons.has(metric.key)
+      ? (reason ? "対象外（" + reason + "）" : "対象外")
       : achieved[metric.key] ? "○" : "要改善";
     const label = storageEvidence.pickup && metric.key === 'explained_lock_and_arrival' ? 'ロックナット専用工具の案内' : storageEvidence.storage && metric.key === 'explained_loaner' ? '代車の必要性確認' : metric.label;
     return `${label}: ${status}${attempts.length > 1 ? `（${attempts.length}回発話）` : ""}`;

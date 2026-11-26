@@ -123,4 +123,25 @@ assert.equal(controls.run('asksInspectionGlassDamage("ガラスを交換しま�
 assert.equal(controls.run('inspectionAppointmentDateCandidates("9月30日木曜日10時はいかがですか？").length'), 1);
 assert.equal(controls.run('inspectionAppointmentDateCandidates("ヤリスの車検の件です。9月30日車検回り指なんですが、ご都合いかがでしょうか？").length'), 0);
 
-console.log("11月25〜26日履歴: 車検満了日・分割日時・引取・代車・損傷確認、12カ月点検の来店判断・案内・終話 OK");
+const preferredSlot = "8月1日から作業できるんですが、ご都合のいい時とかございますか？";
+for (const id of [pickup, phone]) {
+  const availability = open(id, "off");
+  await availability.say(preferredSlot);
+  assert.ok(availability.run('scoreScriptedRoleplay().judgements.includes("都合確認: ○")'));
+  assert.equal(availability.run("state.proposedAppointment"), null);
+  assert.equal(availability.run('hasInspectionAvailabilityRequest("ご都合の良い時間帯はございますでしょうか？")'), true);
+  assert.equal(availability.run('hasInspectionAvailabilityRequest("ご都合の良い時間帯がございます。")'), false);
+  assert.equal(availability.run('hasInspectionAvailabilityRequest("8月22日9時半はいかがですか？")'), false);
+}
+
+const pickupScoring = open(pickup, "off");
+const noPickupJudgements = pickupScoring.run("scoreScriptedRoleplay().judgements");
+assert.equal(noPickupJudgements.filter(text => text.endsWith("対象外（引取相談なし）")).length, 5);
+assert.ok(!noPickupJudgements.some(text => text.includes("店内待ち提案済み")));
+pickupScoring.run('state.inspectionPickupActive = true; state.inspectionPickupPhase = "proposal"; state.inspectionPickupReason = "competitor";');
+await pickupScoring.say("8月22日9時20分にご自宅へお車を取りに伺います。");
+const acceptedPickupJudgements = pickupScoring.run("scoreScriptedRoleplay().judgements");
+assert.ok(acceptedPickupJudgements.includes("待ち方確認: 対象外（引取納車）"));
+assert.ok(!acceptedPickupJudgements.some(text => text.includes("引取相談なし")));
+
+console.log("11月25〜26日履歴: 車検と12カ月点検の返答・日時、都合確認の採点、対象外理由 OK");
